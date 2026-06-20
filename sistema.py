@@ -233,7 +233,7 @@ footer { visibility: hidden; }
 header { visibility: hidden; }
 </style>
 
-<<canvas id="particles-canvas"></canvas>
+<canvas id="particles-canvas"></canvas>
 
 <script>
 const canvas = document.getElementById('particles-canvas');
@@ -483,7 +483,7 @@ def sidebar():
 
 # ============== DASHBOARD ==============
 def dashboard():
-    st.markdown(<<h1 style='color: #ffffff; font-weight: 800;'>Dashboard</h1>", unsafe_allow_html=True)
+    st.markdown(<h1 style='color: #ffffff; font-weight: 800;'>Dashboard</h1>", unsafe_allow_html=True)
     st.markdown("<p style='color: rgba(255,255,255,0.7);'>Visão geral do sistema MARMED</p>", unsafe_allow_html=True)
     
     conn = init_db()
