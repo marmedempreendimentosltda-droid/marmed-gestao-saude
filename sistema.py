@@ -1,755 +1,685 @@
 import streamlit as st
 import hashlib
 import sqlite3
-import datetime
 import pandas as pd
-from datetime import date, timedelta
+import random
+from datetime import datetime, date
+import plotly.express as px
 
 st.set_page_config(
-    page_title="MARMED - Gestão em Saúde Pública de Luminárias-MG",
+    page_title="MARMED - Gestão em Saúde Pública",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-DB_NAME = "marmed_saude.db"
-COR_PRIMARIA = "#00d4ff"
-COR_GOLD = "#ffd700"
-COR_BG1 = "#0a0e27"
-COR_BG2 = "#0d2137"
+DEFAULT_USER = "admin"
+DEFAULT_PASS = "Diretor2025#"
+DEFAULT_HASH = hashlib.sha256(DEFAULT_PASS.encode()).hexdigest()
 
-CSS_GLOBAL = f"""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap');
-
-* {{
-    font-family: 'Montserrat', sans-serif;
-}}
-
-.stApp {{
-    background: linear-gradient(135deg, {COR_BG1} 0%, {COR_BG2} 100%);
-    color: #e6f7ff;
-}}
-
-.particles {{
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 0;
-    overflow: hidden;
-}}
-
-.particle {{
-    position: absolute;
-    width: 4px;
-    height: 4px;
-    background: {COR_PRIMARIA};
-    border-radius: 50%;
-    opacity: 0.3;
-    animation: float 15s infinite linear;
-}}
-
-.particle:nth-child(1) {{ left: 10%; animation-duration: 12s; animation-delay: 0s; }}
-.particle:nth-child(2) {{ left: 20%; animation-duration: 18s; animation-delay: 2s; }}
-.particle:nth-child(3) {{ left: 30%; animation-duration: 14s; animation-delay: 4s; }}
-.particle:nth-child(4) {{ left: 40%; animation-duration: 20s; animation-delay: 1s; }}
-.particle:nth-child(5) {{ left: 50%; animation-duration: 16s; animation-delay: 3s; }}
-.particle:nth-child(6) {{ left: 60%; animation-duration: 22s; animation-delay: 5s; }}
-.particle:nth-child(7) {{ left: 70%; animation-duration: 13s; animation-delay: 2s; }}
-.particle:nth-child(8) {{ left: 80%; animation-duration: 19s; animation-delay: 4s; }}
-.particle:nth-child(9) {{ left: 90%; animation-duration: 17s; animation-delay: 6s; }}
-.particle:nth-child(10) {{ left: 95%; animation-duration: 21s; animation-delay: 0s; }}
-
-@keyframes float {{
-    0% {{ transform: translateY(100vh) scale(0); opacity: 0; }}
-    10% {{ opacity: 0.3; }}
-    90% {{ opacity: 0.3; }}
-    100% {{ transform: translateY(-10vh) scale(1); opacity: 0; }}
-}}
-
-.glass-card {{
-    background: rgba(13, 33, 55, 0.7);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(0, 212, 255, 0.2);
-    border-radius: 16px;
-    padding: 24px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-}}
-
-.metric-card {{
-    background: rgba(13, 33, 55, 0.8);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(0, 212, 255, 0.3);
-    border-radius: 12px;
-    padding: 20px;
-    text-align: center;
-    transition: all 0.3s ease;
-}}
-
-.metric-card:hover {{
-    transform: translateY(-5px);
-    border-color: {COR_PRIMARIA};
-    box-shadow: 0 12px 40px rgba(0, 212, 255, 0.15);
-}}
-
-.metric-value {{
-    color: {COR_GOLD};
-    font-size: 1.6rem;
-    font-weight: 700;
-}}
-
-.metric-label {{
-    color: {COR_PRIMARIA};
-    font-size: 0.85rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-top: 8px;
-}}
-
-h1, h2, h3 {{
-    color: {COR_PRIMARIA} !important;
-}}
-
-.stButton button {{
-    background: linear-gradient(135deg, {COR_PRIMARIA} 0%, #0099cc 100%) !important;
-    color: #0a0e27 !important;
-    border: none !important;
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    transition: all 0.3s ease !important;
-}}
-
-.stButton button:hover {{
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0, 212, 255, 0.4) !important;
-}}
-
-.stTextInput input, .stSelectbox select, .stDateInput input, .stNumberInput input, .stTextArea textarea {{
-    background: rgba(10, 14, 39, 0.8) !important;
-    color: #e6f7ff !important;
-    border: 1px solid rgba(0, 212, 255, 0.3) !important;
-    border-radius: 8px !important;
-}}
-
-.stTextInput input:focus, .stSelectbox select:focus, .stDateInput input:focus, .stNumberInput input:focus {{
-    border-color: {COR_PRIMARIA} !important;
-    box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.2) !important;
-}}
-
-.css-1d391kg, .css-163ttbj, .css-1vq4p4l {{
-    background: rgba(10, 14, 39, 0.9) !important;
-}}
-
-.css-1cypcdb, .css-1cypcdb .e1q9f1ca0 {{
-    color: {COR_PRIMARIA} !important;
-}}
-
-[data-testid="stSidebar"] {{
-    background: rgba(10, 14, 39, 0.95) !important;
-    border-right: 1px solid rgba(0, 212, 255, 0.2) !important;
-}}
-
-table {{
-    color: #e6f7ff !important;
-}}
-
-th {{
-    color: {COR_PRIMARIA} !important;
-    background: rgba(0, 212, 255, 0.1) !important;
-}}
-
-.status-pago {{
-    color: #00ff88;
-    font-weight: 600;
-}}
-
-.status-pendente {{
-    color: #ff6b6b;
-    font-weight: 600;
-}}
-
-.status-atrasado {{
-    color: #ffd700;
-    font-weight: 600;
-}}
-</style>
-"""
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "page" not in st.session_state:
+    st.session_state.page = "Dashboard"
+if "edit_id" not in st.session_state:
+    st.session_state.edit_id = None
+if "edit_table" not in st.session_state:
+    st.session_state.edit_table = None
 
 
 def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            nome TEXT,
-            cargo TEXT
-        )
-    ''')
-
-    cursor.execute('''
+    conn = sqlite3.connect("marmed.db", check_same_thread=False)
+    c = conn.cursor()
+    c.execute("""
         CREATE TABLE IF NOT EXISTS contas_pagar (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            descricao TEXT NOT NULL,
-            fornecedor TEXT,
-            valor REAL NOT NULL,
-            data_vencimento DATE,
-            status TEXT DEFAULT 'Pendente',
-            categoria TEXT,
-            observacao TEXT,
-            data_cadastro DATE DEFAULT CURRENT_DATE
+            descricao TEXT,
+            credor TEXT,
+            valor REAL,
+            vencimento TEXT,
+            status TEXT,
+            categoria TEXT
         )
-    ''')
-
-    cursor.execute('''
+    """)
+    c.execute("""
         CREATE TABLE IF NOT EXISTS contas_receber (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            descricao TEXT NOT NULL,
+            descricao TEXT,
             devedor TEXT,
-            valor REAL NOT NULL,
-            data_vencimento DATE,
-            status TEXT DEFAULT 'Pendente',
-            categoria TEXT,
-            observacao TEXT,
-            data_cadastro DATE DEFAULT CURRENT_DATE
+            valor REAL,
+            vencimento TEXT,
+            status TEXT,
+            categoria TEXT
         )
-    ''')
-
-    cursor.execute('''
+    """)
+    c.execute("""
         CREATE TABLE IF NOT EXISTS empenhos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            numero_empenho TEXT NOT NULL,
+            numero TEXT,
             descricao TEXT,
-            valor REAL NOT NULL,
-            data_empenho DATE,
-            fornecedor TEXT,
-            status TEXT DEFAULT 'Ativo',
-            observacao TEXT
+            valor REAL,
+            data TEXT,
+            fonte TEXT,
+            status TEXT
         )
-    ''')
-
-    cursor.execute('''
+    """)
+    c.execute("""
         CREATE TABLE IF NOT EXISTS licitacoes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            numero_processo TEXT NOT NULL,
+            numero TEXT,
             objeto TEXT,
             modalidade TEXT,
-            valor_estimado REAL,
-            data_abertura DATE,
-            status TEXT DEFAULT 'Em Andamento',
-            vencedor TEXT,
-            observacao TEXT
+            valor REAL,
+            data_abertura TEXT,
+            status TEXT
         )
-    ''')
-
-    cursor.execute('''
+    """)
+    c.execute("""
         CREATE TABLE IF NOT EXISTS contratos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            numero_contrato TEXT NOT NULL,
-            objeto TEXT,
+            numero TEXT,
             contratado TEXT,
-            valor_total REAL,
-            data_inicio DATE,
-            data_fim DATE,
-            status TEXT DEFAULT 'Vigente',
-            observacao TEXT
+            objeto TEXT,
+            valor REAL,
+            inicio TEXT,
+            fim TEXT,
+            status TEXT
         )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS movimentacoes (
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS transferencias (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo TEXT NOT NULL,
             descricao TEXT,
-            valor REAL NOT NULL,
-            data_movimentacao DATE DEFAULT CURRENT_DATE,
-            categoria TEXT,
-            observacao TEXT
+            origem TEXT,
+            destino TEXT,
+            valor REAL,
+            data TEXT,
+            tipo TEXT
         )
-    ''')
-
-    default_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
-    cursor.execute('''
-        INSERT OR IGNORE INTO usuarios (username, password_hash, nome, cargo)
-        VALUES (?, ?, ?, ?)
-    ''', ('admin', default_hash, 'Administrador', 'Diretor'))
-
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS transposicoes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            descricao TEXT,
+            origem TEXT,
+            destino TEXT,
+            valor REAL,
+            data TEXT,
+            tipo TEXT
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS repasses_federal (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            descricao TEXT,
+            valor REAL,
+            data TEXT,
+            programa TEXT
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS repasses_estadual (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            descricao TEXT,
+            valor REAL,
+            data TEXT,
+            programa TEXT
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS recursos_municipal (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            descricao TEXT,
+            valor REAL,
+            data TEXT,
+            origem TEXT
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario TEXT UNIQUE,
+            senha_hash TEXT
+        )
+    """)
+    c.execute("""
+        INSERT OR IGNORE INTO usuarios (usuario, senha_hash) VALUES (?, ?)
+    """, (DEFAULT_USER, DEFAULT_HASH))
     conn.commit()
-    conn.close()
+    return conn
 
 
-def get_db_connection():
-    return sqlite3.connect(DB_NAME)
+conn = init_db()
 
 
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+def login_page():
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+    .main { background: linear-gradient(135deg, #050510 0%, #0a0a20 50%, #02020a 100%); min-height: 100vh; }
+    .login-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 20px;
+    }
+    .title-3d {
+        font-family: 'Orbitron', sans-serif;
+        font-size: 5rem;
+        font-weight: 900;
+        color: #00d4ff;
+        text-align: center;
+        perspective: 1000px;
+        margin-bottom: 10px;
+        text-shadow: 0 0 10px #00d4ff, 0 0 30px #00d4ff, 0 0 60px #008cff;
+    }
+    .title-3d span {
+        display: inline-block;
+        animation: flyIn 3s ease-out forwards, glowPulse 2s ease-in-out infinite 3s, flash 0.4s ease-out 3s;
+        opacity: 0;
+        transform-style: preserve-3d;
+    }
+    .title-3d .m1 { --tx: -500px; --ty: -300px; --tz: 800px; --rx: 120deg; --ry: -80deg; animation-delay: 0s, 3s, 3s; }
+    .title-3d .a1 { --tx: 400px; --ty: -250px; --tz: -600px; --rx: -100deg; --ry: 90deg; animation-delay: 0.18s, 3.18s, 3.18s; }
+    .title-3d .r1 { --tx: -300px; --ty: 350px; --tz: 500px; --rx: 80deg; --ry: -120deg; animation-delay: 0.36s, 3.36s, 3.36s; }
+    .title-3d .m2 { --tx: 500px; --ty: 300px; --tz: -400px; --rx: -70deg; --ry: 100deg; animation-delay: 0.54s, 3.54s, 3.54s; }
+    .title-3d .e1 { --tx: -400px; --ty: -200px; --tz: 700px; --rx: 110deg; --ry: -90deg; animation-delay: 0.72s, 3.72s, 3.72s; }
+    .title-3d .d1 { --tx: 300px; --ty: 250px; --tz: -800px; --rx: -130deg; --ry: 70deg; animation-delay: 0.90s, 3.90s, 3.90s; }
+    @keyframes flyIn {
+        0% { opacity: 0; transform: translate3d(var(--tx), var(--ty), var(--tz)) rotateX(var(--rx)) rotateY(var(--ry)); }
+        60% { opacity: 1; }
+        100% { opacity: 1; transform: translate3d(0, 0, 0) rotateX(0deg) rotateY(0deg); }
+    }
+    @keyframes glowPulse {
+        0%, 100% { text-shadow: 0 0 10px #00d4ff, 0 0 30px #00d4ff, 0 0 60px #008cff; }
+        50% { text-shadow: 0 0 20px #00d4ff, 0 0 50px #00d4ff, 0 0 100px #008cff, 0 0 150px #ffffff; }
+    }
+    @keyframes flash {
+        0% { text-shadow: 0 0 5px #fff, 0 0 20px #ffd700; color: #ffffff; }
+        50% { text-shadow: 0 0 50px #ffd700, 0 0 100px #ffffff; color: #ffd700; }
+        100% { text-shadow: 0 0 10px #00d4ff, 0 0 30px #00d4ff; color: #00d4ff; }
+    }
+    .subtitle-cyan { color: #00d4ff; font-size: 1.5rem; text-align: center; font-family: 'Orbitron', sans-serif; margin-top: 0; }
+    .subtitle-blue { color: #87cefa; font-size: 1.2rem; text-align: center; font-family: 'Orbitron', sans-serif; margin-top: 5px; }
+    .glass-card {
+        background: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(0, 212, 255, 0.3);
+        border-radius: 20px;
+        padding: 40px;
+        width: 100%;
+        max-width: 420px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 30px rgba(0, 212, 255, 0.1);
+        margin-top: 30px;
+    }
+    .field-label { color: #e0f7ff; font-weight: 600; margin-bottom: 5px; display: block; }
+    .stTextInput > div > div > input {
+        background: rgba(255, 255, 255, 0.15) !important;
+        border: 2px solid #00d4ff !important;
+        color: #ffffff !important;
+        border-radius: 10px !important;
+        padding: 12px !important;
+    }
+    .stTextInput > div > div > input:focus {
+        border-color: #ffd700 !important;
+        box-shadow: 0 0 15px #ffd700 !important;
+        outline: none !important;
+    }
+    .stButton > button {
+        width: 100%;
+        background: linear-gradient(90deg, #00d4ff, #008cff) !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 10px !important;
+        padding: 12px !important;
+        font-weight: 700 !important;
+        transition: all 0.3s ease !important;
+    }
+    .stButton > button:hover {
+        background: linear-gradient(90deg, #008cff, #00d4ff) !important;
+        box-shadow: 0 0 25px #00d4ff !important;
+        transform: translateY(-2px) !important;
+    }
+    #particles-canvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        pointer-events: none;
+    }
+    </style>
+    <canvas id="particles-canvas"></canvas>
+    <script>
+    (function(){
+        const canvas = document.getElementById('particles-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        function resize(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.addEventListener('resize', resize);
+        resize();
+        for (let i = 0; i < 80; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                r: Math.random() * 2 + 1,
+                dx: (Math.random() - 0.5) * 0.5,
+                dy: (Math.random() - 0.5) * 0.5,
+                alpha: Math.random() * 0.5 + 0.2
+            });
+        }
+        function animate(){
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => {
+                p.x += p.dx;
+                p.y += p.dy;
+                if (p.x < 0 || p.x > canvas.width) p.dx *= -1;
+                if (p.y < 0 || p.y > canvas.height) p.dy *= -1;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0, 212, 255, ' + p.alpha + ')';
+                ctx.fill();
+            });
+            requestAnimationFrame(animate);
+        }
+        animate();
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="login-container">
+        <div class="title-3d">
+            <span class="m1">M</span><span class="a1">A</span><span class="r1">R</span><span class="m2">M</span><span class="e1">E</span><span class="d1">D</span>
+        </div>
+        <div class="subtitle-cyan">Gestão em Saúde Pública</div>
+        <div class="subtitle-blue">Luminárias - MG</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.container():
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<span class='field-label'>Usuário</span>", unsafe_allow_html=True)
+        usuario = st.text_input("", key="user_login", label_visibility="collapsed")
+        st.markdown("<span class='field-label'>Senha</span>", unsafe_allow_html=True)
+        senha = st.text_input("", type="password", key="pass_login", label_visibility="collapsed")
+        if st.button("Entrar", key="btn_login"):
+            h = hashlib.sha256(senha.encode()).hexdigest()
+            c = conn.cursor()
+            c.execute("SELECT * FROM usuarios WHERE usuario=? AND senha_hash=?", (usuario, h))
+            if c.fetchone():
+                st.session_state.logged_in = True
+                st.session_state.page = "Dashboard"
+                st.success("Login realizado com sucesso!")
+                st.rerun()
+            else:
+                st.error("Usuário ou senha inválidos.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
-def verify_login(username, password):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT * FROM usuarios WHERE username = ? AND password_hash = ?",
-        (username, hash_password(password))
-    )
-    user = cursor.fetchone()
-    conn.close()
-    return user
+def global_css():
+    st.markdown("""
+    <style>
+    .main { background: linear-gradient(135deg, #050510 0%, #0a0a20 50%, #02020a 100%); color: #ffffff; }
+    .block-container { padding-top: 2rem; }
+    h1, h2, h3 { color: #00d4ff; font-family: 'Orbitron', sans-serif; }
+    .metric-card {
+        background: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(0, 212, 255, 0.3);
+        border-radius: 15px;
+        padding: 20px;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    }
+    .metric-card h3 { margin: 0; font-size: 1rem; color: #87cefa; }
+    .metric-card p { margin: 10px 0 0; font-size: 1.6rem; font-weight: 700; color: #00d4ff; }
+    .glass-card {
+        background: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(0, 212, 255, 0.3);
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .stButton > button {
+        background: linear-gradient(90deg, #00d4ff, #008cff) !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+    }
+    .stButton > button:hover {
+        box-shadow: 0 0 20px #00d4ff !important;
+    }
+    .stTextInput > div > div > input, .stNumberInput > div > div > input, .stDateInput > div > div > input, .stSelectbox > div > div > div {
+        background: rgba(255, 255, 255, 0.12) !important;
+        border: 1px solid rgba(0, 212, 255, 0.5) !important;
+        color: #ffffff !important;
+        border-radius: 8px !important;
+    }
+    .stDataFrame { border-radius: 10px; overflow: hidden; }
+    </style>
+    """, unsafe_allow_html=True)
 
 
-def update_password(username, new_password):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE usuarios SET password_hash = ? WHERE username = ?",
-        (hash_password(new_password), username)
-    )
-    conn.commit()
-    conn.close()
-
-
-def add_record(table, data):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    columns = ', '.join(data.keys())
-    placeholders = ', '.join(['?' for _ in data])
-    cursor.execute(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", list(data.values()))
-    conn.commit()
-    conn.close()
-
-
-def get_all_records(table):
-    conn = get_db_connection()
-    df = pd.read_sql_query(f"SELECT * FROM {table} ORDER BY id DESC", conn)
-    conn.close()
-    return df
-
-
-def update_record(table, id_value, data):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    sets = ', '.join([f"{k} = ?" for k in data.keys()])
-    values = list(data.values()) + [id_value]
-    cursor.execute(f"UPDATE {table} SET {sets} WHERE id = ?", values)
-    conn.commit()
-    conn.close()
-
-
-def delete_record(table, id_value):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(f"DELETE FROM {table} WHERE id = ?", (id_value,))
-    conn.commit()
-    conn.close()
-
-
-def get_record_by_id(table, id_value):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM {table} WHERE id = ?", (id_value,))
-    record = cursor.fetchone()
-    conn.close()
-    return record
-
-
-def format_currency(value):
-    if pd.isna(value) or value is None:
-        return "R$ 0,00"
-    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-def render_login():
-    st.markdown("<<div class='particles'>" + "".join(["<<div class='particle'></div>" for _ in range(10)]) + "</div>", unsafe_allow_html=True)
-    st.markdown("<<br><br>", unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<<h1 style='text-align: center;'>🏥 MARMED</h1>", unsafe_allow_html=True)
-        st.markdown("<<h3 style='text-align: center; color: #e6f7ff;'>Gestão em Saúde Pública</h3>", unsafe_allow_html=True)
-        st.markdown("<<p style='text-align: center; color: #00d4ff; font-weight: 600;'>Luminárias - MG</p>", unsafe_allow_html=True)
-        st.markdown("<<br>", unsafe_allow_html=True)
-
-        username = st.text_input("Usuário", key="login_user")
-        password = st.text_input("Senha", type="password", key="login_pass")
-
-        if st.button("Entrar", use_container_width=True):
-            user = verify_login(username, password)
-            if user:
-                st.session_state.authenticated = True
-                st.session_state.username = username
-                st.session_state.nome = user[3]
-                st.session_state.cargo = user[4]
+def sidebar():
+    menu_items = [
+        "Dashboard", "Contas a Pagar", "Contas a Receber", "Empenhos",
+        "Licitações", "Contratos", "Relatórios", "Trocar Senha", "Sair"
+    ]
+    st.sidebar.markdown("<h1 style="text-align:center; color:#00d4ff;'>MARMED</h1>", unsafe_allow_html=True)
+    st.sidebar.markdown("<<p style='text-align:center; color:#87cefa;'>Luminárias - MG</p>", unsafe_allow_html=True)
+    for item in menu_items:
+        if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True):
+            if item == "Sair":
+                st.session_state.logged_in = False
                 st.session_state.page = "Dashboard"
                 st.rerun()
             else:
-                st.error("Usuário ou senha incorretos!")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-
-def render_sidebar():
-    with st.sidebar:
-        st.markdown(f"<<h2 style='color: #00d4ff;'>🏥 MARMED</h2>", unsafe_allow_html=True)
-        st.markdown(f"<<p style='color: #e6f7ff;'>Bem-vindo, <b>{st.session_state.get('nome', 'Admin')}</b></p>", unsafe_allow_html=True)
-        st.markdown(f"<<p style='color: #ffd700; font-size: 0.85rem;'>{st.session_state.get('cargo', 'Diretor')}</p>", unsafe_allow_html=True)
-        st.markdown("<<hr style='border-color: rgba(0,212,255,0.3);'>", unsafe_allow_html=True)
-
-        pages = [
-            "Dashboard", "Contas a Pagar", "Contas a Receber", "Empenhos",
-            "Licitações", "Contratos", "Relatórios", "Trocar Senha", "Sair"
-        ]
-
-        for page in pages:
-            if st.button(page, use_container_width=True, key=f"nav_{page}"):
-                if page == "Sair":
-                    st.session_state.clear()
-                    st.rerun()
-                else:
-                    st.session_state.page = page
-                    st.rerun()
-
-
-def render_dashboard():
-    st.markdown("<<h1>Dashboard</h1>", unsafe_allow_html=True)
-
-    metricas = [
-        ("REPASSE FEDERAL", 1250000),
-        ("REPASSE ESTADUAL", 890000),
-        ("RECURSO MUNICIPAL", 450000),
-        ("TRANSFERÊNCIA", 320000),
-        ("TRANSPOSIÇÃO", 180000)
-    ]
-
-    cols = st.columns(5)
-    for i, (label, value) in enumerate(metricas):
-        with cols[i]:
-            st.markdown(f"""
-                <div class='metric-card'>
-                    <div class='metric-value'>{format_currency(value)}</div>
-                    <div class='metric-label'>{label}</div>
-                </div>
-            """, unsafe_allow_html=True)
-
-    st.markdown("<<br>", unsafe_allow_html=True)
-
-    col1, col2 = st.columns([2, 1])
-
-    with col1:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<<h3>📊 Movimentações</h3>", unsafe_allow_html=True)
-        df = get_all_records("movimentacoes")
-        if not df.empty:
-            df['valor'] = df['valor'].apply(format_currency)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        else:
-            st.info("Nenhuma movimentação registrada.")
-
-        with st.expander("➕ Nova Movimentação"):
-            with st.form("form_movimentacao"):
-                tipo = st.selectbox("Tipo", ["Entrada", "Saída", "Transferência"])
-                descricao = st.text_input("Descrição")
-                valor = st.number_input("Valor", min_value=0.0, format="%.2f")
-                categoria = st.text_input("Categoria")
-                observacao = st.text_area("Observação")
-                submitted = st.form_submit_button("Salvar Movimentação")
-                if submitted:
-                    add_record("movimentacoes", {
-                        "tipo": tipo,
-                        "descricao": descricao,
-                        "valor": valor,
-                        "data_movimentacao": date.today().isoformat(),
-                        "categoria": categoria,
-                        "observacao": observacao
-                    })
-                    st.success("Movimentação registrada com sucesso!")
-                    st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with col2:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<<h3>📅 Resumo do Mês</h3>", unsafe_allow_html=True)
-
-        today = date.today()
-        first_day = today.replace(day=1).isoformat()
-        last_day = (today.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-        last_day = last_day.isoformat()
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_pagar WHERE status = 'Pago' AND data_vencimento BETWEEN ? AND ?", (first_day, last_day))
-        total_pago = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_pagar WHERE status = 'Pendente' AND data_vencimento BETWEEN ? AND ?", (first_day, last_day))
-        total_pagar = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_receber WHERE status = 'Recebido' AND data_vencimento BETWEEN ? AND ?", (first_day, last_day))
-        total_recebido = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_receber WHERE status = 'Pendente' AND data_vencimento BETWEEN ? AND ?", (first_day, last_day))
-        total_receber = cursor.fetchone()[0]
-
-        conn.close()
-
-        st.markdown(f"<<p style='color: #00d4ff;'>Contas Pagas</p>", unsafe_allow_html=True)
-        st.markdown(f"<<p class='metric-value'>{format_currency(total_pago)}</p>", unsafe_allow_html=True)
-
-        st.markdown(f"<<p style='color: #00d4ff;'>Contas a Pagar</p>", unsafe_allow_html=True)
-        st.markdown(f"<<p class='metric-value'>{format_currency(total_pagar)}</p>", unsafe_allow_html=True)
-
-        st.markdown(f"<<p style='color: #00d4ff;'>Contas Recebidas</p>", unsafe_allow_html=True)
-        st.markdown(f"<<p class='metric-value'>{format_currency(total_recebido)}</p>", unsafe_allow_html=True)
-
-        st.markdown(f"<<p style='color: #00d4ff;'>Contas a Receber</p>", unsafe_allow_html=True)
-        st.markdown(f"<<p class='metric-value'>{format_currency(total_receber)}</p>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-
-def crud_page(table_name, title, fields, date_fields=None):
-    if date_fields is None:
-        date_fields = []
-
-    st.markdown(f"<<h1>{title}</h1>", unsafe_allow_html=True)
-
-    tab1, tab2 = st.tabs(["📋 Listar", "➕ Adicionar"])
-
-    with tab1:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-        df = get_all_records(table_name)
-        if not df.empty:
-            for field in fields:
-                if field in df.columns and field in date_fields:
-                    df[field] = pd.to_datetime(df[field], errors='coerce').dt.strftime('%d/%m/%Y')
-            st.dataframe(df, use_container_width=True, hide_index=True)
-
-            st.markdown("<<br>", unsafe_allow_html=True)
-            col1, col2 = st.columns(2)
-            with col1:
-                id_edit = st.number_input("ID para editar", min_value=1, step=1, key=f"edit_{table_name}")
-            with col2:
-                id_delete = st.number_input("ID para excluir", min_value=1, step=1, key=f"delete_{table_name}")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("✏️ Edregar", key=f"btn_edit_{table_name}"):
-                    record = get_record_by_id(table_name, id_edit)
-                    if record:
-                        st.session_state[f"edit_record_{table_name}"] = record
-                        st.rerun()
-                    else:
-                        st.error("Registro não encontrado!")
-            with col2:
-                if st.button("🗑️ Excluir", key=f"btn_delete_{table_name}"):
-                    delete_record(table_name, id_delete)
-                    st.success("Registro excluído com sucesso!")
-                    st.rerun()
-        else:
-            st.info("Nenhum registro encontrado.")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with tab2:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-        with st.form(f"form_add_{table_name}"):
-            values = {}
-            for field in fields:
-                if field in date_fields:
-                    values[field] = st.date_input(field.replace("_", " ").title(), key=f"add_{field}_{table_name}").isoformat()
-                elif field in ["valor", "valor_estimado", "valor_total"]:
-                    values[field] = st.number_input(field.replace("_", " ").title(), min_value=0.0, format="%.2f", key=f"add_{field}_{table_name}")
-                elif field == "status":
-                    values[field] = st.selectbox(field.replace("_", " ").title(), ["Pendente", "Pago", "Atrasado", "Recebido", "Ativo", "Inativo", "Em Andamento", "Concluído", "Cancelado", "Vigente", "Encerrado"], key=f"add_{field}_{table_name}")
-                elif field == "modalidade":
-                    values[field] = st.selectbox("Modalidade", ["Pregão", "Tomada de Preços", "Concorrência", "Convite", "Leilão", "Concurso", "Dispensa", "Inexigibilidade"], key=f"add_{field}_{table_name}")
-                elif field == "observacao":
-                    values[field] = st.text_area(field.replace("_", " ").title(), key=f"add_{field}_{table_name}")
-                else:
-                    values[field] = st.text_input(field.replace("_", " ").title(), key=f"add_{field}_{table_name}")
-
-            submitted = st.form_submit_button("Salvar")
-            if submitted:
-                add_record(table_name, values)
-                st.success("Registro salvo com sucesso!")
+                st.session_state.page = item
+                st.session_state.edit_id = None
+                st.session_state.edit_table = None
                 st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    if f"edit_record_{table_name}" in st.session_state:
-        record = st.session_state[f"edit_record_{table_name}"]
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<<h3>✏️ Editar Registro</h3>", unsafe_allow_html=True)
-        with st.form(f"form_edit_{table_name}"):
-            values = {}
-            for i, field in enumerate(fields):
-                if field in date_fields:
-                    try:
-                        default = pd.to_datetime(record[i+1]).date() if record[i+1] else date.today()
-                    except:
-                        default = date.today()
-                    values[field] = st.date_input(field.replace("_", " ").title(), value=default, key=f"edit_{field}_{table_name}").isoformat()
-                elif field in ["valor", "valor_estimado", "valor_total"]:
-                    values[field] = st.number_input(field.replace("_", " ").title(), min_value=0.0, value=float(record[i+1] or 0), format="%.2f", key=f"edit_{field}_{table_name}")
-                elif field == "status":
-                    values[field] = st.selectbox(field.replace("_", " ").title(), ["Pendente", "Pago", "Atrasado", "Recebido", "Ativo", "Inativo", "Em Andamento", "Concluído", "Cancelado", "Vigente", "Encerrado"], index=["Pendente", "Pago", "Atrasado", "Recebido", "Ativo", "Inativo", "Em Andamento", "Concluído", "Cancelado", "Vigente", "Encerrado"].index(record[i+1]) if record[i+1] in ["Pendente", "Pago", "Atrasado", "Recebido", "Ativo", "Inativo", "Em Andamento", "Concluído", "Cancelado", "Vigente", "Encerrado"] else 0, key=f"edit_{field}_{table_name}")
-                elif field == "modalidade":
-                    values[field] = st.selectbox("Modalidade", ["Pregão", "Tomada de Preços", "Concorrência", "Convite", "Leilão", "Concurso", "Dispensa", "Inexigibilidade"], index=["Pregão", "Tomada de Preços", "Concorrência", "Convite", "Leilão", "Concurso", "Dispensa", "Inexigibilidade"].index(record[i+1]) if record[i+1] in ["Pregão", "Tomada de Preços", "Concorrência", "Convite", "Leilão", "Concurso", "Dispensa", "Inexigibilidade"] else 0, key=f"edit_{field}_{table_name}")
-                elif field == "observacao":
-                    values[field] = st.text_area(field.replace("_", " ").title(), value=record[i+1] or "", key=f"edit_{field}_{table_name}")
-                else:
-                    values[field] = st.text_input(field.replace("_", " ").title(), value=record[i+1] or "", key=f"edit_{field}_{table_name}")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.form_submit_button("Atualizar"):
-                    update_record(table_name, record[0], values)
-                    del st.session_state[f"edit_record_{table_name}"]
-                    st.success("Registro atualizado com sucesso!")
-                    st.rerun()
-            with col2:
-                if st.form_submit_button("Cancelar"):
-                    del st.session_state[f"edit_record_{table_name}"]
-                    st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_contas_pagar():
-    crud_page("contas_pagar", "Contas a Pagar", ["descricao", "fornecedor", "valor", "data_vencimento", "status", "categoria", "observacao"], ["data_vencimento"])
+def totals():
+    c = conn.cursor()
+    total = 0.0
+    for t in ["repasses_federal", "repasses_estadual", "recursos_municipal", "transferencias", "transposicoes"]:
+        c.execute(f"SELECT COALESCE(SUM(valor),0) FROM {t}")
+        total += c.fetchone()[0]
+    federal = 1250000
+    estadual = 890000
+    municipal = 450000
+    transferencia = 320000
+    transposicao = 180000
+    if total == 0:
+        for t, v, d in [
+            ("repasses_federal", federal, "Repasse Federal 2025"),
+            ("repasses_estadual", estadual, "Repasse Estadual 2025"),
+            ("recursos_municipal", municipal, "Recurso Municipal 2025"),
+            ("transferencias", transferencia, "Transferência 2025"),
+            ("transposicoes", transposicao, "Transposição 2025")
+        ]:
+            c.execute(f"INSERT INTO {t} (descricao, valor, data, programa) VALUES (?, ?, ?, ?)", (d, v, "2025-01-01", "Saúde"))
+        conn.commit()
+    c.execute("SELECT COALESCE(SUM(valor),0) FROM repasses_federal")
+    federal = c.fetchone()[0] or 1250000
+    c.execute("SELECT COALESCE(SUM(valor),0) FROM repasses_estadual")
+    estadual = c.fetchone()[0] or 890000
+    c.execute("SELECT COALESCE(SUM(valor),0) FROM recursos_municipal")
+    municipal = c.fetchone()[0] or 450000
+    c.execute("SELECT COALESCE(SUM(valor),0) FROM transferencias")
+    transferencia = c.fetchone()[0] or 320000
+    c.execute("SELECT COALESCE(SUM(valor),0) FROM transposicoes")
+    transposicao = c.fetchone()[0] or 180000
+    return {
+        "REPASSE FEDERAL": federal,
+        "REPASSE ESTADUAL": estadual,
+        "RECURSO MUNICIPAL": municipal,
+        "TRANSFERÊNCIA": transferencia,
+        "TRANSPOSIÇÃO": transposicao
+    }
 
 
-def render_contas_receber():
-    crud_page("contas_receber", "Contas a Receber", ["descricao", "devedor", "valor", "data_vencimento", "status", "categoria", "observacao"], ["data_vencimento"])
+def dashboard_page():
+    st.title("Dashboard")
+    values = totals()
+    cols = st.columns(5)
+    for col, (label, value) in zip(cols, values.items()):
+        col.markdown(f"""
+        <div class="metric-card">
+            <h3>{label}</h3>
+            <p>R$ {value:,.2f}</p>
+        </div>
+        """, unsafe_allow_html=True)
 
+    c = conn.cursor()
+    c.execute("SELECT status, SUM(valor) FROM contas_pagar GROUP BY status")
+    rows_pagar = c.fetchall()
+    c.execute("SELECT status, SUM(valor) FROM contas_receber GROUP BY status")
+    rows_receber = c.fetchall()
 
-def render_empenhos():
-    crud_page("empenhos", "Empenhos", ["numero_empenho", "descricao", "valor", "data_empenho", "fornecedor", "status", "observacao"], ["data_empenho"])
+    if not rows_pagar:
+        rows_pagar = [("Pendente", 0)]
+    if not rows_receber:
+        rows_receber = [("Pendente", 0)]
 
+    df_pagar = pd.DataFrame(rows_pagar, columns=["Status", "Valor"])
+    df_receber = pd.DataFrame(rows_receber, columns=["Status", "Valor"])
 
-def render_licitacoes():
-    crud_page("licitacoes", "Licitações", ["numero_processo", "objeto", "modalidade", "valor_estimado", "data_abertura", "status", "vencedor", "observacao"], ["data_abertura"])
-
-
-def render_contratos():
-    crud_page("contratos", "Contratos", ["numero_contrato", "objeto", "contratado", "valor_total", "data_inicio", "data_fim", "status", "observacao"], ["data_inicio", "data_fim"])
-
-
-def render_relatorios():
-    st.markdown("<<h1>Relatórios</h1>", unsafe_allow_html=True)
-    st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
-        relatorio = st.selectbox("Tipo de Relatório", ["Contas a Pagar", "Contas a Receber", "Empenhos", "Licitações", "Contratos", "Movimentações"])
+        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+        st.subheader("Contas a Pagar por Status")
+        fig1 = px.pie(df_pagar, values="Valor", names="Status", color_discrete_sequence=["#00d4ff", "#008cff", "#ffd700", "#87cefa"], template="plotly_dark")
+        st.plotly_chart(fig1, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
     with col2:
-        data_inicio = st.date_input("Data Início", value=date.today().replace(day=1))
-    with col3:
-        data_fim = st.date_input("Data Fim", value=date.today())
+        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+        st.subheader("Contas a Receber por Status")
+        fig2 = px.pie(df_receber, values="Valor", names="Status", color_discrete_sequence=["#00d4ff", "#008cff", "#ffd700", "#87cefa"], template="plotly_dark")
+        st.plotly_chart(fig2, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    if st.button("Gerar Relatório", use_container_width=True):
-        tabela = relatorio.lower().replace(" ", "_")
-        if tabela == "contas_a_pagar":
-            tabela = "contas_pagar"
-        elif tabela == "contas_a_receber":
-            tabela = "contas_receber"
 
-        conn = get_db_connection()
-        if tabela == "movimentacoes":
-            query = f"SELECT * FROM {tabela} WHERE data_movimentacao BETWEEN ? AND ? ORDER BY data_movimentacao DESC"
-        elif tabela == "licitacoes":
-            query = f"SELECT * FROM {tabela} WHERE data_abertura BETWEEN ? AND ? ORDER BY data_abertura DESC"
-        elif tabela == "contratos":
-            query = f"SELECT * FROM {tabela} WHERE data_inicio BETWEEN ? AND ? ORDER BY data_inicio DESC"
+def crud_page(table, columns, labels, title, status_options=None):
+    st.title(title)
+    c = conn.cursor()
+    c.execute(f"SELECT * FROM {table}")
+    rows = c.fetchall()
+    df = pd.DataFrame(rows, columns=["id"] + columns)
+
+    st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+    st.subheader("Cadastrar / Editar")
+    with st.form(f"form_{table}"):
+        inputs = {}
+        colunas = st.columns(min(len(labels), 3))
+        for i, (col, label) in enumerate(zip(columns, labels)):
+            with colunas[i % 3]:
+                st.markdown("<span class='field-label'>Senha</span>", unsafe_allow_html=True)
+                if col in ["valor"]:
+                    inputs[col] = st.number_input("", value=0.0, step=0.01, key=f"{table}_{col}", label_visibility="collapsed")
+                elif "data" in col or "vencimento" in col or "inicio" in col or "fim" in col or "abertura" in col:
+                    inputs[col] = st.date_input("", value=date.today(), key=f"{table}_{col}", label_visibility="collapsed").isoformat()
+                elif col == "status" and status_options:
+                    inputs[col] = st.selectbox("", status_options, key=f"{table}_{col}", label_visibility="collapsed")
+                elif col in ["tipo", "modalidade", "fonte", "categoria", "origem", "destino", "programa"]:
+                    inputs[col] = st.text_input("", key=f"{table}_{col}", label_visibility="collapsed")
+                else:
+                    inputs[col] = st.text_input("", key=f"{table}_{col}", label_visibility="collapsed")
+        cols = st.columns(2)
+        with cols[0]:
+            submitted = st.form_submit_button("Salvar")
+        with cols[1]:
+            if st.session_state.edit_id and st.session_state.edit_table == table:
+                cancel = st.form_submit_button("Cancelar Edição")
+                if cancel:
+                    st.session_state.edit_id = None
+                    st.session_state.edit_table = None
+                    st.rerun()
+
+    if submitted:
+        if st.session_state.edit_id and st.session_state.edit_table == table:
+            sets = ", ".join([f"{col}=?" for col in columns])
+            vals = list(inputs.values()) + [st.session_state.edit_id]
+            c.execute(f"UPDATE {table} SET {sets} WHERE id=?", vals)
+            st.success("Registro atualizado com sucesso!")
+            st.session_state.edit_id = None
+            st.session_state.edit_table = None
         else:
-            query = f"SELECT * FROM {tabela} WHERE data_vencimento BETWEEN ? AND ? ORDER BY data_vencimento DESC"
+            cols_sql = ", ".join(columns)
+            placeholders = ", ".join(["?"] * len(columns))
+            c.execute(f"INSERT INTO {table} ({cols_sql}) VALUES ({placeholders})", list(inputs.values()))
+            st.success("Registro salvo com sucesso!")
+        conn.commit()
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
-        df = pd.read_sql_query(query, conn, params=(data_inicio.isoformat(), data_fim.isoformat()))
-        conn.close()
-
-        if not df.empty:
-            st.markdown(f"<<h3>Relatório de {relatorio}</h3>", unsafe_allow_html=True)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-
-            total = 0
-            valor_cols = [c for c in df.columns if 'valor' in c]
-            if valor_cols:
-                total = df[valor_cols[0]].sum()
-                st.markdown(f"<<h3 style='color: #ffd700;'>Total: {format_currency(total)}</h3>", unsafe_allow_html=True)
-
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Baixar CSV",
-                data=csv,
-                file_name=f"relatorio_{relatorio.lower().replace(' ', '_')}_{data_inicio.isoformat()}_{data_fim.isoformat()}.csv",
-                mime='text/csv',
-                use_container_width=True
-            )
-        else:
-            st.info("Nenhum registro encontrado no período selecionado.")
+    st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+    st.subheader("Registros")
+    if not df.empty:
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        cols = st.columns(len(df))
+        for idx, row in df.iterrows():
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("Editar", key=f"edit_{table}_{row['id']}"):
+                    st.session_state.edit_id = row["id"]
+                    st.session_state.edit_table = table
+                    for col in columns:
+                        if col in ["valor"]:
+                            st.session_state[f"{table}_{col}"] = float(row[col])
+                        elif col in ["vencimento", "data", "data_abertura", "inicio", "fim"]:
+                            try:
+                                st.session_state[f"{table}_{col}"] = datetime.strptime(row[col], "%Y-%m-%d").date()
+                            except:
+                                st.session_state[f"{table}_{col}"] = date.today()
+                        else:
+                            st.session_state[f"{table}_{col}"] = row[col]
+                    st.rerun()
+            with c2:
+                if st.button("Excluir", key=f"del_{table}_{row['id']}"):
+                    c.execute(f"DELETE FROM {table} WHERE id=?", (row["id"],))
+                    conn.commit()
+                    st.success("Registro excluído!")
+                    st.rerun()
+    else:
+        st.info("Nenhum registro cadastrado.")
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_trocar_senha():
-    st.markdown("<<h1>Trocar Senha</h1>", unsafe_allow_html=True)
+def contas_pagar_page():
+    crud_page(
+        "contas_pagar",
+        ["descricao", "credor", "valor", "vencimento", "status", "categoria"],
+        ["Descrição", "Credor", "Valor", "Vencimento", "Status", "Categoria"],
+        "Contas a Pagar",
+        status_options=["Pendente", "Pago", "Vencido", "Cancelado"]
+    )
+
+
+def contas_receber_page():
+    crud_page(
+        "contas_receber",
+        ["descricao", "devedor", "valor", "vencimento", "status", "categoria"],
+        ["Descrição", "Devedor", "Valor", "Vencimento", "Status", "Categoria"],
+        "Contas a Receber",
+        status_options=["Pendente", "Recebido", "Vencido", "Cancelado"]
+    )
+
+
+def empenhos_page():
+    crud_page(
+        "empenhos",
+        ["numero", "descricao", "valor", "data", "fonte", "status"],
+        ["Número", "Descrição", "Valor", "Data", "Fonte", "Status"],
+        "Empenhos",
+        status_options=["Ativo", "Anulado", "Liquidado", "Pago"]
+    )
+
+
+def licitacoes_page():
+    crud_page(
+        "licitacoes",
+        ["numero", "objeto", "modalidade", "valor", "data_abertura", "status"],
+        ["Número", "Objeto", "Modalidade", "Valor", "Data Abertura", "Status"],
+        "Licitações",
+        status_options=["Em Andamento", "Concluída", "Cancelada", "Adjudicada"]
+    )
+
+
+def contratos_page():
+    crud_page(
+        "contratos",
+        ["numero", "contratado", "objeto", "valor", "inicio", "fim", "status"],
+        ["Número", "Contratado", "Objeto", "Valor", "Início", "Fim", "Status"],
+        "Contratos",
+        status_options=["Vigente", "Encerrado", "Rescindido", "Renovado"]
+    )
+
+
+def relatorios_page():
+    st.title("Relatórios")
+    c = conn.cursor()
+    tables = {
+        "Contas a Pagar": "contas_pagar",
+        "Contas a Receber": "contas_receber",
+        "Empenhos": "empenhos",
+        "Licitações": "licitacoes",
+        "Contratos": "contratos"
+    }
     st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+    selected = st.selectbox("Selecione o relatório", list(tables.keys()))
+    t = tables[selected]
+    c.execute(f"SELECT * FROM {t}")
+    rows = c.fetchall()
+    if rows:
+        cols = [desc[0] for desc in c.description]
+        df = pd.DataFrame(rows, columns=cols)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button("Download CSV", csv, f"relatorio_{t}.csv", "text/csv")
+    else:
+        st.info("Nenhum dado disponível.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    with st.form("form_trocar_senha"):
-        senha_atual = st.text_input("Senha Atual", type="password")
-        nova_senha = st.text_input("Nova Senha", type="password")
-        confirmar_senha = st.text_input("Confirmar Nova Senha", type="password")
-        submitted = st.form_submit_button("Alterar Senha")
 
-        if submitted:
-            if not verify_login(st.session_state.username, senha_atual):
-                st.error("Senha atual incorreta!")
-            elif nova_senha != confirmar_senha:
-                st.error("As novas senhas não conferem!")
-            elif len(nova_senha) < 6:
-                st.error("A nova senha deve ter pelo menos 6 caracteres!")
+def trocar_senha_page():
+    st.title("Trocar Senha")
+    st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+    st.markdown("<span class='field-label'>Senha</span>", unsafe_allow_html=True)
+    atual = st.text_input("", type="password", key="senha_atual", label_visibility="collapsed")
+    st.markdown("<span class='field-label'>Senha</span>", unsafe_allow_html=True)
+    nova = st.text_input("", type="password", key="senha_nova", label_visibility="collapsed")
+   st.markdown("<span class='field-label'>Senha</span>", unsafe_allow_html=True)
+    confirma = st.text_input("", type="password", key="senha_confirma", label_visibility="collapsed")
+    if st.button("Alterar Senha"):
+        if nova != confirma:
+            st.error("As senhas não conferem.")
+        else:
+            c = conn.cursor()
+            h_atual = hashlib.sha256(atual.encode()).hexdigest()
+            c.execute("SELECT * FROM usuarios WHERE usuario=? AND senha_hash=?", (DEFAULT_USER, h_atual))
+            if not c.fetchone():
+                st.error("Senha atual incorreta.")
             else:
-                update_password(st.session_state.username, nova_senha)
-                st.success("Senha alterada com sucesso! Faça login novamente.")
-                st.session_state.clear()
-                st.rerun()
+                h_nova = hashlib.sha256(nova.encode()).hexdigest()
+                c.execute("UPDATE usuarios SET senha_hash=? WHERE usuario=?", (h_nova, DEFAULT_USER))
+                conn.commit()
+                st.success("Senha alterada com sucesso!")
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 def main():
-    init_db()
-    st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
-
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
-    if "page" not in st.session_state:
-        st.session_state.page = "Dashboard"
-
-    if not st.session_state.authenticated:
-        render_login()
+    if not st.session_state.logged_in:
+        login_page()
     else:
-        render_sidebar()
+        global_css()
+        sidebar()
         page = st.session_state.page
-
         if page == "Dashboard":
-            render_dashboard()
+            dashboard_page()
         elif page == "Contas a Pagar":
-            render_contas_pagar()
+            contas_pagar_page()
         elif page == "Contas a Receber":
-            render_contas_receber()
+            contas_receber_page()
         elif page == "Empenhos":
-            render_empenhos()
+            empenhos_page()
         elif page == "Licitações":
-            render_licitacoes()
+            licitacoes_page()
         elif page == "Contratos":
-            render_contratos()
+            contratos_page()
         elif page == "Relatórios":
-            render_relatorios()
+            relatorios_page()
         elif page == "Trocar Senha":
-            render_trocar_senha()
+            trocar_senha_page()
 
 
 if __name__ == "__main__":
