@@ -79,7 +79,7 @@ def init_db():
     )''')
 
     default_hash = hashlib.sha256('Diretor2025#'.encode()).hexdigest()
-    c.execute("INSERT OR IGNORE INTO users (id, username, password) VALUES (1, 'admin', ?)", (default_hash,))
+    c.execute("INSERT OR IGNORE INTO users (username, password) VALUES ('admin', ?)", (default_hash,))
 
     c.execute("INSERT OR IGNORE INTO metricas (id, repasse_federal, repasse_estadual, recurso_municipal, transferencia, transposicao) VALUES (1, 0, 0, 0, 0, 0)")
 
@@ -280,7 +280,7 @@ def sidebar_menu():
 
 # ------------------ DASHBOARD ------------------
 def dashboard_page():
-    st.markdown('<h1 style="color:#00d4ff; text-align:center;">Dashboard</h1>', unsafe_allow_html=True)
+    st.markdown("<h1 style="color:#00d4ff; text-align:center;">Dashboard</h1>', unsafe_allow_html=True)
     st.markdown('<hr style="border-color:#00d4ff;">', unsafe_allow_html=True)
 
     conn = get_conn()
