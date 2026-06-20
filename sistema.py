@@ -373,7 +373,7 @@ def sidebar():
         "Dashboard", "Contas a Pagar", "Contas a Receber", "Empenhos",
         "Licitações", "Contratos", "Relatórios", "Trocar Senha", "Sair"
     ]
-    st.sidebar.markdown("<h1 style="text-align:center; color:#00d4ff;'>MARMED</h1>", unsafe_allow_html=True)
+    st.sidebar.markdown("<h1 style='text-align:center; color:#00d4ff;'>MARMED</h1>", unsafe_allow_html=True)
     st.sidebar.markdown("<<p style='text-align:center; color:#87cefa;'>Luminárias - MG</p>", unsafe_allow_html=True)
     for item in menu_items:
         if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True):
