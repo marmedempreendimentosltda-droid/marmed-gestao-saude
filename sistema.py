@@ -516,11 +516,11 @@ def metric_card(label: str, value: str, color: str = "#00d4ff"):
 
 
 def section_header(title: str):
-    st.markdown(f"<<h2 style='margin-top: 0; margin-bottom: 20px; color: #00d4ff;'>{title}</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='margin-top: 0; margin-bottom: 20px; color: #00d4ff;'>{title}</h2>", unsafe_allow_html=True)
 
 
 def glass_container_start():
-    st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
 
 
 def glass_container_end():
@@ -548,12 +548,12 @@ def dashboard():
     with col4:
         metric_card("Contratos", format_currency(total_contratos), "#a855f7")
 
-    st.markdown("<<hr/>", unsafe_allow_html=True)
+    st.markdown("<hr/>", unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<<h3 style='color: #ff6b6b;'>Resumo Contas a Pagar</h3>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #ff6b6b;'>Resumo Contas a Pagar</h3>", unsafe_allow_html=True)
         data = fetch_all("SELECT status, COUNT(*), SUM(valor) FROM contas_pagar GROUP BY status")
         if data:
             df = pd.DataFrame(data, columns=["Status", "Quantidade", "Valor"])
@@ -564,8 +564,8 @@ def dashboard():
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c2:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<<h3 style='color: #4ade80;'>Resumo Contas a Receber</h3>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #4ade80;'>Resumo Contas a Receber</h3>", unsafe_allow_html=True)
         data = fetch_all("SELECT status, COUNT(*), SUM(valor) FROM contas_receber GROUP BY status")
         if data:
             df = pd.DataFrame(data, columns=["Status", "Quantidade", "Valor"])
@@ -581,7 +581,7 @@ def manage_contas_pagar():
     tab1, tab2 = st.tabs(["Listar", "Cadastrar / Editar"])
 
     with tab1:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         rows = fetch_all("SELECT id, descricao, fornecedor, valor, vencimento, status, categoria, observacao FROM contas_pagar ORDER BY vencimento")
         if rows:
             df = pd.DataFrame(rows, columns=["ID", "Descrição", "Fornecedor", "Valor", "Vencimento", "Status", "Categoria", "Observação"])
@@ -592,7 +592,7 @@ def manage_contas_pagar():
         st.markdown("</div>", unsafe_allow_html=True)
 
     with tab2:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         edit_id = st.session_state.get("edit_pagar", None)
         descricao = ""
         fornecedor = ""
@@ -651,7 +651,7 @@ def manage_contas_pagar():
                 st.session_state.edit_pagar = None
                 st.rerun()
 
-        st.markdown("<<h4>Ações</h4>", unsafe_allow_html=True)
+        st.markdown("<h4>Ações</h4>", unsafe_allow_html=True)
         ids = [r[0] for r in fetch_all("SELECT id, descricao FROM contas_pagar")]
         if ids:
             selected = st.selectbox("Selecione para editar/excluir", ids, format_func=lambda x: f"#{x} - {fetch_one('SELECT descricao FROM contas_pagar WHERE id=?', (x,))[0]}")
@@ -675,7 +675,7 @@ def manage_contas_receber():
     tab1, tab2 = st.tabs(["Listar", "Cadastrar / Editar"])
 
     with tab1:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         rows = fetch_all("SELECT id, descricao, cliente, valor, vencimento, status, categoria, observacao FROM contas_receber ORDER BY vencimento")
         if rows:
             df = pd.DataFrame(rows, columns=["ID", "Descrição", "Cliente", "Valor", "Vencimento", "Status", "Categoria", "Observação"])
@@ -686,7 +686,7 @@ def manage_contas_receber():
         st.markdown("</div>", unsafe_allow_html=True)
 
     with tab2:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         edit_id = st.session_state.get("edit_receber", None)
         descricao = ""
         cliente = ""
@@ -745,7 +745,7 @@ def manage_contas_receber():
                 st.session_state.edit_receber = None
                 st.rerun()
 
-        st.markdown("<<h4>Ações</h4>", unsafe_allow_html=True)
+        st.markdown("<h4>Ações</h4>", unsafe_allow_html=True)
         ids = [r[0] for r in fetch_all("SELECT id, descricao FROM contas_receber")]
         if ids:
             selected = st.selectbox("Selecione para editar/excluir", ids, format_func=lambda x: f"#{x} - {fetch_one('SELECT descricao FROM contas_receber WHERE id=?', (x,))[0]}")
@@ -769,7 +769,7 @@ def manage_empenhos():
     tab1, tab2 = st.tabs(["Listar", "Cadastrar / Editar"])
 
     with tab1:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         rows = fetch_all("SELECT id, numero, descricao, valor, data_empenho, status, dotacao, observacao FROM empenhos ORDER BY data_empenho DESC")
         if rows:
             df = pd.DataFrame(rows, columns=["ID", "Número", "Descrição", "Valor", "Data Empenho", "Status", "Dotação", "Observação"])
@@ -780,7 +780,7 @@ def manage_empenhos():
         st.markdown("</div>", unsafe_allow_html=True)
 
     with tab2:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         edit_id = st.session_state.get("edit_empenho", None)
         numero = ""
         descricao = ""
@@ -839,7 +839,7 @@ def manage_empenhos():
                 st.session_state.edit_empenho = None
                 st.rerun()
 
-        st.markdown("<<h4>Ações</h4>", unsafe_allow_html=True)
+        st.markdown("<h4>Ações</h4>", unsafe_allow_html=True)
         ids = [r[0] for r in fetch_all("SELECT id, numero FROM empenhos")]
         if ids:
             selected = st.selectbox("Selecione para editar/excluir", ids, format_func=lambda x: f"#{x} - {fetch_one('SELECT numero FROM empenhos WHERE id=?', (x,))[0]}")
@@ -863,7 +863,7 @@ def manage_licitacoes():
     tab1, tab2 = st.tabs(["Listar", "Cadastrar / Editar"])
 
     with tab1:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         rows = fetch_all("SELECT id, numero, objeto, modalidade, valor_estimado, data_abertura, status, vencedor, observacao FROM licitacoes ORDER BY data_abertura DESC")
         if rows:
             df = pd.DataFrame(rows, columns=["ID", "Número", "Objeto", "Modalidade", "Valor Estimado", "Data Abertura", "Status", "Vencedor", "Observação"])
@@ -874,7 +874,7 @@ def manage_licitacoes():
         st.markdown("</div>", unsafe_allow_html=True)
 
     with tab2:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         edit_id = st.session_state.get("edit_licitacao", None)
         numero = ""
         objeto = ""
@@ -936,7 +936,7 @@ def manage_licitacoes():
                 st.session_state.edit_licitacao = None
                 st.rerun()
 
-        st.markdown("<<h4>Ações</h4>", unsafe_allow_html=True)
+        st.markdown("<h4>Ações</h4>", unsafe_allow_html=True)
         ids = [r[0] for r in fetch_all("SELECT id, numero FROM licitacoes")]
         if ids:
             selected = st.selectbox("Selecione para editar/excluir", ids, format_func=lambda x: f"#{x} - {fetch_one('SELECT numero FROM licitacoes WHERE id=?', (x,))[0]}")
@@ -960,7 +960,7 @@ def manage_contratos():
     tab1, tab2 = st.tabs(["Listar", "Cadastrar / Editar"])
 
     with tab1:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         rows = fetch_all("SELECT id, numero, objeto, contratada, valor, inicio, fim, status, observacao FROM contratos ORDER BY inicio DESC")
         if rows:
             df = pd.DataFrame(rows, columns=["ID", "Número", "Objeto", "Contratada", "Valor", "Início", "Fim", "Status", "Observação"])
@@ -971,7 +971,7 @@ def manage_contratos():
         st.markdown("</div>", unsafe_allow_html=True)
 
     with tab2:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         edit_id = st.session_state.get("edit_contrato", None)
         numero = ""
         objeto = ""
@@ -1035,7 +1035,7 @@ def manage_contratos():
                 st.session_state.edit_contrato = None
                 st.rerun()
 
-        st.markdown("<<h4>Ações</h4>", unsafe_allow_html=True)
+        st.markdown("<h4>Ações</h4>", unsafe_allow_html=True)
         ids = [r[0] for r in fetch_all("SELECT id, numero FROM contratos")]
         if ids:
             selected = st.selectbox("Selecione para editar/excluir", ids, format_func=lambda x: f"#{x} - {fetch_one('SELECT numero FROM contratos WHERE id=?', (x,))[0]}")
@@ -1056,7 +1056,7 @@ def manage_contratos():
 
 def change_password_page():
     section_header("Trocar Senha")
-    st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
     with st.form("form_senha"):
         senha_atual = st.text_input("Senha Atual", type="password")
         nova_senha = st.text_input("Nova Senha", type="password")
@@ -1085,16 +1085,16 @@ def change_password_page():
 # =============================================================================
 def sidebar_menu():
     st.sidebar.markdown('<h1 style="text-align:center; color:#00d4ff;">MARMED</h1>', unsafe_allow_html=True)
-    st.sidebar.markdown(f"<<p style='text-align:center; color:#a0b4c0;'>Usuário: <b>{st.session_state.username}</b></p>", unsafe_allow_html=True)
-    st.sidebar.markdown("<<hr/>", unsafe_allow_html=True)
+    st.sidebar.markdown(f"<p style='text-align:center; color:#a0b4c0;'>Usuário: <b>{st.session_state.username}</b></p>", unsafe_allow_html=True)
+    st.sidebar.markdown("<hr/>", unsafe_allow_html=True)
 
     menu = st.sidebar.radio(
         "Menu",
         ["Dashboard", "Contas a Pagar", "Contas a Receber", "Empenhos", "Licitações", "Contratos", "Trocar Senha", "Sair"],
         label_visibility="collapsed"
     )
-    st.sidebar.markdown("<<hr/>", unsafe_allow_html=True)
-    st.sidebar.markdown("<<p style='text-align:center; color:#a0b4c0; font-size:0.85rem;'>MARMED v1.0</p>", unsafe_allow_html=True)
+    st.sidebar.markdown("<hr/>", unsafe_allow_html=True)
+    st.sidebar.markdown("<p style='text-align:center; color:#a0b4c0; font-size:0.85rem;'>MARMED v1.0</p>", unsafe_allow_html=True)
     return menu
 
 
@@ -1105,15 +1105,15 @@ def login_page():
     inject_custom_css()
     inject_particles()
 
-    st.markdown("<<div style='height: 10vh;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 10vh;'></div>", unsafe_allow_html=True)
 
     animated_title()
-    st.markdown("<<p class='subtitle'>Sistema Integrado de Gestão Financeira e Contratual</p>", unsafe_allow_html=True)
+    st.markdown("<p class='subtitle'>Sistema Integrado de Gestão Financeira e Contratual</p>", unsafe_allow_html=True)
 
     _, col, _ = st.columns([1, 2, 1])
     with col:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<<h3 style='text-align:center; color:#00d4ff; margin-top:0;'>Acesso ao Sistema</h3>", unsafe_allow_html=True)
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align:center; color:#00d4ff; margin-top:0;'>Acesso ao Sistema</h3>", unsafe_allow_html=True)
 
         with st.form("login_form"):
             username = st.text_input("Usuário")
@@ -1129,7 +1129,7 @@ def login_page():
                 else:
                     st.error("Usuário ou senha inválidos.")
 
-        st.markdown("<<p style='text-align:center; color:#a0b4c0; font-size:0.85rem; margin-bottom:0;'>Usuário padrão: admin | Senha: Diretor2025#</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align:center; color:#a0b4c0; font-size:0.85rem; margin-bottom:0;'>Usuário padrão: admin | Senha: Diretor2025#</p>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 
