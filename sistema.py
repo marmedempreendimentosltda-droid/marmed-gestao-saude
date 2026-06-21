@@ -309,7 +309,7 @@ for i, (label, val) in enumerate(zip(labels, values)):
 
 st.markdown('<br>', unsafe_allow_html=True)
 
-    with st.expander('Editar Metricas'):
+with st.expander('Editar Metricas'):
         with st.form('form_metricas'):
             novo_federal = st.number_input('Repasse Federal', value=float(values[0]), step=0.01)
             novo_estadual = st.number_input('Repasse Estadual', value=float(values[1]), step=0.01)
