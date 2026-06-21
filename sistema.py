@@ -296,7 +296,7 @@ else:
         labels = ['REPASSE FEDERAL', 'REPASSE ESTADUAL', 'RECURSO MUNICIPAL', 'TRANSFERENCIA', 'TRANSPOSICAO']
         values = [0.0, 0.0, 0.0, 0.0, 0.0]
 
-    cols = st.columns(5)
+cols = st.columns(5)
     for i, (label, val) in enumerate(zip(labels, values)):
         with cols[i]:
             st.markdown(
