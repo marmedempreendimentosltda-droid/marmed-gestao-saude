@@ -332,9 +332,9 @@ st.markdown('<h3 style="color:#00d4ff;">Resumo Financeiro</h3>', unsafe_allow_ht
 conn = get_conn()
 df_pagar = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM contas_pagar', conn)
 df_receber = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM contas_receber', conn)
-    df_empenhos = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM empenhos', conn)
-    df_licitacoes = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM licitacoes', conn)
-    df_contratos = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM contratos', conn)
+df_empenhos = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM empenhos', conn)
+df_licitacoes = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM licitacoes', conn)
+df_contratos = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM contratos', conn)
     conn.close()
 
     total_pagar = float(df_pagar['total'].iloc[0])
