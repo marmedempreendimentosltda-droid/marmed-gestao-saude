@@ -30,24 +30,36 @@ init_db()
 def login_page():
     st.markdown("""
         <style>
-        .stApp { background: linear-gradient(135deg, #0f172a, #1e3a8a, #0f172a); overflow: hidden; }
-        .card-unico {
-            background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(16px);
-            border: 1px solid rgba(14, 165, 233, 0.3); border-radius: 24px;
-            padding: 48px; max-width: 420px; margin: 120px auto;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-            text-align: center;
+        .stApp { 
+            background: linear-gradient(135deg, #0f172a, #1e3a8a, #0f172a) !important; 
+            overflow: hidden;
+        }
+        div[data-testid="column"]:nth-child(2) {
+            background: rgba(15, 23, 42, 0.75) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            border: 1px solid rgba(14, 165, 233, 0.3) !important;
+            border-radius: 24px !important;
+            padding: 48px 40px !important;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5) !important;
+            margin-top: 120px !important;
+            max-width: 420px !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
         }
         .marmed-title {
-            font-size: 52px; font-weight: 800; color: #e0f2fe;
-            letter-spacing: 6px; text-shadow: 0 0 20px rgba(14, 165, 233, 0.6);
+            font-size: 52px; font-weight: 800; text-align: center;
+            color: #e0f2fe; letter-spacing: 6px;
+            text-shadow: 0 0 20px rgba(14, 165, 233, 0.6);
             margin-bottom: 8px;
         }
         .subtitle {
-            color: #7dd3fc; font-size: 14px; letter-spacing: 4px;
-            margin-bottom: 36px; text-transform: uppercase;
+            text-align: center; color: #7dd3fc; font-size: 14px;
+            letter-spacing: 4px; margin-bottom: 36px; text-transform: uppercase;
         }
-        .stTextInput > label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
+        .stTextInput label {
+            color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px;
+        }
         .stTextInput > div > div > input {
             background: rgba(30, 41, 59, 0.8) !important;
             border: 1px solid rgba(34, 211, 238, 0.3) !important;
@@ -59,12 +71,10 @@ def login_page():
             border-radius: 10px !important; border: none !important;
             width: 100%; padding: 12px !important; letter-spacing: 2px;
         }
-        .acesso-text { color: #94a3b8; font-size: 12px; margin-top: 28px; }
         </style>
     """, unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown('<div class="card-unico">', unsafe_allow_html=True)
         st.markdown('<div class="marmed-title">MARMED</div>', unsafe_allow_html=True)
         st.markdown('<div class="subtitle">SISTEMA INTEGRADO DE GESTAO</div>', unsafe_allow_html=True)
         username = st.text_input("USUARIO", key="login_user")
@@ -83,8 +93,7 @@ def login_page():
                 st.rerun()
             else:
                 st.error("Usuario ou senha invalidos")
-        st.markdown('<div class="acesso-text">Acesso restrito a usuarios autorizados</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('<div style="text-align:center;color:#94a3b8;font-size:12px;margin-top:28px;">Acesso restrito a usuarios autorizados</div>', unsafe_allow_html=True)
 def dashboard():
     st.markdown('<h1 style="color:#e0f2fe;text-align:center;">MARMED</h1>', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#7dd3fc;text-align:center;letter-spacing:4px;">SISTEMA INTEGRADO DE GESTAO</h3>', unsafe_allow_html=True)
