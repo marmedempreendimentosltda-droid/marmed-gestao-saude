@@ -343,9 +343,9 @@ total_empenhos = float(df_empenhos['total'].iloc[0])
 total_licitacoes = float(df_licitacoes['total'].iloc[0])
 total_contratos = float(df_contratos['total'].iloc[0])
 
-    resumo_cols = st.columns(5)
-    resumo_labels = ['Contas a Pagar', 'Contas a Receber', 'Empenhos', 'Licitacoes', 'Contratos']
-    resumo_values = [total_pagar, total_receber, total_empenhos, total_licitacoes, total_contratos]
+resumo_cols = st.columns(5)
+resumo_labels = ['Contas a Pagar', 'Contas a Receber', 'Empenhos', 'Licitacoes', 'Contratos']
+resumo_values = [total_pagar, total_receber, total_empenhos, total_licitacoes, total_contratos]
     for i, (label, val) in enumerate(zip(resumo_labels, resumo_values)):
         with resumo_cols[i]:
             st.markdown(
