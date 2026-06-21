@@ -346,7 +346,7 @@ total_contratos = float(df_contratos['total'].iloc[0])
 resumo_cols = st.columns(5)
 resumo_labels = ['Contas a Pagar', 'Contas a Receber', 'Empenhos', 'Licitacoes', 'Contratos']
 resumo_values = [total_pagar, total_receber, total_empenhos, total_licitacoes, total_contratos]
-    for i, (label, val) in enumerate(zip(resumo_labels, resumo_values)):
+for i, (label, val) in enumerate(zip(resumo_labels, resumo_values)):
         with resumo_cols[i]:
             st.markdown(
                 f'<div style="background: rgba(255,255,255,0.05); border:1px solid #a0eaff; border-radius:12px; padding:16px; text-align:center;">'
