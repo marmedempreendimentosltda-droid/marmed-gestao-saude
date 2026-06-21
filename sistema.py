@@ -240,7 +240,6 @@ def contas_cadastradas():
                     pdf[c] = pdf[c].apply(lambda x: format_currency(x))
                 st.dataframe(pdf, use_container_width=True, hide_index=True)
                 st.markdown(f'<p style="color:#64748b;font-size:12px;">Total: {len(registros)} conta(s) {esf}</p>', unsafe_allow_html=True)
-                # Editar/Excluir DENTRO da aba
                 st.markdown(f'<h4 style="color:#7dd3fc;margin-top:15px;">Editar / Excluir - {esf}</h4>', unsafe_allow_html=True)
                 opcoes = {f"{r[2]} - Fonte {r[3]} (ID {r[0]})": r[0] for r in registros}
                 opcoes["Selecione..."] = None
@@ -261,7 +260,6 @@ def contas_cadastradas():
                             st.rerun()
             else:
                 st.markdown(f'<p style="color:#94a3b8;">Nenhuma conta {esf} cadastrada.</p>', unsafe_allow_html=True)
-    # Superávit fora das abas (geral)
     st.markdown('<hr style="border-color:rgba(34,211,238,0.5);margin-top:30px;">', unsafe_allow_html=True)
     st.markdown('<h2 style="color:#fbbf24;text-align:center;letter-spacing:2px;font-size:22px;">RECURSOS DE EXERCÍCIOS ANTERIORES / SUPERÁVIT FINANCEIRO</h2>', unsafe_allow_html=True)
     sup_df = conn.execute("SELECT id, esfera, fonte_original, fonte_superavit, saldo_total, saldo_restante, created_at FROM superavit ORDER BY id DESC").fetchall()
@@ -339,12 +337,43 @@ def realizar_compras():
     st.markdown('<h1 style="color:#e0f2fe;">REALIZAR COMPRAS</h1>', unsafe_allow_html=True)
     st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
+    
+    # Seção de Editar / Excluir ordens de compra já registradas
+    st.markdown('<h3 style="color:#7dd3fc;">Editar / Excluir Solicitações de Compra</h3>', unsafe_allow_html=True)
+    ordens = conn.execute("SELECT oc.id, oc.esfera, oc.numero_conta, oc.fonte, oc.ficha, oc.tipo_despesa, oc.data_compra, oc.valor_compra, oc.produto_servico FROM ordens_compra oc ORDER BY oc.id DESC").fetchall()
+    if ordens:
+        opcoes_ordem = {}
+        for o in ordens:
+            label = f"{o[1]} - Conta {o[2]} - Ficha {o[4] or '—'} (R$ {o[7]:.2f}) - ID {o[0]}"
+            opcoes_ordem[label] = o[0]
+        opcoes_ordem["Selecione..."] = None
+        escolha_ordem = st.selectbox("Selecione uma solicitação de compra", list(opcoes_ordem.keys()), key="sel_ordem")
+        if escolha_ordem and opcoes_ordem[escolha_ordem]:
+            oid = opcoes_ordem[escolha_ordem]
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("Editar Solicitação", key=f"edit_ordem_{oid}"):
+                    st.session_state["edit_ordem_id"] = oid
+                    st.session_state["page"] = "EDITAR ORDEM COMPRA"
+                    st.rerun()
+            with c2:
+                if st.button("Excluir Solicitação", key=f"del_ordem_{oid}"):
+                    conn.execute("DELETE FROM ordens_compra WHERE id=?", (oid,))
+                    conn.commit()
+                    st.success("Solicitação de compra excluída!")
+                    st.rerun()
+    else:
+        st.markdown('<p style="color:#94a3b8;">Nenhuma solicitação de compra registrada ainda.</p>', unsafe_allow_html=True)
+    
+    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);margin-top:20px;">', unsafe_allow_html=True)
+    st.markdown('<h3 style="color:#7dd3fc;">Nova Solicitação de Compra</h3>', unsafe_allow_html=True)
+    
     tab1, tab2, tab3 = st.tabs(["🔵 FEDERAL", "🟢 ESTADUAL", "🟡 MUNICIPAL"])
     for tab, esf in [(tab1, "Federal"), (tab2, "Estadual"), (tab3, "Municipal")]:
         with tab:
             contas = conn.execute("SELECT id, esfera, numero_conta, fonte, tipo_recurso, valor_total FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esf,)).fetchall()
             if not contas:
-                st.markdown(f'<p style="color:#94a3b8;">Nenhuma conta {esf} disponível para compra.</p>', unsafe_allow_html=True)
+                st.markdown(f'<p style="color:#94a3b8;">Nenhuma conta {esf} disponível.</p>', unsafe_allow_html=True)
             else:
                 for cid, esfera, num, fonte, trecurso, vtotal in contas:
                     total_gasto = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE conta_receber_id=?", (cid,)).fetchone()[0]
@@ -381,6 +410,43 @@ def realizar_compras():
                                     conn.commit()
                                     st.success(f"Solicitação registrada para {num}!")
                                     st.rerun()
+    conn.close()
+
+def editar_ordem_compra():
+    st.markdown('<h1 style="color:#e0f2fe;">EDITAR SOLICITAÇÃO DE COMPRA</h1>', unsafe_allow_html=True)
+    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
+    oid = st.session_state.get("edit_ordem_id")
+    if not oid:
+        st.error("Nenhuma solicitação selecionada.")
+        if st.button("Voltar"):
+            st.session_state["page"] = "REALIZAR COMPRAS"
+            st.rerun()
+        return
+    conn = sqlite3.connect("marmed.db")
+    row = conn.execute("SELECT * FROM ordens_compra WHERE id=?", (oid,)).fetchone()
+    if not row:
+        conn.close()
+        st.error("Solicitação não encontrada.")
+        return
+    ficha = st.text_input("Ficha", value=row[4] or "")
+    tipo_desp = st.selectbox("Tipo de Despesa", ["", "Material de Consumo", "Serviço de Terceiro Pessoa Física", "Serviço de Terceiro Pessoa Jurídica", "Distribuição Gratuita"], index=["", "Material de Consumo", "Serviço de Terceiro Pessoa Física", "Serviço de Terceiro Pessoa Jurídica", "Distribuição Gratuita"].index(row[5]) if row[5] in ["", "Material de Consumo", "Serviço de Terceiro Pessoa Física", "Serviço de Terceiro Pessoa Jurídica", "Distribuição Gratuita"] else 0, key="td_edit")
+    data_compra = st.text_input("Data da Compra", value=row[6] or datetime.now().strftime("%d/%m/%Y"))
+    valor_compra = st.number_input("Valor da Compra", min_value=0.0, step=0.01, format="%.2f", value=float(row[7] or 0))
+    produto_servico = st.text_area("Produto/Serviço", height=120, value=row[8] or "")
+    st.markdown(f'<p style="color:#94a3b8;">Conta: {row[2]} | Esfera: {row[1]} | Fonte: {row[3]}</p>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Salvar Alterações"):
+            conn.execute("UPDATE ordens_compra SET ficha=?, tipo_despesa=?, data_compra=?, valor_compra=?, produto_servico=? WHERE id=?", (ficha, tipo_desp, data_compra, valor_compra, produto_servico, oid))
+            conn.commit()
+            conn.close()
+            st.success("Solicitação atualizada!")
+            st.session_state["page"] = "REALIZAR COMPRAS"
+            st.rerun()
+    with c2:
+        if st.button("Voltar"):
+            st.session_state["page"] = "REALIZAR COMPRAS"
+            st.rerun()
     conn.close()
 
 def change_password():
@@ -446,6 +512,8 @@ def main():
             editar_conta()
         elif page == "REALIZAR COMPRAS":
             realizar_compras()
+        elif page == "EDITAR ORDEM COMPRA":
+            editar_ordem_compra()
         elif page == "ESFERA DETALHE":
             esfera_detalhe()
         elif page == "Trocar Senha":
