@@ -238,7 +238,7 @@ def get_total(table):
 
 def dashboard():
     st.markdown('<h1 style="text-align:center; color:#00d4ff;">Dashboard</h1>', unsafe_allow_html=True)
-    st.markdown("<<hr>", unsafe_allow_html=True)
+    st.markdown("<hr>", unsafe_allow_html=True)
     cols = st.columns(5)
     labels = ["REPASSE FEDERAL", "REPASSE ESTADUAL", "RECURSO MUNICIPAL", "TRANSFERENCIA", "TRANSPOSICAO"]
     values = [get_total("contas_receber")] * 5
@@ -259,12 +259,12 @@ def dashboard():
 
 def crud_page(title, table, fields):
     st.markdown(f'<h1 style="text-align:center; color:#00d4ff;">{title}</h1>', unsafe_allow_html=True)
-    st.markdown("<<hr>", unsafe_allow_html=True)
+    st.markdown("<hr>", unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
     df = pd.read_sql_query(f"SELECT * FROM {table}", conn)
     conn.close()
     st.dataframe(df, use_container_width=True)
-    st.markdown("<<h3 style="color:#00d4ff;">Cadastrar / Editar</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style="color:#00d4ff;">Cadastrar / Editar</h3>", unsafe_allow_html=True)
     cols = st.columns(len(fields))
     inputs = {}
     for col, field in zip(cols, fields):
@@ -329,7 +329,7 @@ def contratos():
 
 def trocar_senha():
     st.markdown('<h1 style="text-align:center; color:#00d4ff;">Trocar Senha</h1>', unsafe_allow_html=True)
-    st.markdown("<<hr>", unsafe_allow_html=True)
+    st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown('<p style="color:#00d4ff;">Senha Atual</p>', unsafe_allow_html=True)
     senha_atual = st.text_input("", type="password", key="senha_atual", label_visibility="collapsed")
     st.markdown('<p style="color:#00d4ff;">Nova Senha</p>', unsafe_allow_html=True)
@@ -347,7 +347,7 @@ def trocar_senha():
 
 def sidebar():
     st.sidebar.markdown('<h1 style="text-align:center; color:#00d4ff;">MARMED</h1>', unsafe_allow_html=True)
-    st.sidebar.markdown("<<hr>", unsafe_allow_html=True)
+    st.sidebar.markdown("<hr>", unsafe_allow_html=True)
     menu = [
         "Dashboard", "Contas a Pagar", "Contas a Receber", "Empenhos",
         "Licitacoes", "Contratos", "Trocar Senha"
@@ -355,7 +355,7 @@ def sidebar():
     for item in menu:
         if st.sidebar.button(item, use_container_width=True):
             st.session_state.page = item
-    st.sidebar.markdown("<<hr>", unsafe_allow_html=True)
+    st.sidebar.markdown("<hr>", unsafe_allow_html=True)
     if st.sidebar.button("Sair", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.page = "Login"
