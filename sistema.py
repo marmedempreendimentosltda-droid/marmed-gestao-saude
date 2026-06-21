@@ -12,6 +12,7 @@ def get_conn():
     return sqlite3.connect(DB)
 
 def init_db():
+    def init_db():
     conn = get_conn()
     c = conn.cursor()
 
@@ -79,7 +80,7 @@ def init_db():
     )''')
 
     default_hash = hashlib.sha256('Diretor2025#'.encode()).hexdigest()
-   c.execute("INSERT OR IGNORE INTO users (username, password) VALUES ('admin', ?)", (default_hash,))
+    c.execute("INSERT OR IGNORE INTO users (username, password) VALUES ('admin', ?)", (default_hash,))
     c.execute("INSERT OR IGNORE INTO metricas (id, repasse_federal, repasse_estadual, recurso_municipal, transferencia, transposicao) VALUES (1, 0, 0, 0, 0, 0)")
 
     conn.commit()
