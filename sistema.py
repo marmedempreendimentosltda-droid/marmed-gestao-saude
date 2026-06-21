@@ -34,12 +34,19 @@ def login_page():
         .card-unico {
             background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(16px);
             border: 1px solid rgba(14, 165, 233, 0.3); border-radius: 24px;
-            padding: 48px; max-width: 420px; margin: 80px auto;
+            padding: 48px; max-width: 420px; margin: 120px auto;
             box-shadow: 0 20px 60px rgba(0,0,0,0.5);
             text-align: center;
         }
-        .marmed-title { font-size: 52px; font-weight: 800; color: #e0f2fe; letter-spacing: 6px; text-shadow: 0 0 20px rgba(14, 165, 233, 0.6); }
-        .subtitle { color: #7dd3fc; font-size: 14px; letter-spacing: 4px; margin-top: 8px; margin-bottom: 32px; }
+        .marmed-title {
+            font-size: 52px; font-weight: 800; color: #e0f2fe;
+            letter-spacing: 6px; text-shadow: 0 0 20px rgba(14, 165, 233, 0.6);
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #7dd3fc; font-size: 14px; letter-spacing: 4px;
+            margin-bottom: 36px; text-transform: uppercase;
+        }
         .stTextInput > label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
         .stTextInput > div > div > input {
             background: rgba(30, 41, 59, 0.8) !important;
@@ -52,7 +59,7 @@ def login_page():
             border-radius: 10px !important; border: none !important;
             width: 100%; padding: 12px !important; letter-spacing: 2px;
         }
-        .acesso-text { color: #94a3b8; font-size: 12px; margin-top: 24px; }
+        .acesso-text { color: #94a3b8; font-size: 12px; margin-top: 28px; }
         </style>
     """, unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
