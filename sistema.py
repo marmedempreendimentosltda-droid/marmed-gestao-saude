@@ -307,7 +307,7 @@ for i, (label, val) in enumerate(zip(labels, values)):
                 unsafe_allow_html=True
             )
 
-    st.markdown('<br>', unsafe_allow_html=True)
+st.markdown('<br>', unsafe_allow_html=True)
 
     with st.expander('Editar Metricas'):
         with st.form('form_metricas'):
