@@ -14,8 +14,10 @@ def init_db():
     conn = sqlite3.connect("marmed.db")
     c = conn.cursor()
     c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT)")
+    # Drop old table and recreate with new structure
+    c.execute("DROP TABLE IF EXISTS contas_receber")
     c.execute("""
-        CREATE TABLE IF NOT EXISTS contas_receber (
+        CREATE TABLE contas_receber (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             numero_conta TEXT,
             referencia_tipo TEXT,
@@ -26,11 +28,13 @@ def init_db():
             valor_total REAL DEFAULT 0,
             data_recebimento TEXT,
             programa_politica TEXT,
-            setor_gasto TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            setor_gasto TEXT
         )
     """)
     c.execute("CREATE TABLE IF NOT EXISTS contas_pagar (id INTEGER PRIMARY KEY AUTOINCREMENT, fornecedor TEXT, descricao TEXT, valor REAL, vencimento TEXT, status TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS empenhos (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, objeto TEXT, valor REAL, data TEXT, status TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS licitacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, objeto TEXT, modalidade TEXT, valor REAL, data TEXT, status TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS contratos (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, contratado TEXT, objeto TEXT, valor REAL, inicio TEXT, fim TEXT, status TEXT)")
     default_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
     c.execute("INSERT OR IGNORE INTO users (username, password_hash) VALUES (?, ?)", ("admin", default_hash))
     conn.commit()
