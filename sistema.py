@@ -16,7 +16,7 @@ def init_db():
     c = conn.cursor()
     c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS contas_pagar (id INTEGER PRIMARY KEY AUTOINCREMENT, fornecedor TEXT, descricao TEXT, valor REAL, vencimento TEXT, status TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS contas_receber (id INTEGER PRIMARY KEY AUTOINCREMENT, devedor TEXT, descricao TEXT, valor REAL, vencimento TEXT, status TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS contas_receber (id INTEGER PRIMARY KEY AUTOINCREMENT, cliente TEXT, descricao TEXT, valor REAL, vencimento TEXT, status TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS empenhos (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, objeto TEXT, valor REAL, data TEXT, status TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS licitacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, objeto TEXT, modalidade TEXT, valor REAL, data TEXT, status TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS contratos (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, contratado TEXT, objeto TEXT, valor REAL, inicio TEXT, fim TEXT, status TEXT)")
@@ -30,14 +30,10 @@ init_db()
 def login_page():
     st.markdown("""
         <style>
-        .stApp { 
-            background: linear-gradient(135deg, #0f172a, #1e3a8a, #0f172a) !important; 
-            overflow: hidden;
-        }
+        .stApp { background: linear-gradient(135deg, #0f172a, #1e3a8a, #0f172a); overflow: hidden; }
         div[data-testid="column"]:nth-child(2) {
             background: rgba(15, 23, 42, 0.75) !important;
             backdrop-filter: blur(16px) !important;
-            -webkit-backdrop-filter: blur(16px) !important;
             border: 1px solid rgba(14, 165, 233, 0.3) !important;
             border-radius: 24px !important;
             padding: 48px 40px !important;
@@ -47,30 +43,11 @@ def login_page():
             margin-left: auto !important;
             margin-right: auto !important;
         }
-        .marmed-title {
-            font-size: 52px; font-weight: 800; text-align: center;
-            color: #e0f2fe; letter-spacing: 6px;
-            text-shadow: 0 0 20px rgba(14, 165, 233, 0.6);
-            margin-bottom: 8px;
-        }
-        .subtitle {
-            text-align: center; color: #7dd3fc; font-size: 14px;
-            letter-spacing: 4px; margin-bottom: 36px; text-transform: uppercase;
-        }
-        .stTextInput label {
-            color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px;
-        }
-        .stTextInput > div > div > input {
-            background: rgba(30, 41, 59, 0.8) !important;
-            border: 1px solid rgba(34, 211, 238, 0.3) !important;
-            color: #e0f2fe !important; border-radius: 10px !important;
-        }
-        .stButton > button {
-            background: linear-gradient(90deg, #06b6d4, #3b82f6) !important;
-            color: #fff !important; font-weight: 700 !important;
-            border-radius: 10px !important; border: none !important;
-            width: 100%; padding: 12px !important; letter-spacing: 2px;
-        }
+        .marmed-title { font-size: 52px; font-weight: 800; text-align: center; color: #e0f2fe; letter-spacing: 6px; text-shadow: 0 0 20px rgba(14, 165, 233, 0.6); margin-bottom: 8px; }
+        .subtitle { text-align: center; color: #7dd3fc; font-size: 14px; letter-spacing: 4px; margin-bottom: 36px; text-transform: uppercase; }
+        .stTextInput label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
+        .stTextInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
+        .stButton > button { background: linear-gradient(90deg, #06b6d4, #3b82f6) !important; color: #fff !important; font-weight: 700 !important; border-radius: 10px !important; border: none !important; width: 100%; padding: 12px !important; letter-spacing: 2px; }
         </style>
     """, unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -93,7 +70,8 @@ def login_page():
                 st.rerun()
             else:
                 st.error("Usuario ou senha invalidos")
-        st.markdown('<div style="text-align:center;color:#94a3b8;font-size:12px;margin-top:28px;">Acesso restrito a usuarios autorizados</div>', unsafe_allow_html=True)
+        st.markdown('<p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:28px;">Acesso restrito a usuarios autorizados</p>', unsafe_allow_html=True)
+
 def dashboard():
     st.markdown('<h1 style="color:#e0f2fe;text-align:center;">MARMED</h1>', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#7dd3fc;text-align:center;letter-spacing:4px;">SISTEMA INTEGRADO DE GESTAO</h3>', unsafe_allow_html=True)
@@ -112,21 +90,15 @@ def dashboard():
     tc = c.fetchone()[0]
     conn.close()
     cols = st.columns(5)
-    dados = [
-        ("REPASSE FEDERAL", tp, "#ef4444"),
-        ("REPASSE ESTADUAL", tr, "#22c55e"),
-        ("RECURSO MUNICIPAL", te, "#eab308"),
-        ("TRANSFERENCIA", tl, "#a855f7"),
-        ("TRANSPOSICAO", tc, "#3b82f6"),
-    ]
+    dados = [("REPASSE FEDERAL", tp, "#ef4444"), ("REPASSE ESTADUAL", tr, "#22c55e"), ("RECURSO MUNICIPAL", te, "#eab308"), ("TRANSFERENCIA", tl, "#a855f7"), ("TRANSPOSICAO", tc, "#3b82f6")]
     for i, (tit, val, cor) in enumerate(dados):
         with cols[i]:
-            st.markdown(f'<div style="background:linear-gradient(135deg,#1a2a3a,#0f2027);border-radius:15px;padding:20px;text-align:center;border-left:4px solid {cor};border:1px solid rgba(34,211,238,0.3);box-shadow:0 0 15px rgba(0,212,255,0.2);"><div style="color:#b0eaff;font-size:12px;letter-spacing:1px;">{tit}</div><div style="color:#00d4ff;font-size:22px;font-weight:700;">{format_currency(val)}</div></div>', unsafe_allow_html=True)
-    st.markdown(f'<div style="text-align:center;color:#64748b;font-size:12px;margin-top:20px;">Painel gerencial MARMED - {datetime.now().strftime("%d/%m/%Y")}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background:linear-gradient(135deg,#1a2a3a,#0f2027);border-radius:15px;padding:20px;text-align:center;border-left:4px solid {cor};border:1px solid rgba(34,211,238,0.3);"><div style="color:#b0eaff;font-size:12px;letter-spacing:1px;">{tit}</div><div style="color:#00d4ff;font-size:22px;font-weight:700;">{format_currency(val)}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<p style="text-align:center;color:#64748b;font-size:12px;margin-top:20px;">Painel gerencial MARMED - {datetime.now().strftime("%d/%m/%Y")}</p>', unsafe_allow_html=True)
 
 def change_password():
     st.markdown('<h1 style="color:#e0f2fe;">Trocar Senha</h1>', unsafe_allow_html=True)
-    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
+    st.markdown('<hr>', unsafe_allow_html=True)
     current = st.text_input("Senha atual", type="password")
     new_pass = st.text_input("Nova senha", type="password")
     confirm = st.text_input("Confirmar nova senha", type="password")
@@ -151,7 +123,7 @@ def change_password():
 
 def crud_page(table, fields, title):
     st.markdown(f'<h1 style="color:#e0f2fe;">{title}</h1>', unsafe_allow_html=True)
-    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
+    st.markdown('<hr>', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
     df = conn.execute(f"SELECT * FROM {table}").fetchall()
     cols = [desc[0] for desc in conn.execute(f"SELECT * FROM {table} LIMIT 0").description]
@@ -188,29 +160,26 @@ def main():
     if not st.session_state["logged_in"]:
         login_page()
     else:
-             page = st.session_state["page"]
-    if page == "Dashboard":
-        dashboard()
-    elif page == "Registrar Conta":
-        crud_page("contas_receber", ["cliente", "descricao", "valor", "vencimento", "status"], "Registrar Conta")
-    elif page == "Contas Ativas":
-        crud_page("contas_pagar", ["fornecedor", "descricao", "valor", "vencimento", "status"], "Contas Ativas")
-    elif page == "Trocar Senha":
-        change_password()
+        st.sidebar.markdown('<h2 style="color:#22d3ee;text-align:center;">MARMED</h2>', unsafe_allow_html=True)
+        st.sidebar.markdown(f'<p style="color:#94a3b8;text-align:center;font-size:12px;">{st.session_state["username"]}</p>', unsafe_allow_html=True)
+        st.sidebar.markdown('<hr>', unsafe_allow_html=True)
+        if st.sidebar.button("Registrar Conta", key="nav_registrar", use_container_width=True):
+            st.session_state["page"] = "Registrar Conta"
+            st.rerun()
+        if st.sidebar.button("Contas Ativas", key="nav_ativas", use_container_width=True):
+            st.session_state["page"] = "Contas Ativas"
+            st.rerun()
+        st.sidebar.markdown('<hr>', unsafe_allow_html=True)
+        if st.sidebar.button("Sair", key="logout", use_container_width=True):
+            st.session_state["logged_in"] = False
             st.rerun()
         page = st.session_state["page"]
         if page == "Dashboard":
             dashboard()
-        elif page == "Contas a Pagar":
-            crud_page("contas_pagar", ["fornecedor", "descricao", "valor", "vencimento", "status"], "Contas a Pagar")
-        elif page == "Contas a Receber":
-            crud_page("contas_receber", ["devedor", "descricao", "valor", "vencimento", "status"], "Contas a Receber")
-        elif page == "Empenhos":
-            crud_page("empenhos", ["numero", "objeto", "valor", "data", "status"], "Empenhos")
-        elif page == "Licitacoes":
-            crud_page("licitacoes", ["numero", "objeto", "modalidade", "valor", "data", "status"], "Licitacoes")
-        elif page == "Contratos":
-            crud_page("contratos", ["numero", "contratado", "objeto", "valor", "inicio", "fim", "status"], "Contratos")
+        elif page == "Registrar Conta":
+            crud_page("contas_receber", ["cliente", "descricao", "valor", "vencimento", "status"], "Registrar Conta")
+        elif page == "Contas Ativas":
+            crud_page("contas_pagar", ["fornecedor", "descricao", "valor", "vencimento", "status"], "Contas Ativas")
         elif page == "Trocar Senha":
             change_password()
 
