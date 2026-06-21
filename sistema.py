@@ -335,7 +335,7 @@ df_receber = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM cont
 df_empenhos = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM empenhos', conn)
 df_licitacoes = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM licitacoes', conn)
 df_contratos = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM contratos', conn)
-    conn.close()
+conn.close()
 
     total_pagar = float(df_pagar['total'].iloc[0])
     total_receber = float(df_receber['total'].iloc[0])
