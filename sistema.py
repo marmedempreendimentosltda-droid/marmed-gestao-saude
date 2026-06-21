@@ -337,7 +337,7 @@ df_licitacoes = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM l
 df_contratos = pd.read_sql_query('SELECT COALESCE(SUM(valor),0) AS total FROM contratos', conn)
 conn.close()
 
-    total_pagar = float(df_pagar['total'].iloc[0])
+total_pagar = float(df_pagar['total'].iloc[0])
     total_receber = float(df_receber['total'].iloc[0])
     total_empenhos = float(df_empenhos['total'].iloc[0])
     total_licitacoes = float(df_licitacoes['total'].iloc[0])
