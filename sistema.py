@@ -281,7 +281,7 @@ def sidebar_menu():
 # ------------------ DASHBOARD ------------------
 def dashboard_page():
    st.markdown('<h1 style="color:#00d4ff; text-align:center;">Dashboard</h1>', unsafe_allow_html=True)
-    st.markdown('<hr style="border-color:#00d4ff;">', unsafe_allow_html=True)
+st.markdown('<hr style="border-color:#00d4ff;">', unsafe_allow_html=True)
 
     conn = get_conn()
     c = conn.cursor()
