@@ -264,7 +264,7 @@ def crud_page(title, table, fields):
     df = pd.read_sql_query(f"SELECT * FROM {table}", conn)
     conn.close()
     st.dataframe(df, use_container_width=True)
-    st.markdown("<h3 style="color:#00d4ff;">Cadastrar / Editar</h3>", unsafe_allow_html=True)
+   st.markdown('<h3 style="color:#00d4ff;">Cadastrar / Editar</h3>', unsafe_allow_html=True)
     cols = st.columns(len(fields))
     inputs = {}
     for col, field in zip(cols, fields):
