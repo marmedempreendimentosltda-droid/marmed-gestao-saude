@@ -289,7 +289,7 @@ c.execute('SELECT repasse_federal, repasse_estadual, recurso_municipal, transfer
 row = c.fetchone()
 conn.close()
 
-    if row:
+if row:
         labels = ['REPASSE FEDERAL', 'REPASSE ESTADUAL', 'RECURSO MUNICIPAL', 'TRANSFERENCIA', 'TRANSPOSICAO']
         values = list(row)
     else:
