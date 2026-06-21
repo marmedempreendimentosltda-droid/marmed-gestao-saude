@@ -13,7 +13,7 @@ def get_conn():
 
 def init_db():
 def init_db():
-    conn = get_conn()
+conn = get_conn()
     c = conn.cursor()
 
     c.execute('''CREATE TABLE IF NOT EXISTS users (
