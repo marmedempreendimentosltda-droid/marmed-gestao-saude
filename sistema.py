@@ -82,15 +82,9 @@ def dashboard():
     tp = c.fetchone()[0]
     c.execute("SELECT COALESCE(SUM(valor),0) FROM contas_receber")
     tr = c.fetchone()[0]
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM empenhos")
-    te = c.fetchone()[0]
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM licitacoes")
-    tl = c.fetchone()[0]
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM contratos")
-    tc = c.fetchone()[0]
     conn.close()
-    cols = st.columns(5)
-    dados = [("REPASSE FEDERAL", tp, "#ef4444"), ("REPASSE ESTADUAL", tr, "#22c55e"), ("RECURSO MUNICIPAL", te, "#eab308"), ("TRANSFERENCIA", tl, "#a855f7"), ("TRANSPOSICAO", tc, "#3b82f6")]
+    cols = st.columns(2)
+    dados = [("CONTAS ATIVAS", tp, "#22c55e"), ("REGISTRAR CONTAS", tr, "#3b82f6")]
     for i, (tit, val, cor) in enumerate(dados):
         with cols[i]:
             st.markdown(f'<div style="background:linear-gradient(135deg,#1a2a3a,#0f2027);border-radius:15px;padding:20px;text-align:center;border-left:4px solid {cor};border:1px solid rgba(34,211,238,0.3);"><div style="color:#b0eaff;font-size:12px;letter-spacing:1px;">{tit}</div><div style="color:#00d4ff;font-size:22px;font-weight:700;">{format_currency(val)}</div></div>', unsafe_allow_html=True)
