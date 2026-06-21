@@ -338,7 +338,6 @@ def realizar_compras():
     st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
     
-    # Seção de Editar / Excluir ordens de compra já registradas
     st.markdown('<h3 style="color:#7dd3fc;">Editar / Excluir Solicitações de Compra</h3>', unsafe_allow_html=True)
     ordens = conn.execute("SELECT oc.id, oc.esfera, oc.numero_conta, oc.fonte, oc.ficha, oc.tipo_despesa, oc.data_compra, oc.valor_compra, oc.produto_servico FROM ordens_compra oc ORDER BY oc.id DESC").fetchall()
     if ordens:
@@ -360,14 +359,13 @@ def realizar_compras():
                 if st.button("Excluir Solicitação", key=f"del_ordem_{oid}"):
                     conn.execute("DELETE FROM ordens_compra WHERE id=?", (oid,))
                     conn.commit()
-                    st.success("Solicitação de compra excluída!")
+                    st.success("Solicitação excluída!")
                     st.rerun()
     else:
-        st.markdown('<p style="color:#94a3b8;">Nenhuma solicitação de compra registrada ainda.</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#94a3b8;">Nenhuma solicitação registrada.</p>', unsafe_allow_html=True)
     
     st.markdown('<hr style="border-color:rgba(34,211,238,0.3);margin-top:20px;">', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#7dd3fc;">Nova Solicitação de Compra</h3>', unsafe_allow_html=True)
-    
     tab1, tab2, tab3 = st.tabs(["🔵 FEDERAL", "🟢 ESTADUAL", "🟡 MUNICIPAL"])
     for tab, esf in [(tab1, "Federal"), (tab2, "Estadual"), (tab3, "Municipal")]:
         with tab:
@@ -378,12 +376,12 @@ def realizar_compras():
                 for cid, esfera, num, fonte, trecurso, vtotal in contas:
                     total_gasto = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE conta_receber_id=?", (cid,)).fetchone()[0]
                     saldo = vtotal - total_gasto
-                    with st.expander(f"📋 {num} - Fonte {fonte}"):
+                    with st.expander(f"{num} - Fonte {fonte}"):
                         st.markdown(f'<div style="background:rgba(30,41,59,0.6);border-radius:10px;padding:12px;margin-bottom:10px;"><div style="display:flex;justify-content:space-between;"><div style="color:#94a3b8;">Conta: <span style="color:#e0f2fe;">{num}</span></div><div style="color:#94a3b8;">Fonte: <span style="color:#22d3ee;">{fonte}</span></div><div style="color:#94a3b8;">Valor: <span style="color:#00d4ff;">{format_currency(vtotal)}</span></div><div style="color:#94a3b8;">Saldo: <span style="color:{"#22c55e" if saldo>0 else "#ef4444"};">{format_currency(saldo)}</span></div></div></div>', unsafe_allow_html=True)
                         if esf != "Municipal":
                             saldo_sup = conn.execute("SELECT COALESCE(SUM(saldo_restante),0) FROM superavit WHERE esfera=? AND saldo_restante>0", (esf,)).fetchone()[0]
                             if saldo_sup > 0:
-                                st.warning(f"⚠️ Superávit de {format_currency(saldo_sup)} para {esf}. Utilize-o antes.")
+                                st.warning(f"Superávit de {format_currency(saldo_sup)} para {esf}. Utilize-o antes.")
                         with st.form(key=f"form_compra_{esf}_{cid}"):
                             col1, col2 = st.columns(2)
                             with col1:
@@ -428,12 +426,14 @@ def editar_ordem_compra():
         conn.close()
         st.error("Solicitação não encontrada.")
         return
-    ficha = st.text_input("Ficha", value=row[4] or "")
-    tipo_desp = st.selectbox("Tipo de Despesa", ["", "Material de Consumo", "Serviço de Terceiro Pessoa Física", "Serviço de Terceiro Pessoa Jurídica", "Distribuição Gratuita"], index=["", "Material de Consumo", "Serviço de Terceiro Pessoa Física", "Serviço de Terceiro Pessoa Jurídica", "Distribuição Gratuita"].index(row[5]) if row[5] in ["", "Material de Consumo", "Serviço de Terceiro Pessoa Física", "Serviço de Terceiro Pessoa Jurídica", "Distribuição Gratuita"] else 0, key="td_edit")
-    data_compra = st.text_input("Data da Compra", value=row[6] or datetime.now().strftime("%d/%m/%Y"))
-    valor_compra = st.number_input("Valor da Compra", min_value=0.0, step=0.01, format="%.2f", value=float(row[7] or 0))
-    produto_servico = st.text_area("Produto/Serviço", height=120, value=row[8] or "")
-    st.markdown(f'<p style="color:#94a3b8;">Conta: {row[2]} | Esfera: {row[1]} | Fonte: {row[3]}</p>', unsafe_allow_html=True)
+    # row: 0=id, 1=conta_receber_id, 2=esfera, 3=numero_conta, 4=fonte, 
+    #      5=ficha, 6=tipo_despesa, 7=data_compra, 8=valor_compra, 9=produto_servico, 10=created_at
+    ficha = st.text_input("Ficha", value=row[5] or "")
+    tipo_desp = st.selectbox("Tipo de Despesa", ["", "Material de Consumo", "Serviço de Terceiro Pessoa Física", "Serviço de Terceiro Pessoa Jurídica", "Distribuição Gratuita"], index=["", "Material de Consumo", "Serviço de Terceiro Pessoa Física", "Serviço de Terceiro Pessoa Jurídica", "Distribuição Gratuita"].index(row[6]) if row[6] in ["", "Material de Consumo", "Serviço de Terceiro Pessoa Física", "Serviço de Terceiro Pessoa Jurídica", "Distribuição Gratuita"] else 0, key="td_edit")
+    data_compra = st.text_input("Data da Compra", value=row[7] or datetime.now().strftime("%d/%m/%Y"))
+    valor_compra = st.number_input("Valor da Compra", min_value=0.0, step=0.01, format="%.2f", value=float(row[8] or 0))
+    produto_servico = st.text_area("Produto/Serviço", height=120, value=row[9] or "")
+    st.markdown(f'<p style="color:#94a3b8;">Conta: {row[3]} | Esfera: {row[2]} | Fonte: {row[4]}</p>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Salvar Alterações"):
