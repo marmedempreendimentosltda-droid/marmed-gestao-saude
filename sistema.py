@@ -287,7 +287,7 @@ conn = get_conn()
 c = conn.cursor()
 c.execute('SELECT repasse_federal, repasse_estadual, recurso_municipal, transferencia, transposicao FROM metricas WHERE id = 1')
 row = c.fetchone()
-    conn.close()
+conn.close()
 
     if row:
         labels = ['REPASSE FEDERAL', 'REPASSE ESTADUAL', 'RECURSO MUNICIPAL', 'TRANSFERENCIA', 'TRANSPOSICAO']
