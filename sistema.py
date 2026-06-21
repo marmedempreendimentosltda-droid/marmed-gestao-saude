@@ -292,7 +292,7 @@ conn.close()
 if row:
         labels = ['REPASSE FEDERAL', 'REPASSE ESTADUAL', 'RECURSO MUNICIPAL', 'TRANSFERENCIA', 'TRANSPOSICAO']
         values = list(row)
-    else:
+else:
         labels = ['REPASSE FEDERAL', 'REPASSE ESTADUAL', 'RECURSO MUNICIPAL', 'TRANSFERENCIA', 'TRANSPOSICAO']
         values = [0.0, 0.0, 0.0, 0.0, 0.0]
 
