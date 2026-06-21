@@ -326,7 +326,7 @@ with st.expander('Editar Metricas'):
                 st.success('Metricas atualizadas!')
                 st.rerun()
 
-    st.markdown('<br>', unsafe_allow_html=True)
+st.markdown('<br>', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#00d4ff;">Resumo Financeiro</h3>', unsafe_allow_html=True)
 
     conn = get_conn()
