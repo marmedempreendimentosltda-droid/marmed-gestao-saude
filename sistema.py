@@ -297,7 +297,7 @@ else:
         values = [0.0, 0.0, 0.0, 0.0, 0.0]
 
 cols = st.columns(5)
-    for i, (label, val) in enumerate(zip(labels, values)):
+for i, (label, val) in enumerate(zip(labels, values)):
         with cols[i]:
             st.markdown(
                 f'<div style="background: rgba(0,212,255,0.08); border:1px solid #00d4ff; border-radius:16px; padding:20px; text-align:center; box-shadow:0 0 20px rgba(0,212,255,0.2);">'
