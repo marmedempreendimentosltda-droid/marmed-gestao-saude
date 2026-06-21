@@ -177,7 +177,7 @@ def cadastrar_contas():
         for c in ["Valor Custeio", "Valor Investimento", "Valor Total"]:
             pdf[c] = pdf[c].apply(lambda x: format_currency(x))
         st.dataframe(pdf, use_container_width=True, hide_index=True)
-    with st.expander("NOVO CADASTRO", expanded=False):
+    with st.expander("NOVO CADASTRO", expanded=True):
         st.markdown('<p style="color:#fbbf24;font-size:12px;margin-bottom:10px;">* Campos obrigatórios</p>', unsafe_allow_html=True)
         esfera = st.selectbox("* Esfera", ["", "Federal", "Estadual", "Municipal"], key="esfera_cad")
         fonte_auto = get_fonte(esfera)
@@ -186,35 +186,29 @@ def cadastrar_contas():
             st.markdown(f'<p style="color:#22d3ee;font-weight:600;">Fonte: {fonte_auto}</p>', unsafe_allow_html=True)
         else:
             st.markdown(f'<p style="color:#94a3b8;">Selecione a Esfera para definir a Fonte automaticamente</p>', unsafe_allow_html=True)
-        # Opcionais abaixo
         ref_contrato = st.selectbox("Referência do Contrato (opcional)", ["", "Resolução", "Deliberação", "Portaria"])
         num_ano_ref = st.text_input("Número/Ano (opcional)")
         tipo_recurso = st.selectbox("* Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], key="tipo_recurso_cad")
-        if tipo_recurso == "Custeio/Investimento":
-            val_custeio = st.number_input("* Valor Pago Custeio", min_value=0.0, step=0.01, format="%.2f")
-            val_invest = st.number_input("* Valor Pago Investimento", min_value=0.0, step=0.01, format="%.2f")
-            val_total = val_custeio + val_invest
-        elif tipo_recurso == "Custeio":
-            val_pago = st.number_input("* Valor Pago", min_value=0.0, step=0.01, format="%.2f")
-            val_custeio = val_pago
-            val_invest = 0.0
-            val_total = val_pago
-        elif tipo_recurso == "Investimento":
-            val_pago = st.number_input("* Valor Pago", min_value=0.0, step=0.01, format="%.2f")
-            val_custeio = 0.0
-            val_invest = val_pago
-            val_total = val_pago
-        else:
-            val_custeio = 0.0
-            val_invest = 0.0
-            val_total = 0.0
+        # SEMPRE mostra os dois campos de valor (preenche 0 se não for usado)
+        val_custeio = st.number_input("Valor Pago - Custeio (preencha 0 se não houver)", min_value=0.0, step=0.01, format="%.2f", key="val_custeio_cad")
+        val_invest = st.number_input("Valor Pago - Investimento (preencha 0 se não houver)", min_value=0.0, step=0.01, format="%.2f", key="val_invest_cad")
+        val_total = val_custeio + val_invest
+        if val_total > 0:
+            st.markdown(f'<p style="color:#00d4ff;font-size:16px;font-weight:700;">Valor Total: {format_currency(val_total)}</p>', unsafe_allow_html=True)
         data_receb = st.text_input("* Data de Recebimento", value=datetime.now().strftime("%d/%m/%Y"))
-        # Opcionais
         programa_politica = st.text_input("Programa/Política (opcional)")
         setor_gasto = st.text_input("Setor de Referência de Gasto (opcional)")
         if st.button("Salvar Conta", key="salvar_conta"):
-            if not esfera or not num_conta or not tipo_recurso or not data_receb or val_total <= 0:
-                st.error("Preencha todos os campos obrigatórios: Esfera, Número da Conta, Tipo de Recurso, Valor Pago e Data de Recebimento")
+            if not esfera:
+                st.error("Selecione a Esfera")
+            elif not num_conta:
+                st.error("Preencha o Número da Conta")
+            elif not tipo_recurso:
+                st.error("Selecione o Tipo de Recurso")
+            elif val_total <= 0:
+                st.error("Preencha pelo menos um valor (Custeio ou Investimento)")
+            elif not data_receb:
+                st.error("Preencha a Data de Recebimento")
             else:
                 conn = sqlite3.connect("marmed.db")
                 c = conn.cursor()
