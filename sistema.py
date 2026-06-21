@@ -270,6 +270,9 @@ def main():
     else:
         st.sidebar.markdown('<h3 style="color:#22d3ee;text-align:center;letter-spacing:2px;">ABA DE NAVEGAÇÃO</h3>', unsafe_allow_html=True)
         st.sidebar.markdown('<hr>', unsafe_allow_html=True)
+        if st.sidebar.button("🏠 INÍCIO", key="nav_inicio", use_container_width=True):
+            st.session_state["page"] = "Dashboard"
+            st.rerun()
         if st.sidebar.button("CADASTRAR CONTAS", key="nav_cadastrar", use_container_width=True):
             st.session_state["page"] = "CADASTRAR CONTAS"
             st.rerun()
