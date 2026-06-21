@@ -2,9 +2,22 @@ import streamlit as st
 import sqlite3
 import hashlib
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime
+import random
+import math
 
-st.set_page_config(page_title="MARMED", layout="wide")
+st.set_page_config(page_title="MARMED", page_icon="<<img src='https://cdn-icons-png.flaticon.com/512/3774/3774299.png' width='32'/>", layout="wide")
+
+
+def format_currency(value):
+    if value is None:
+        value = 0.0
+    try:
+        value = float(value)
+    except Exception:
+        value = 0.0
+    s = f"{value:,.2f}"
+    return "R$ " + s
 
 
 def init_db():
@@ -21,7 +34,6 @@ def init_db():
         CREATE TABLE IF NOT EXISTS contas_pagar (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             fornecedor TEXT,
-            descricao TEXT,
             valor REAL,
             vencimento TEXT,
             status TEXT
@@ -30,8 +42,7 @@ def init_db():
     c.execute('''
         CREATE TABLE IF NOT EXISTS contas_receber (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            devedor TEXT,
-            descricao TEXT,
+            cliente TEXT,
             valor REAL,
             vencimento TEXT,
             status TEXT
@@ -41,10 +52,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS empenhos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             numero TEXT,
-            objeto TEXT,
+            descricao TEXT,
             valor REAL,
-            data TEXT,
-            status TEXT
+            data TEXT
         )
     ''')
     c.execute('''
@@ -52,9 +62,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             numero TEXT,
             objeto TEXT,
-            modalidade TEXT,
             valor REAL,
-            data TEXT,
             status TEXT
         )
     ''')
@@ -62,12 +70,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS contratos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             numero TEXT,
-            contratado TEXT,
-            objeto TEXT,
+            contratada TEXT,
             valor REAL,
-            inicio TEXT,
-            fim TEXT,
-            status TEXT
+            vigencia TEXT
         )
     ''')
     default_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
@@ -76,319 +81,345 @@ def init_db():
     conn.close()
 
 
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-
-def verify_user(username, password):
-    conn = sqlite3.connect("marmed.db")
-    c = conn.cursor()
-    c.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
-    row = c.fetchone()
-    conn.close()
-    if row and row[0] == hash_password(password):
-        return True
-    return False
-
-
-def change_password(username, current, new):
-    if not verify_user(username, current):
-        return False
-    conn = sqlite3.connect("marmed.db")
-    c = conn.cursor()
-    c.execute("UPDATE users SET password_hash = ? WHERE username = ?", (hash_password(new), username))
-    conn.commit()
-    conn.close()
-    return True
-
-
-def format_currency(value):
-    if value is None:
-        value = 0
-    return "R$ {:,.2f}".format(value).replace(",", "X").replace(".", ",").replace("X", ".")
+init_db()
 
 
 def login_page():
-    st.markdown(
-        """
+    st.markdown('''
         <style>
-        .login-bg {
-            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            z-index: -1;
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .main {
+            background: linear-gradient(-45deg, #0f172a, #1e3a8a, #0f172a, #0ea5e9);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
         }
         .glass-card {
-            background: rgba(255,255,255,0.07);
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 8px 32px 0 rgba(0,0,0,0.37);
-            border: 1px solid rgba(255,255,255,0.18);
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(14, 165, 233, 0.3);
+            border-radius: 24px;
+            padding: 48px;
             max-width: 420px;
-            margin: auto;
-            margin-top: 80px;
-            backdrop-filter: blur(10px);
+            margin: 0 auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(14, 165, 233, 0.1);
         }
-        .marmed-letter {
-            display: inline-block;
+        .marmed-title {
             font-size: 52px;
-            font-weight: 900;
-            color: #00d4ff;
-            text-shadow: 0 0 20px #00d4ff;
-            animation: flyIn 1.2s ease forwards;
-            opacity: 0;
+            font-weight: 800;
+            text-align: center;
+            color: #e0f2fe;
+            letter-spacing: 6px;
+            text-shadow: 0 0 20px rgba(14, 165, 233, 0.6);
+            animation: pulse 2s ease-in-out infinite;
         }
-        @keyframes flyIn {
-            0% {transform: translateY(-80px) scale(0.5); opacity: 0;}
-            100% {transform: translateY(0) scale(1); opacity: 1;}
+        @keyframes pulse {
+            0%, 100% { text-shadow: 0 0 20px rgba(14, 165, 233, 0.6); }
+            50% { text-shadow: 0 0 40px rgba(34, 211, 238, 0.9); }
         }
         .subtitle {
-            color: #b0eaff;
-            letter-spacing: 4px;
+            text-align: center;
+            color: #7dd3fc;
             font-size: 14px;
-            margin-top: 10px;
-            margin-bottom: 30px;
-            text-align: center;
+            letter-spacing: 4px;
+            margin-top: 8px;
+            margin-bottom: 32px;
+            text-transform: uppercase;
         }
-        .acesso-bottom {
-            text-align: center;
-            color: #00d4ff;
-            font-size: 12px;
-            margin-top: 20px;
+        .stTextInput > label {
+            color: #22d3ee !important;
+            font-weight: 600;
+            font-size: 13px;
+            letter-spacing: 1px;
+        }
+        .stTextInput > div > div > input {
+            background: rgba(30, 41, 59, 0.8) !important;
+            border: 1px solid rgba(34, 211, 238, 0.3) !important;
+            color: #e0f2fe !important;
+            border-radius: 10px !important;
+        }
+        .stButton > button {
+            background: linear-gradient(90deg, #06b6d4, #3b82f6) !important;
+            color: #ffffff !important;
+            font-weight: 700 !important;
+            border-radius: 10px !important;
+            border: none !important;
+            width: 100%;
+            padding: 12px !important;
             letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .acesso-text {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 12px;
+            margin-top: 24px;
         }
         .particle {
             position: fixed;
-            width: 6px;
-            height: 6px;
-            background: rgba(0,212,255,0.4);
             border-radius: 50%;
-            animation: float 8s infinite linear;
-        }
-        @keyframes float {
-            0% {transform: translateY(100vh) translateX(0); opacity: 0;}
-            50% {opacity: 1;}
-            100% {transform: translateY(-10vh) translateX(40px); opacity: 0;}
+            background: rgba(34, 211, 238, 0.15);
+            pointer-events: none;
+            z-index: 0;
         }
         </style>
-        <div class="login-bg"></div>
-        <div class="particle" style="left:10%; animation-duration:7s;"></div>
-        <div class="particle" style="left:25%; animation-duration:9s;"></div>
-        <div class="particle" style="left:40%; animation-duration:6s;"></div>
-        <div class="particle" style="left:55%; animation-duration:10s;"></div>
-        <div class="particle" style="left:70%; animation-duration:8s;"></div>
-        <div class="particle" style="left:85%; animation-duration:7s;"></div>
-        """,
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        """
-        <div class="glass-card">
-            <div style="text-align:center;">
-                <span class="marmed-letter" style="animation-delay:0s;">M</span>
-                <span class="marmed-letter" style="animation-delay:0.1s;">A</span>
-                <span class="marmed-letter" style="animation-delay:0.2s;">R</span>
-                <span class="marmed-letter" style="animation-delay:0.3s;">M</span>
-                <span class="marmed-letter" style="animation-delay:0.4s;">E</span>
-                <span class="marmed-letter" style="animation-delay:0.5s;">D</span>
+    ''', unsafe_allow_html=True)
+    particles_html = ""
+    for i in range(30):
+        size = random.randint(4, 12)
+        left = random.randint(0, 100)
+        top = random.randint(0, 100)
+        duration = random.randint(10, 25)
+        delay = random.randint(0, 10)
+        particles_html += f'<div class="particle" style="width:{size}px;height:{size}px;left:{left}vw;top:{top}vh;animation:float {duration}s linear {delay}s infinite;"></div>'
+    st.markdown(particles_html, unsafe_allow_html=True)
+    st.markdown('''
+        <style>
+        @keyframes float {
+            0% { transform: translateY(0) translateX(0); opacity: 0.2; }
+            50% { opacity: 0.5; }
+            100% { transform: translateY(-100vh) translateX(20px); opacity: 0; }
+        }
+        </style>
+    ''', unsafe_allow_html=True)
+    col_left, col_center, col_right = st.columns([1, 2, 1])
+    with col_center:
+        st.markdown('''
+            <div class="glass-card">
+                <div class="marmed-title">MARMED</div>
+                <div class="subtitle">SISTEMA INTEGRADO DE GESTAO</div>
             </div>
-            <div class="subtitle">SISTEMA INTEGRADO DE GESTAO</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    with st.container():
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.markdown(
-                """
-                <div style="max-width:340px; margin:auto; margin-top:20px;">
-                """,
-                unsafe_allow_html=True
-            )
-            st.markdown('<p style="color:#00d4ff;">Usuario</p>', unsafe_allow_html=True)
-            username = st.text_input("", key="login_user", label_visibility="collapsed")
-            st.markdown('<p style="color:#00d4ff;">Senha</p>', unsafe_allow_html=True)
-            password = st.text_input("", type="password", key="login_pass", label_visibility="collapsed")
-            if st.button("Entrar", use_container_width=True):
-                if verify_user(username, password):
-                    st.session_state.logged_in = True
-                    st.session_state.username = username
-                    st.session_state.page = "Dashboard"
-                    st.rerun()
-                else:
-                    st.error("Usuario ou senha invalidos")
-            st.markdown(
-                """
-                </div>
-                <div class="acesso-bottom">ACESSO</div>
-                """,
-                unsafe_allow_html=True
-            )
+        ''', unsafe_allow_html=True)
+        st.markdown('<div class="glass-card" style="margin-top:-20px;padding-top:20px;">', unsafe_allow_html=True)
+        username = st.text_input("USUARIO", key="login_user")
+        password = st.text_input("SENHA", type="password", key="login_pass")
+        if st.button("Acessar", key="login_btn"):
+            pw_hash = hashlib.sha256(password.encode()).hexdigest()
+            conn = sqlite3.connect("marmed.db")
+            c = conn.cursor()
+            c.execute("SELECT * FROM users WHERE username=? AND password_hash=?", (username, pw_hash))
+            user = c.fetchone()
+            conn.close()
+            if user:
+                st.session_state["logged_in"] = True
+                st.session_state["username"] = username
+                st.session_state["page"] = "Dashboard"
+                st.rerun()
+            else:
+                st.error("Usuario ou senha invalidos")
+        st.markdown('''
+            <div class="acesso-text">Acesso restrito a usuarios autorizados</div>
+            </div>
+        ''', unsafe_allow_html=True)
 
 
-def get_total(table):
-    conn = sqlite3.connect("marmed.db")
-    c = conn.cursor()
-    c.execute(f"SELECT COALESCE(SUM(valor),0) FROM {table}")
-    total = c.fetchone()[0]
-    conn.close()
-    return total
+def change_password():
+    st.markdown('<h1 style="color:#e0f2fe;">Trocar Senha</h1>', unsafe_allow_html=True)
+    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
+    current = st.text_input("Senha atual", type="password")
+    new_pass = st.text_input("Nova senha", type="password")
+    confirm = st.text_input("Confirmar nova senha", type="password")
+    if st.button("Salvar nova senha"):
+        if new_pass != confirm:
+            st.error("As senhas nao conferem")
+        elif len(new_pass) < 6:
+            st.error("A nova senha deve ter pelo menos 6 caracteres")
+        else:
+            current_hash = hashlib.sha256(current.encode()).hexdigest()
+            conn = sqlite3.connect("marmed.db")
+            c = conn.cursor()
+            c.execute("SELECT id FROM users WHERE username=? AND password_hash=?", (st.session_state["username"], current_hash))
+            row = c.fetchone()
+            if row:
+                new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
+                c.execute("UPDATE users SET password_hash=? WHERE id=?", (new_hash, row[0]))
+                conn.commit()
+                conn.close()
+                st.success("Senha alterada com sucesso")
+            else:
+                conn.close()
+                st.error("Senha atual incorreta")
 
 
 def dashboard():
-    st.markdown('<h1 style="text-align:center; color:#00d4ff;">Dashboard</h1>', unsafe_allow_html=True)
-    st.markdown("<hr>", unsafe_allow_html=True)
-    cols = st.columns(5)
-    labels = ["REPASSE FEDERAL", "REPASSE ESTADUAL", "RECURSO MUNICIPAL", "TRANSFERENCIA", "TRANSPOSICAO"]
-    values = [get_total("contas_receber")] * 5
-    for i, (label, value) in enumerate(zip(labels, values)):
-        with cols[i]:
-            st.markdown(
-                f"""
-                <div style="background: linear-gradient(135deg, #1a2a3a, #0f2027);
-                border-radius: 15px; padding: 20px; text-align: center;
-                border: 1px solid #00d4ff; box-shadow: 0 0 15px rgba(0,212,255,0.2);">
-                <div style="color:#b0eaff; font-size:12px; letter-spacing:1px;">{label}</div>
-                <div style="color:#00d4ff; font-size:22px; font-weight:700;">{format_currency(value)}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-
-def crud_page(title, table, fields):
-    st.markdown(f'<h1 style="text-align:center; color:#00d4ff;">{title}</h1>', unsafe_allow_html=True)
-    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<h1 style="color:#e0f2fe;text-align:center;text-shadow:0 0 20px rgba(14,165,233,0.4);">MARMED</h1>', unsafe_allow_html=True)
+    st.markdown('<h3 style="color:#7dd3fc;text-align:center;letter-spacing:4px;">SISTEMA INTEGRADO DE GESTAO</h3>', unsafe_allow_html=True)
+    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
-    df = pd.read_sql_query(f"SELECT * FROM {table}", conn)
+    c = conn.cursor()
+    c.execute("SELECT SUM(valor) FROM contas_pagar")
+    total_pagar = c.fetchone()[0] or 0.0
+    c.execute("SELECT SUM(valor) FROM contas_receber")
+    total_receber = c.fetchone()[0] or 0.0
+    c.execute("SELECT SUM(valor) FROM empenhos")
+    total_empenhos = c.fetchone()[0] or 0.0
+    c.execute("SELECT SUM(valor) FROM licitacoes")
+    total_licitacoes = c.fetchone()[0] or 0.0
+    c.execute("SELECT SUM(valor) FROM contratos")
+    total_contratos = c.fetchone()[0] or 0.0
     conn.close()
-    st.dataframe(df, use_container_width=True)
-  st.markdown('<h3 style="color:#00d4ff;">Cadastrar / Editar</h3>', unsafe_allow_html=True)
-    cols = st.columns(len(fields))
-    inputs = {}
-    for col, field in zip(cols, fields):
-        with col:
-            if field in ["vencimento", "data", "inicio", "fim"]:
-                inputs[field] = st.date_input(field.capitalize(), key=f"{table}_{field}")
-            elif field == "valor":
-                inputs[field] = st.number_input("Valor", min_value=0.0, format="%.2f", key=f"{table}_{field}")
-            else:
-                inputs[field] = st.text_input(field.capitalize(), key=f"{table}_{field}")
-    status = st.selectbox("Status", ["Pendente", "Pago", "Recebido", "Ativo", "Inativo", "Concluido", "Cancelado"], key=f"{table}_status")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if st.button("Salvar", use_container_width=True, key=f"{table}_save"):
-            conn = sqlite3.connect("marmed.db")
-            c = conn.cursor()
-            field_names = ", ".join(fields + ["status"])
-            placeholders = ", ".join(["?"] * (len(fields) + 1))
-            values = []
-            for field in fields:
-                if field in ["vencimento", "data", "inicio", "fim"]:
-                    values.append(inputs[field].strftime("%Y-%m-%d"))
-                else:
-                    values.append(inputs[field])
-            values.append(status)
-            c.execute(f"INSERT INTO {table} ({field_names}) VALUES ({placeholders})", values)
-            conn.commit()
-            conn.close()
-            st.success("Registro salvo")
-            st.rerun()
-    with c2:
-        delete_id = st.number_input("ID para excluir", min_value=0, step=1, key=f"{table}_delete_id")
-        if st.button("Excluir", use_container_width=True, key=f"{table}_delete"):
-            conn = sqlite3.connect("marmed.db")
-            c = conn.cursor()
-            c.execute(f"DELETE FROM {table} WHERE id = ?", (delete_id,))
-            conn.commit()
-            conn.close()
-            st.success("Registro excluido")
-            st.rerun()
-
-
-def contas_pagar():
-    crud_page("Contas a Pagar", "contas_pagar", ["fornecedor", "descricao", "valor", "vencimento"])
-
-
-def contas_receber():
-    crud_page("Contas a Receber", "contas_receber", ["devedor", "descricao", "valor", "vencimento"])
-
-
-def empenhos():
-    crud_page("Empenhos", "empenhos", ["numero", "objeto", "valor", "data"])
-
-
-def licitacoes():
-    crud_page("Licitacoes", "licitacoes", ["numero", "objeto", "modalidade", "valor", "data"])
-
-
-def contratos():
-    crud_page("Contratos", "contratos", ["numero", "contratado", "objeto", "valor", "inicio", "fim"])
-
-
-def trocar_senha():
-    st.markdown('<h1 style="text-align:center; color:#00d4ff;">Trocar Senha</h1>', unsafe_allow_html=True)
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<p style="color:#00d4ff;">Senha Atual</p>', unsafe_allow_html=True)
-    senha_atual = st.text_input("", type="password", key="senha_atual", label_visibility="collapsed")
-    st.markdown('<p style="color:#00d4ff;">Nova Senha</p>', unsafe_allow_html=True)
-    nova_senha = st.text_input("", type="password", key="nova_senha", label_visibility="collapsed")
-    st.markdown('<p style="color:#00d4ff;">Confirmar Nova Senha</p>', unsafe_allow_html=True)
-    confirmar_senha = st.text_input("", type="password", key="confirmar_senha", label_visibility="collapsed")
-    if st.button("Alterar Senha"):
-        if nova_senha != confirmar_senha:
-            st.error("Nova senha e confirmacao nao conferem")
-        elif change_password(st.session_state.username, senha_atual, nova_senha):
-            st.success("Senha alterada com sucesso")
-        else:
-            st.error("Senha atual incorreta")
-
-
-def sidebar():
-    st.sidebar.markdown('<h1 style="text-align:center; color:#00d4ff;">MARMED</h1>', unsafe_allow_html=True)
-    st.sidebar.markdown("<hr>", unsafe_allow_html=True)
-    menu = [
-        "Dashboard", "Contas a Pagar", "Contas a Receber", "Empenhos",
-        "Licitacoes", "Contratos", "Trocar Senha"
+    cards = [
+        ("Contas a Pagar", total_pagar, "#ef4444"),
+        ("Contas a Receber", total_receber, "#22c55e"),
+        ("Empenhos", total_empenhos, "#eab308"),
+        ("Licitações", total_licitacoes, "#a855f7"),
+        ("Contratos", total_contratos, "#3b82f6"),
     ]
-    for item in menu:
-        if st.sidebar.button(item, use_container_width=True):
-            st.session_state.page = item
-    st.sidebar.markdown("<hr>", unsafe_allow_html=True)
-    if st.sidebar.button("Sair", use_container_width=True):
-        st.session_state.logged_in = False
-        st.session_state.page = "Login"
-        st.rerun()
+    st.markdown('''
+        <style>
+        .metric-card {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid rgba(34, 211, 238, 0.2);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+            transition: transform 0.2s;
+        }
+        .metric-card:hover {
+            transform: translateY(-4px);
+        }
+        .metric-title {
+            color: #94a3b8;
+            font-size: 13px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .metric-value {
+            color: #e0f2fe;
+            font-size: 26px;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+        </style>
+    ''', unsafe_allow_html=True)
+    cols = st.columns(5)
+    for i, (title, value, color) in enumerate(cards):
+        with cols[i]:
+            st.markdown(f'''
+                <div class="metric-card" style="border-left: 4px solid {color};">
+                    <div class="metric-title">{title}</div>
+                    <div class="metric-value">{format_currency(value)}</div>
+                </div>
+            ''', unsafe_allow_html=True)
+    st.markdown('<br>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align:center;color:#64748b;font-size:12px;">Painel gerencial MARMED - ' + datetime.now().strftime("%d/%m/%Y") + '</div>', unsafe_allow_html=True)
+
+
+def crud_page(table, fields, title, value_field="valor"):
+    st.markdown(f'<h1 style="color:#e0f2fe;">{title}</h1>', unsafe_allow_html=True)
+    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
+    conn = sqlite3.connect("marmed.db")
+    c = conn.cursor()
+    c.execute(f"SELECT * FROM {table}")
+    rows = c.fetchall()
+    cols = [desc[0] for desc in c.description]
+    conn.close()
+    df = pd.DataFrame(rows, columns=cols)
+    if not df.empty and value_field in df.columns:
+        df[value_field] = df[value_field].apply(format_currency)
+    st.markdown('<h3 style="color:#7dd3fc;">Registros</h3>', unsafe_allow_html=True)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+    with st.expander("Adicionar / Editar"):
+        record_id = st.number_input("ID (0 para novo)", min_value=0, step=1, value=0)
+        inputs = {}
+        for field in fields:
+            if field == value_field:
+                inputs[field] = st.number_input(field.capitalize(), min_value=0.0, step=0.01, value=0.0)
+            elif "data" in field or "vencimento" in field or "vigencia" in field:
+                inputs[field] = st.text_input(field.capitalize(), value=datetime.now().strftime("%d/%m/%Y"))
+            else:
+                inputs[field] = st.text_input(field.capitalize())
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("Salvar"):
+                conn = sqlite3.connect("marmed.db")
+                c = conn.cursor()
+                placeholders = ", ".join(["?"] * len(fields))
+                values = [inputs[f] for f in fields]
+                if record_id == 0:
+                    c.execute(f"INSERT INTO {table} ({', '.join(fields)}) VALUES ({placeholders})", values)
+                    st.success("Registro criado")
+                else:
+                    set_clause = ", ".join([f"{f}=?" for f in fields])
+                    c.execute(f"UPDATE {table} SET {set_clause} WHERE id=?", values + [record_id])
+                    st.success("Registro atualizado")
+                conn.commit()
+                conn.close()
+                st.rerun()
+        with col2:
+            if st.button("Excluir") and record_id > 0:
+                conn = sqlite3.connect("marmed.db")
+                c = conn.cursor()
+                c.execute(f"DELETE FROM {table} WHERE id=?", (record_id,))
+                conn.commit()
+                conn.close()
+                st.success("Registro excluido")
+                st.rerun()
+        with col3:
+            if st.button("Limpar"):
+                st.rerun()
 
 
 def main():
-    init_db()
     if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
+        st.session_state["logged_in"] = False
     if "page" not in st.session_state:
-        st.session_state.page = "Login"
-    if not st.session_state.logged_in:
+        st.session_state["page"] = "Dashboard"
+    if not st.session_state["logged_in"]:
         login_page()
     else:
-        sidebar()
-        page = st.session_state.page
+        st.markdown('''
+            <style>
+            .main {
+                background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            }
+            .stSidebar {
+                background: rgba(15, 23, 42, 0.95);
+            }
+            .stSidebar .stButton > button {
+                background: rgba(30, 41, 59, 0.8) !important;
+                color: #e0f2fe !important;
+                border: 1px solid rgba(34, 211, 238, 0.3) !important;
+                border-radius: 8px !important;
+                text-align: left !important;
+            }
+            .stSidebar .stButton > button:hover {
+                background: rgba(34, 211, 238, 0.15) !important;
+            }
+            </style>
+        ''', unsafe_allow_html=True)
+        st.sidebar.markdown(f'<h2 style="color:#22d3ee;text-align:center;">MARMED</h2>', unsafe_allow_html=True)
+        st.sidebar.markdown(f'<p style="color:#94a3b8;text-align:center;font-size:12px;">{st.session_state["username"]}</p>', unsafe_allow_html=True)
+        st.sidebar.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
+        pages = ["Dashboard", "Contas a Pagar", "Contas a Receber", "Empenhos", "Licitacoes", "Contratos", "Trocar Senha"]
+        for p in pages:
+            if st.sidebar.button(p, key=f"nav_{p}"):
+                st.session_state["page"] = p
+                st.rerun()
+        st.sidebar.markdown('<br>', unsafe_allow_html=True)
+        if st.sidebar.button("Sair", key="logout"):
+            st.session_state["logged_in"] = False
+            st.session_state["page"] = "Dashboard"
+            st.rerun()
+        page = st.session_state["page"]
         if page == "Dashboard":
             dashboard()
         elif page == "Contas a Pagar":
-            contas_pagar()
+            crud_page("contas_pagar", ["fornecedor", "valor", "vencimento", "status"], "Contas a Pagar")
         elif page == "Contas a Receber":
-            contas_receber()
+            crud_page("contas_receber", ["cliente", "valor", "vencimento", "status"], "Contas a Receber")
         elif page == "Empenhos":
-            empenhos()
+            crud_page("empenhos", ["numero", "descricao", "valor", "data"], "Empenhos")
         elif page == "Licitacoes":
-            licitacoes()
+            crud_page("licitacoes", ["numero", "objeto", "valor", "status"], "Licitacoes")
         elif page == "Contratos":
-            contratos()
+            crud_page("contratos", ["numero", "contratada", "valor", "vigencia"], "Contratos")
         elif page == "Trocar Senha":
-            trocar_senha()
-        else:
-            dashboard()
+            change_password()
 
 
 if __name__ == "__main__":
