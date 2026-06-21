@@ -284,7 +284,7 @@ def dashboard_page():
 st.markdown('<hr style="border-color:#00d4ff;">', unsafe_allow_html=True)
 
 conn = get_conn()
-    c = conn.cursor()
+c = conn.cursor()
     c.execute('SELECT repasse_federal, repasse_estadual, recurso_municipal, transferencia, transposicao FROM metricas WHERE id = 1')
     row = c.fetchone()
     conn.close()
