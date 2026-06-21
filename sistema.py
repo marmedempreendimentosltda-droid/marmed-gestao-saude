@@ -188,17 +188,15 @@ def main():
     if not st.session_state["logged_in"]:
         login_page()
     else:
-        st.sidebar.markdown('<h2 style="color:#22d3ee;text-align:center;">MARMED</h2>', unsafe_allow_html=True)
-        st.sidebar.markdown(f'<p style="color:#94a3b8;text-align:center;font-size:12px;">{st.session_state["username"]}</p>', unsafe_allow_html=True)
-        st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        pages = ["Dashboard", "Contas a Pagar", "Contas a Receber", "Empenhos", "Licitacoes", "Contratos", "Trocar Senha"]
-        for p in pages:
-            if st.sidebar.button(p, key=f"nav_{p}", use_container_width=True):
-                st.session_state["page"] = p
-                st.rerun()
-        st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        if st.sidebar.button("Sair", key="logout", use_container_width=True):
-            st.session_state["logged_in"] = False
+             page = st.session_state["page"]
+    if page == "Dashboard":
+        dashboard()
+    elif page == "Registrar Conta":
+        crud_page("contas_receber", ["cliente", "descricao", "valor", "vencimento", "status"], "Registrar Conta")
+    elif page == "Contas Ativas":
+        crud_page("contas_pagar", ["fornecedor", "descricao", "valor", "vencimento", "status"], "Contas Ativas")
+    elif page == "Trocar Senha":
+        change_password()
             st.rerun()
         page = st.session_state["page"]
         if page == "Dashboard":
