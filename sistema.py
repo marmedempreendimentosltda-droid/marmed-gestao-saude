@@ -12,7 +12,7 @@ def get_conn():
     return sqlite3.connect(DB)
 
 def init_db():
-    def init_db():
+def init_db():
     conn = get_conn()
     c = conn.cursor()
 
