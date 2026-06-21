@@ -178,27 +178,29 @@ def cadastrar_contas():
             pdf[c] = pdf[c].apply(lambda x: format_currency(x))
         st.dataframe(pdf, use_container_width=True, hide_index=True)
     with st.expander("NOVO CADASTRO", expanded=False):
-        esfera = st.selectbox("Esfera", ["", "Federal", "Estadual", "Municipal"], key="esfera_cad")
+        st.markdown('<p style="color:#fbbf24;font-size:12px;margin-bottom:10px;">* Campos obrigatórios</p>', unsafe_allow_html=True)
+        esfera = st.selectbox("* Esfera", ["", "Federal", "Estadual", "Municipal"], key="esfera_cad")
         fonte_auto = get_fonte(esfera)
-        num_conta = st.text_input("Número da Conta")
+        num_conta = st.text_input("* Número da Conta (aceita letras e números)")
         if esfera:
             st.markdown(f'<p style="color:#22d3ee;font-weight:600;">Fonte: {fonte_auto}</p>', unsafe_allow_html=True)
         else:
             st.markdown(f'<p style="color:#94a3b8;">Selecione a Esfera para definir a Fonte automaticamente</p>', unsafe_allow_html=True)
-        ref_contrato = st.selectbox("Referência do Contrato", ["", "Resolução", "Deliberação", "Portaria"])
-        num_ano_ref = st.text_input("Número/Ano")
-        tipo_recurso = st.selectbox("Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], key="tipo_recurso_cad")
+        # Opcionais abaixo
+        ref_contrato = st.selectbox("Referência do Contrato (opcional)", ["", "Resolução", "Deliberação", "Portaria"])
+        num_ano_ref = st.text_input("Número/Ano (opcional)")
+        tipo_recurso = st.selectbox("* Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], key="tipo_recurso_cad")
         if tipo_recurso == "Custeio/Investimento":
-            val_custeio = st.number_input("Valor Pago Custeio", min_value=0.0, step=0.01, format="%.2f")
-            val_invest = st.number_input("Valor Pago Investimento", min_value=0.0, step=0.01, format="%.2f")
+            val_custeio = st.number_input("* Valor Pago Custeio", min_value=0.0, step=0.01, format="%.2f")
+            val_invest = st.number_input("* Valor Pago Investimento", min_value=0.0, step=0.01, format="%.2f")
             val_total = val_custeio + val_invest
         elif tipo_recurso == "Custeio":
-            val_pago = st.number_input("Valor Pago", min_value=0.0, step=0.01, format="%.2f")
+            val_pago = st.number_input("* Valor Pago", min_value=0.0, step=0.01, format="%.2f")
             val_custeio = val_pago
             val_invest = 0.0
             val_total = val_pago
         elif tipo_recurso == "Investimento":
-            val_pago = st.number_input("Valor Pago", min_value=0.0, step=0.01, format="%.2f")
+            val_pago = st.number_input("* Valor Pago", min_value=0.0, step=0.01, format="%.2f")
             val_custeio = 0.0
             val_invest = val_pago
             val_total = val_pago
@@ -206,12 +208,13 @@ def cadastrar_contas():
             val_custeio = 0.0
             val_invest = 0.0
             val_total = 0.0
-        data_receb = st.text_input("Data de Recebimento", value=datetime.now().strftime("%d/%m/%Y"))
-        programa_politica = st.text_input("Programa/Política")
-        setor_gasto = st.text_input("Setor de Referência de Gasto")
+        data_receb = st.text_input("* Data de Recebimento", value=datetime.now().strftime("%d/%m/%Y"))
+        # Opcionais
+        programa_politica = st.text_input("Programa/Política (opcional)")
+        setor_gasto = st.text_input("Setor de Referência de Gasto (opcional)")
         if st.button("Salvar Conta", key="salvar_conta"):
-            if not num_conta or not ref_contrato or not tipo_recurso or not esfera:
-                st.error("Preencha os campos obrigatórios: Esfera, Número da Conta, Referência do Contrato e Tipo de Recurso")
+            if not esfera or not num_conta or not tipo_recurso or not data_receb or val_total <= 0:
+                st.error("Preencha todos os campos obrigatórios: Esfera, Número da Conta, Tipo de Recurso, Valor Pago e Data de Recebimento")
             else:
                 conn = sqlite3.connect("marmed.db")
                 c = conn.cursor()
@@ -263,7 +266,7 @@ def contas_cadastradas():
     else:
         st.info("Nenhuma conta cadastrada ainda.")
     
-    # ===== BLOCO DE SUPERÁVIT =====
+    # Bloco de Superávit
     st.markdown('<hr style="border-color:rgba(34,211,238,0.5);margin-top:30px;">', unsafe_allow_html=True)
     st.markdown('<h2 style="color:#fbbf24;text-align:center;letter-spacing:2px;font-size:22px;">RECURSOS DE EXERCÍCIOS ANTERIORES / SUPERÁVIT FINANCEIRO</h2>', unsafe_allow_html=True)
     
@@ -291,7 +294,7 @@ def contas_cadastradas():
                 else:
                     conn.execute("INSERT INTO superavit (esfera, fonte_original, fonte_superavit, saldo_total, saldo_restante, created_at) VALUES (?,?,?,?,?,?)", (esfera, fonte_orig, fonte_sup, total, total, agora))
         conn.commit()
-        st.success("Saldos migrados para Superávit com sucesso! Lembrando: Fonte 1.500 (Municipal) não foi migrada.")
+        st.success("Saldos migrados para Superávit com sucesso! Fonte 1.500 (Municipal) não foi migrada.")
         st.rerun()
     
     conn.close()
@@ -312,47 +315,50 @@ def editar_conta():
     if not row:
         st.error("Conta não encontrada.")
         return
-    esfera = st.selectbox("Esfera", ["", "Federal", "Estadual", "Municipal"], index=["", "Federal", "Estadual", "Municipal"].index(row[1]) if row[1] in ["", "Federal", "Estadual", "Municipal"] else 0, key="esfera_edit")
+    esfera = st.selectbox("* Esfera", ["", "Federal", "Estadual", "Municipal"], index=["", "Federal", "Estadual", "Municipal"].index(row[1]) if row[1] in ["", "Federal", "Estadual", "Municipal"] else 0, key="esfera_edit")
     fonte_auto = get_fonte(esfera)
-    num_conta = st.text_input("Número da Conta", value=row[2] or "")
+    num_conta = st.text_input("* Número da Conta (aceita letras e números)", value=row[2] or "")
     if esfera:
         st.markdown(f'<p style="color:#22d3ee;font-weight:600;">Fonte: {fonte_auto}</p>', unsafe_allow_html=True)
-    ref_contrato = st.selectbox("Referência do Contrato", ["", "Resolução", "Deliberação", "Portaria"], index=["", "Resolução", "Deliberação", "Portaria"].index(row[4]) if row[4] in ["", "Resolução", "Deliberação", "Portaria"] else 0)
-    num_ano_ref = st.text_input("Número/Ano", value=row[5] or "")
-    tipo_recurso = st.selectbox("Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], index=["", "Custeio", "Investimento", "Custeio/Investimento"].index(row[6]) if row[6] in ["", "Custeio", "Investimento", "Custeio/Investimento"] else 0, key="tipo_recurso_edit")
+    ref_contrato = st.selectbox("Referência do Contrato (opcional)", ["", "Resolução", "Deliberação", "Portaria"], index=["", "Resolução", "Deliberação", "Portaria"].index(row[4]) if row[4] in ["", "Resolução", "Deliberação", "Portaria"] else 0)
+    num_ano_ref = st.text_input("Número/Ano (opcional)", value=row[5] or "")
+    tipo_recurso = st.selectbox("* Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], index=["", "Custeio", "Investimento", "Custeio/Investimento"].index(row[6]) if row[6] in ["", "Custeio", "Investimento", "Custeio/Investimento"] else 0, key="tipo_recurso_edit")
     if tipo_recurso == "Custeio/Investimento":
-        val_custeio = st.number_input("Valor Pago Custeio", min_value=0.0, step=0.01, format="%.2f", value=float(row[7] or 0))
-        val_invest = st.number_input("Valor Pago Investimento", min_value=0.0, step=0.01, format="%.2f", value=float(row[8] or 0))
+        val_custeio = st.number_input("* Valor Pago Custeio", min_value=0.0, step=0.01, format="%.2f", value=float(row[7] or 0))
+        val_invest = st.number_input("* Valor Pago Investimento", min_value=0.0, step=0.01, format="%.2f", value=float(row[8] or 0))
         val_total = val_custeio + val_invest
     elif tipo_recurso == "Custeio":
-        val_pago = st.number_input("Valor Pago", min_value=0.0, step=0.01, format="%.2f", value=float(row[7] or 0))
+        val_pago = st.number_input("* Valor Pago", min_value=0.0, step=0.01, format="%.2f", value=float(row[7] or 0))
         val_custeio = val_pago
         val_invest = 0.0
     elif tipo_recurso == "Investimento":
-        val_pago = st.number_input("Valor Pago", min_value=0.0, step=0.01, format="%.2f", value=float(row[8] or 0))
+        val_pago = st.number_input("* Valor Pago", min_value=0.0, step=0.01, format="%.2f", value=float(row[8] or 0))
         val_custeio = 0.0
         val_invest = val_pago
     else:
         val_custeio = 0.0
         val_invest = 0.0
     val_total = val_custeio + val_invest
-    data_receb = st.text_input("Data de Recebimento", value=row[10] or datetime.now().strftime("%d/%m/%Y"))
-    programa_politica = st.text_input("Programa/Política", value=row[11] or "")
-    setor_gasto = st.text_input("Setor de Referência de Gasto", value=row[12] or "")
+    data_receb = st.text_input("* Data de Recebimento", value=row[10] or datetime.now().strftime("%d/%m/%Y"))
+    programa_politica = st.text_input("Programa/Política (opcional)", value=row[11] or "")
+    setor_gasto = st.text_input("Setor de Referência de Gasto (opcional)", value=row[12] or "")
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Salvar Alterações"):
-            conn = sqlite3.connect("marmed.db")
-            conn.execute("""
-                UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?,
-                valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=?
-                WHERE id=?
-            """, (esfera, num_conta, fonte_auto, ref_contrato, num_ano_ref, tipo_recurso, val_custeio, val_invest, val_total, data_receb, programa_politica, setor_gasto, rid))
-            conn.commit()
-            conn.close()
-            st.success("Conta atualizada com sucesso!")
-            st.session_state["page"] = "CONTAS CADASTRADAS"
-            st.rerun()
+            if not esfera or not num_conta or not tipo_recurso or not data_receb:
+                st.error("Preencha os campos obrigatórios: Esfera, Número da Conta, Tipo de Recurso e Data de Recebimento")
+            else:
+                conn = sqlite3.connect("marmed.db")
+                conn.execute("""
+                    UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?,
+                    valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=?
+                    WHERE id=?
+                """, (esfera, num_conta, fonte_auto, ref_contrato, num_ano_ref, tipo_recurso, val_custeio, val_invest, val_total, data_receb, programa_politica, setor_gasto, rid))
+                conn.commit()
+                conn.close()
+                st.success("Conta atualizada com sucesso!")
+                st.session_state["page"] = "CONTAS CADASTRADAS"
+                st.rerun()
     with c2:
         if st.button("Voltar"):
             st.session_state["page"] = "CONTAS CADASTRADAS"
@@ -403,7 +409,6 @@ def realizar_compras():
             if not item or not esfera:
                 st.error("Preencha os campos obrigatórios: Esfera e Item")
             else:
-                # VERIFICAÇÃO DE SUPERÁVIT
                 if esfera != "Municipal":
                     saldo_sup = conn.execute("SELECT COALESCE(SUM(saldo_restante),0) FROM superavit WHERE esfera=? AND saldo_restante>0", (esfera,)).fetchone()[0]
                     if saldo_sup > 0:
