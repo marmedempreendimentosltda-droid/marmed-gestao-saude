@@ -1,6 +1,8 @@
 import streamlit as st
 import sqlite3
 import hashlib
+import io
+import re
 from datetime import datetime
 
 st.set_page_config(page_title="MARMED", layout="wide")
@@ -25,6 +27,20 @@ def get_fonte_superavit(esfera):
     elif esfera == "Estadual":
         return "2.621"
     return None
+
+def extract_text_from_bytes(file_bytes, filename):
+    """Tenta extrair texto de arquivos enviados."""
+    text = ""
+    try:
+        if filename.lower().endswith('.txt'):
+            text = file_bytes.decode('utf-8', errors='replace')
+        elif filename.lower().endswith('.csv'):
+            text = file_bytes.decode('utf-8', errors='replace')
+        else:
+            text = f"[Arquivo: {filename} - visualização de texto não disponível para este formato]"
+    except:
+        text = f"[Não foi possível extrair texto de {filename}]"
+    return text
 
 def init_db():
     conn = sqlite3.connect("marmed.db")
@@ -73,6 +89,16 @@ def init_db():
             created_at TEXT
         )
     """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS arquivos_saude (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bloco TEXT,
+            nome_arquivo TEXT,
+            conteudo_texto TEXT,
+            dados_arquivo BLOB,
+            data_upload TEXT
+        )
+    """)
     default_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
     try:
         c.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", ("admin", default_hash))
@@ -102,17 +128,14 @@ def login_page():
         .marmed-title { font-size: 52px; font-weight: 800; text-align: center; color: #e0f2fe; letter-spacing: 6px; margin-bottom: 8px; }
         .subtitle { text-align: center; color: #7dd3fc; font-size: 14px; letter-spacing: 4px; margin-bottom: 36px; text-transform: uppercase; }
         .stTextInput label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
-        .stSelectbox label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
-        .stNumberInput label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
-        .stTextArea label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
         .stTextInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
-        .stTextArea > div > textarea { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; min-height: 120px !important; }
         .stButton > button { background: linear-gradient(90deg, #06b6d4, #3b82f6) !important; color: #fff !important; font-weight: 700 !important; border-radius: 10px !important; border: none !important; width: 100%; padding: 12px !important; letter-spacing: 2px; }
         .stSelectbox > div > div { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; border-radius: 10px !important; color: #e0f2fe !important; }
-        .stNumberInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
         .stDataFrame { background: rgba(15, 23, 42, 0.6) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; border-radius: 10px !important; }
         .stDataFrame td { color: #e0f2fe !important; }
         .stDataFrame th { color: #22d3ee !important; }
+        .stFileUploader > div { background: rgba(30, 41, 59, 0.8) !important; border: 1px dashed rgba(34, 211, 238, 0.4) !important; border-radius: 10px !important; color: #e0f2fe !important; }
+        .stTextArea > div > textarea { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
         </style>
     """, unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -337,35 +360,30 @@ def realizar_compras():
     st.markdown('<h1 style="color:#e0f2fe;">REALIZAR COMPRAS</h1>', unsafe_allow_html=True)
     st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
-    
-    st.markdown('<h3 style="color:#7dd3fc;">Editar / Excluir Solicitações de Compra</h3>', unsafe_allow_html=True)
+    st.markdown('<h3 style="color:#7dd3fc;">Editar / Excluir Solicitações</h3>', unsafe_allow_html=True)
     ordens = conn.execute("SELECT oc.id, oc.esfera, oc.numero_conta, oc.fonte, oc.ficha, oc.tipo_despesa, oc.data_compra, oc.valor_compra, oc.produto_servico FROM ordens_compra oc ORDER BY oc.id DESC").fetchall()
     if ordens:
-        opcoes_ordem = {}
-        for o in ordens:
-            label = f"{o[1]} - Conta {o[2]} - Ficha {o[4] or '—'} (R$ {o[7]:.2f}) - ID {o[0]}"
-            opcoes_ordem[label] = o[0]
+        opcoes_ordem = {f"{o[1]} - Conta {o[2]} - Ficha {o[4] or '—'} (R$ {o[7]:.2f}) - ID {o[0]}": o[0] for o in ordens}
         opcoes_ordem["Selecione..."] = None
-        escolha_ordem = st.selectbox("Selecione uma solicitação de compra", list(opcoes_ordem.keys()), key="sel_ordem")
+        escolha_ordem = st.selectbox("Selecione uma solicitação", list(opcoes_ordem.keys()), key="sel_ordem")
         if escolha_ordem and opcoes_ordem[escolha_ordem]:
             oid = opcoes_ordem[escolha_ordem]
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("Editar Solicitação", key=f"edit_ordem_{oid}"):
+                if st.button("Editar", key=f"edit_ordem_{oid}"):
                     st.session_state["edit_ordem_id"] = oid
                     st.session_state["page"] = "EDITAR ORDEM COMPRA"
                     st.rerun()
             with c2:
-                if st.button("Excluir Solicitação", key=f"del_ordem_{oid}"):
+                if st.button("Excluir", key=f"del_ordem_{oid}"):
                     conn.execute("DELETE FROM ordens_compra WHERE id=?", (oid,))
                     conn.commit()
                     st.success("Solicitação excluída!")
                     st.rerun()
     else:
         st.markdown('<p style="color:#94a3b8;">Nenhuma solicitação registrada.</p>', unsafe_allow_html=True)
-    
     st.markdown('<hr style="border-color:rgba(34,211,238,0.3);margin-top:20px;">', unsafe_allow_html=True)
-    st.markdown('<h3 style="color:#7dd3fc;">Nova Solicitação de Compra</h3>', unsafe_allow_html=True)
+    st.markdown('<h3 style="color:#7dd3fc;">Nova Solicitação</h3>', unsafe_allow_html=True)
     tab1, tab2, tab3 = st.tabs(["🔵 FEDERAL", "🟢 ESTADUAL", "🟡 MUNICIPAL"])
     for tab, esf in [(tab1, "Federal"), (tab2, "Estadual"), (tab3, "Municipal")]:
         with tab:
@@ -394,28 +412,21 @@ def realizar_compras():
                                     st.markdown(f'<p style="color:#ef4444;font-size:12px;">Excede saldo de {format_currency(saldo)}</p>', unsafe_allow_html=True)
                             produto_servico = st.text_area("Produto/Serviço", height=120)
                             if st.form_submit_button(f"Solicitar Compra - {num}"):
-                                erros = []
-                                if not ficha: erros.append("Ficha")
-                                if not tipo_desp: erros.append("Tipo")
-                                if not data_compra: erros.append("Data")
-                                if valor_compra <= 0: erros.append("Valor")
-                                if not produto_servico: erros.append("Produto/Serviço")
-                                if valor_compra > saldo: erros.append(f"Excede saldo ({format_currency(saldo)})")
-                                if erros:
-                                    st.error(f"Preencha: {', '.join(erros)}")
+                                erros = [x for x, v in [("Ficha", ficha), ("Tipo", tipo_desp), ("Data", data_compra), ("Valor", valor_compra>0), ("Produto/Serviço", produto_servico), ("Saldo", valor_compra<=saldo)] if not v]
+                                if erros: st.error(f"Preencha: {', '.join(erros)}")
                                 else:
                                     conn.execute("INSERT INTO ordens_compra (conta_receber_id, esfera, numero_conta, fonte, ficha, tipo_despesa, data_compra, valor_compra, produto_servico, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (cid, esf, num, fonte, ficha, tipo_desp, data_compra, valor_compra, produto_servico, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
                                     conn.commit()
-                                    st.success(f"Solicitação registrada para {num}!")
+                                    st.success(f"Solicitação registrada!")
                                     st.rerun()
     conn.close()
 
 def editar_ordem_compra():
-    st.markdown('<h1 style="color:#e0f2fe;">EDITAR SOLICITAÇÃO DE COMPRA</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 style="color:#e0f2fe;">EDITAR SOLICITAÇÃO</h1>', unsafe_allow_html=True)
     st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
     oid = st.session_state.get("edit_ordem_id")
     if not oid:
-        st.error("Nenhuma solicitação selecionada.")
+        st.error("Nenhuma selecionada.")
         if st.button("Voltar"):
             st.session_state["page"] = "REALIZAR COMPRAS"
             st.rerun()
@@ -424,23 +435,21 @@ def editar_ordem_compra():
     row = conn.execute("SELECT * FROM ordens_compra WHERE id=?", (oid,)).fetchone()
     if not row:
         conn.close()
-        st.error("Solicitação não encontrada.")
+        st.error("Não encontrada.")
         return
-    # row: 0=id, 1=conta_receber_id, 2=esfera, 3=numero_conta, 4=fonte, 
-    #      5=ficha, 6=tipo_despesa, 7=data_compra, 8=valor_compra, 9=produto_servico, 10=created_at
     ficha = st.text_input("Ficha", value=row[5] or "")
     tipo_desp = st.selectbox("Tipo de Despesa", ["", "Material de Consumo", "Serviço de Terceiro Pessoa Física", "Serviço de Terceiro Pessoa Jurídica", "Distribuição Gratuita"], index=["", "Material de Consumo", "Serviço de Terceiro Pessoa Física", "Serviço de Terceiro Pessoa Jurídica", "Distribuição Gratuita"].index(row[6]) if row[6] in ["", "Material de Consumo", "Serviço de Terceiro Pessoa Física", "Serviço de Terceiro Pessoa Jurídica", "Distribuição Gratuita"] else 0, key="td_edit")
-    data_compra = st.text_input("Data da Compra", value=row[7] or datetime.now().strftime("%d/%m/%Y"))
-    valor_compra = st.number_input("Valor da Compra", min_value=0.0, step=0.01, format="%.2f", value=float(row[8] or 0))
+    data_compra = st.text_input("Data", value=row[7] or datetime.now().strftime("%d/%m/%Y"))
+    valor_compra = st.number_input("Valor", min_value=0.0, step=0.01, format="%.2f", value=float(row[8] or 0))
     produto_servico = st.text_area("Produto/Serviço", height=120, value=row[9] or "")
     st.markdown(f'<p style="color:#94a3b8;">Conta: {row[3]} | Esfera: {row[2]} | Fonte: {row[4]}</p>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("Salvar Alterações"):
+        if st.button("Salvar"):
             conn.execute("UPDATE ordens_compra SET ficha=?, tipo_despesa=?, data_compra=?, valor_compra=?, produto_servico=? WHERE id=?", (ficha, tipo_desp, data_compra, valor_compra, produto_servico, oid))
             conn.commit()
             conn.close()
-            st.success("Solicitação atualizada!")
+            st.success("Atualizada!")
             st.session_state["page"] = "REALIZAR COMPRAS"
             st.rerun()
     with c2:
@@ -474,6 +483,227 @@ def change_password():
                 conn.close()
                 st.error("Senha atual incorreta")
 
+# ============================================================
+# PROGRAMAS DE SAÚDE
+# ============================================================
+
+def bloco_saude(titulo, sigla, explicacao, site_url, cor_topo="#1e40af"):
+    """Renderiza um bloco de saúde com explicação, link, upload e busca."""
+    st.markdown(f'<div style="background:linear-gradient(135deg,{cor_topo},{"#0f172a"});border-radius:12px;padding:15px;margin-bottom:15px;border-left:4px solid #22d3ee;">', unsafe_allow_html=True)
+    st.markdown(f'<h3 style="color:#22d3ee;margin:0;">{sigla}</h3>', unsafe_allow_html=True)
+    st.markdown(f'<p style="color:#b0eaff;font-size:13px;margin-bottom:10px;">{titulo}</p>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background:rgba(15,23,42,0.5);border-radius:8px;padding:12px;color:#e0f2fe;font-size:13px;line-height:1.5;">{explicacao}</div>', unsafe_allow_html=True)
+    
+    if site_url:
+        st.markdown(f'<a href="{site_url}" target="_blank" style="display:inline-block;margin-top:10px;padding:8px 16px;background:#22d3ee;color:#0f172a;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;">🔗 Acessar Site Oficial</a>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    with st.expander(f"📁 Documentos anexados - {sigla}", expanded=False):
+        conn = sqlite3.connect("marmed.db")
+        
+        uploaded = st.file_uploader(f"Enviar arquivo (PDF, Word, TXT, CSV)", type=["pdf", "docx", "doc", "txt", "csv"], key=f"upload_{sigla}")
+        if uploaded:
+            dados_bytes = uploaded.read()
+            texto_extraido = extract_text_from_bytes(dados_bytes, uploaded.name)
+            conn.execute("INSERT INTO arquivos_saude (bloco, nome_arquivo, conteudo_texto, dados_arquivo, data_upload) VALUES (?,?,?,?,?)", (sigla, uploaded.name, texto_extraido, dados_bytes, datetime.now().strftime("%d/%m/%Y %H:%M")))
+            conn.commit()
+            st.success(f"Arquivo '{uploaded.name}' anexado com sucesso!")
+            st.rerun()
+        
+        arquivos = conn.execute("SELECT id, nome_arquivo, data_upload, conteudo_texto FROM arquivos_saude WHERE bloco=? ORDER BY id DESC", (sigla,)).fetchall()
+        if arquivos:
+            st.markdown(f'<p style="color:#94a3b8;font-size:12px;">{len(arquivos)} arquivo(s) anexado(s)</p>', unsafe_allow_html=True)
+            for arq in arquivos:
+                st.markdown(f'<div style="background:rgba(30,41,59,0.6);border-radius:6px;padding:8px;margin-bottom:5px;border-left:2px solid #22d3ee;"><span style="color:#e0f2fe;">📄 {arq[1]}</span> <span style="color:#64748b;font-size:11px;">— {arq[2]}</span></div>', unsafe_allow_html=True)
+            
+            # Pesquisa nos documentos
+            st.markdown(f'<p style="color:#7dd3fc;font-size:13px;margin-top:10px;">🔍 Pesquisar nos documentos anexados</p>', unsafe_allow_html=True)
+            termo = st.text_input("Digite a palavra ou frase para buscar", key=f"busca_{sigla}")
+            if termo:
+                encontrou = False
+                for arq in arquivos:
+                    texto = arq[3] or ""
+                    matches = list(re.finditer(re.escape(termo), texto, re.IGNORECASE))
+                    if matches:
+                        encontrou = True
+                        st.markdown(f'<p style="color:#22d3ee;font-weight:600;margin-top:8px;">📄 {arq[1]}</p>', unsafe_allow_html=True)
+                        for m in matches[:5]:  # Mostra até 5 ocorrências
+                            start = max(0, m.start() - 80)
+                            end = min(len(texto), m.end() + 80)
+                            trecho = texto[start:end]
+                            # Destaca o termo encontrado
+                            trecho_destacado = re.sub(re.escape(termo), f'<span style="background:#fbbf24;color:#000;padding:1px 3px;border-radius:3px;font-weight:700;">{termo}</span>', trecho, flags=re.IGNORECASE)
+                            st.markdown(f'<div style="background:rgba(15,23,42,0.5);border-radius:6px;padding:8px;margin-bottom:4px;color:#94a3b8;font-size:12px;font-family:monospace;">...{trecho_destacado}...</div>', unsafe_allow_html=True)
+                if not encontrou:
+                    st.markdown(f'<p style="color:#94a3b8;">Nenhuma ocorrência de "{termo}" encontrada nos documentos.</p>', unsafe_allow_html=True)
+        else:
+            st.markdown('<p style="color:#64748b;">Nenhum documento anexado ainda. Faça o upload acima.</p>', unsafe_allow_html=True)
+        
+        conn.close()
+
+def programas_saude():
+    st.markdown('<h1 style="color:#e0f2fe;">PROGRAMAS DE SAÚDE</h1>', unsafe_allow_html=True)
+    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
+    
+    # Agrupa em tabs grandes
+    tab_med, tab_gestao, tab_fin, tab_reg, tab_cons = st.tabs([
+        "💊 MEDICAMENTOS", "🏛️ GESTÃO", "💰 FINANCIAMENTO", "📋 REGULAÇÃO", "🤝 CONSÓRCIOS"
+    ])
+    
+    with tab_med:
+        bloco_saude(
+            "Relação Nacional de Medicamentos Essenciais",
+            "RENAME",
+            """A <strong>RENAME</strong> (Relação Nacional de Medicamentos Essenciais) é a lista oficial do Ministério da Saúde que define quais medicamentos e insumos são oferecidos gratuitamente pelo SUS. Ela serve para orientar o tratamento, garantir o acesso da população e organizar o financiamento entre União, estados e municípios.<br><br>
+Além de servir de guia para médicos e pacientes, a RENAME é a base utilizada pelo SUS para compras públicas, incentivando o uso racional de remédios padronizados para as doenças mais recorrentes no país. Cada estado e município pode criar a sua própria lista, mas ela deve ser baseada nesta relação nacional.""",
+            "https://www.gov.br/saude/pt-br/assuntos/assistencia-farmaceutica-no-sus/rename",
+            "#0891b2"
+        )
+        
+        bloco_saude(
+            "Relação Municipal de Medicamentos Essenciais",
+            "REMUME",
+            """A <strong>REMUME</strong> (Relação Municipal de Medicamentos Essenciais) é a lista oficial de medicamentos disponibilizados gratuitamente pelo SUS na rede pública de cada município. Ela orienta a prescrição médica e garante que a população tenha acesso aos remédios essenciais para as principais necessidades de saúde.<br><br>
+<strong>Componentes:</strong><br>
+• <strong>Componente Básico:</strong> Medicamentos para atenção primária (postos de saúde).<br>
+• <strong>Componente Estratégico:</strong> Fármacos para doenças de controle prioritário ou endemias.<br>
+• <strong>Componente Especializado:</strong> Medicamentos de alto custo fornecidos pelo Estado/Município.""",
+            "https://bvsms.saude.gov.br/bvs/publicacoes/rename_2022.pdf",
+            "#0e7490"
+        )
+        
+        bloco_saude(
+            "Relação Nacional de Equipamentos e Materiais Permanentes",
+            "RENEM",
+            """A <strong>RENEM</strong> (Relação Nacional de Equipamentos e Materiais Permanentes) é a lista oficial do Ministério da Saúde que padroniza e determina quais equipamentos e materiais médico-hospitalares podem ser financiados pelo SUS. Ela é usada para guiar investimentos e compras de entidades públicas e privadas sem fins lucrativos.<br><br>
+<strong>Principais características:</strong><br>
+• <strong>Lista de Itens:</strong> Inclui desde itens simples (como macas e adipômetros) até equipamentos de alta complexidade (como aceleradores lineares).<br>
+• <strong>Valores de Referência:</strong> A lista estabelece valores base que orientam o repasse de verbas federais.<br>
+• <strong>Atualização:</strong> O Ministério da Saúde realiza atualizações periódicas em parceria com o PROCOT.""",
+            "https://portalfns.saude.gov.br/",
+            "#155e75"
+        )
+        
+        bloco_saude(
+            "Relação Nacional de Ações e Serviços de Saúde",
+            "RENASES",
+            """A <strong>RENASES</strong> foi instituída para assegurar o direito à integralidade da assistência, ou seja, garante que o paciente não tenha acesso apenas a um remédio, mas a todo o ciclo de cuidado necessário para tratar sua saúde.<br><br>
+<strong>O que compõe a RENASES?</strong><br>
+• <strong>Atenção Primária:</strong> Postos de saúde, consultas médicas básicas e vacinação.<br>
+• <strong>Urgência e Emergência:</strong> Atendimento em UPAs e pronto-socorros.<br>
+• <strong>Atenção Especializada e Hospitalar:</strong> Consultas com especialistas, exames de alta complexidade e internações.<br>
+• <strong>Atenção Psicossocial:</strong> Tratamentos em CAPS (Centros de Atenção Psicossocial).<br>
+• <strong>Vigilância em Saúde:</strong> Ações de controle de epidemias e saneamento.""",
+            "https://www.gov.br/saude/pt-br/acesso-a-informacao/acoes-e-programas/renases",
+            "#164e63"
+        )
+    
+    with tab_gestao:
+        bloco_saude(
+            "Plataforma de Gestão da Atenção Primária à Saúde",
+            "E-GESTOR APS",
+            """O <strong>e-Gestor APS</strong> (Atenção Primária à Saúde) é a plataforma oficial do Governo Federal/Ministério da Saúde voltada para o Sistema Único de Saúde (SUS).<br><br>
+<strong>O que faz:</strong> Centraliza os acessos a diversos sistemas da Atenção Básica, como histórico de cobertura, acompanhamento de equipes de saúde da família, programas como o Mais Médicos e dados de financiamento.<br><br>
+<strong>Acesso:</strong> Possui uma área de Acesso Público (com relatórios e dados abertos para a população) e uma Área Restrita (para gestores municipais e estaduais administrarem recursos e enviarem informações).""",
+            "https://egestorab.saude.gov.br/",
+            "#0369a1"
+        )
+        
+        bloco_saude(
+            "Nova Plataforma de Regulação de Leitos - SES/MG",
+            "CORE SAÚDE MG",
+            """O <strong>Core Saúde MG</strong> é a nova plataforma digital da Secretaria de Estado de Saúde de Minas Gerais (SES-MG). Ele substituiu o antigo sistema SUSfácil para gerenciar e organizar a fila única de leitos hospitalares, cirurgias, consultas e exames do SUS.<br><br>
+<strong>Objetivos:</strong><br>
+• <strong>Mais Transparência:</strong> Utiliza fila única e critérios técnicos estaduais, evitando interferências na ordem de atendimento.<br>
+• <strong>Decisões Baseadas em Dados:</strong> O paciente é direcionado pelo médico regulador do Estado de forma ágil, com monitoramento em tempo real.<br>
+• <strong>Regulação 4.0:</strong> Padroniza fluxos assistenciais em todo o território mineiro.""",
+            "https://www.saude.mg.gov.br/",
+            "#075985"
+        )
+    
+    with tab_fin:
+        bloco_saude(
+            "Fundo Nacional de Saúde - Gestor Financeiro do SUS",
+            "FNS",
+            """O <strong>Fundo Nacional de Saúde (FNS)</strong> é o gestor financeiro dos recursos do Ministério da Saúde na esfera federal.<br><br>
+<strong>Como Funciona e o que Financia:</strong> O FNS centraliza o orçamento federal da saúde e distribui esses montantes para estados, municípios, Distrito Federal e entidades parceiras do SUS. Esses repasses são utilizados para:<br><br>
+<strong>Custeio:</strong> Manutenção de hospitais, postos de saúde, compra de medicamentos e pagamento de profissionais.<br>
+<strong>Investimentos:</strong> Construção de novas unidades de saúde, reformas e compra de equipamentos.<br><br>
+<strong>Modalidades de Repasse:</strong><br>
+• <strong>Fundo a Fundo:</strong> Transferência direta e automática do Fundo Nacional para os fundos estaduais e municipais de saúde.<br>
+• <strong>Convênios e Termos de Cooperação:</strong> Transferências condicionadas a projetos específicos.""",
+            "https://portalfns.saude.gov.br/",
+            "#1d4ed8"
+        )
+        
+        bloco_saude(
+            "Sistema de Gerenciamento da Tabela de Procedimentos",
+            "SIGTAP",
+            """O <strong>SIGTAP</strong> (Sistema de Gerenciamento da Tabela de Procedimentos, Medicamentos e OPM do SUS) é a tabela oficial do Ministério da Saúde que padroniza todos os procedimentos, medicamentos e Órteses, Próteses e Materiais Especiais (OPM) utilizados no Sistema Único de Saúde (SUS).<br><br>
+<strong>O que você encontra na tabela:</strong><br>
+• <strong>Códigos e Valores:</strong> Identificação numérica de cada exame, cirurgia ou consulta, junto com o valor repassado pelo SUS.<br>
+• <strong>Regras e Compatibilidades:</strong> Define quais procedimentos podem ser feitos juntos.<br>
+• <strong>Instrumentos de Registro:</strong> Indica qual documento deve ser preenchido (AIH para internações ou BPA para ambulatório).<br>
+• <strong>Nível de Complexidade:</strong> Classifica a ação em Atenção Básica, Média ou Alta Complexidade.""",
+            "http://sigtap.datasus.gov.br/tabela-unificada/app/sec/inicio.jsp",
+            "#1e3a8a"
+        )
+        
+        bloco_saude(
+            "Consolidação da Programação Pactuada Integrada",
+            "PPI / CONSOLIDAÇÃO",
+            """A <strong>consolidação da PPI</strong> refere-se à etapa final do planejamento de saúde, onde os dados da Programação Pactuada Integrada (PPI) são unificados. No Sistema Único de Saúde (SUS), esse processo unifica metas físicas e orçamentárias (como exames e consultas) para que os municípios e estados controlem e distribuam os recursos financeiros de forma centralizada.<br><br>
+A PPI é o instrumento que organiza a rede de serviços do SUS, definindo o fluxo de pacientes entre municípios e garantindo que cada gestor saiba exatamente quanto destinar para cada tipo de procedimento.""",
+            "http://datasus.saude.gov.br/informacoes-de-saude/tabnet",
+            "#1e40af"
+        )
+    
+    with tab_reg:
+        bloco_saude(
+            "Conselho Nacional de Secretarias Municipais de Saúde",
+            "CONASEMS",
+            """O <strong>CONASEMS</strong> (Conselho Nacional de Secretarias Municipais de Saúde) é uma associação civil sem fins lucrativos que representa e congrega as Secretarias Municipais de Saúde de todo o Brasil.<br><br>
+<strong>Principais funções:</strong><br>
+• <strong>Representatividade:</strong> Representa os interesses de todos os municípios brasileiros nas instâncias de negociação e decisão do SUS (Comissão Intergestora Tripartite).<br>
+• <strong>Apoio aos Gestores:</strong> Oferece suporte técnico, jurídico e político aos secretários municipais de saúde.<br>
+• <strong>Capacitação:</strong> Atua fortemente na área de educação continuada para trabalhadores e gestores do SUS.<br>
+• <strong>Eventos:</strong> Promove o maior congresso de saúde pública do mundo.<br><br>
+<strong>Diferença entre CONASEMS, COSEMS e CONASS:</strong><br>
+• <strong>CONASEMS:</strong> Municípios em âmbito nacional.<br>
+• <strong>COSEMS:</strong> Municípios em âmbito estadual.<br>
+• <strong>CONASS:</strong> Representa as Secretarias de Estado da Saúde.""",
+            "https://conasems.org.br/",
+            "#4338ca"
+        )
+        
+        bloco_saude(
+            "Conselho de Secretarias Municipais de Saúde de MG",
+            "COSEMS MG",
+            """O <strong>COSEMS MG</strong> (Conselho de Secretarias Municipais de Saúde de Minas Gerais) é uma entidade sem fins lucrativos que representa os gestores municipais de saúde dos 853 municípios mineiros. Ele atua como o principal elo entre os Secretários de Saúde e as esferas estadual e federal.<br><br>
+<strong>Principais Funções:</strong><br>
+• <strong>Representação Política:</strong> Defende os interesses dos municípios na formulação, implantação e avaliação de políticas públicas de saúde.<br>
+• <strong>Articulação Institucional:</strong> Participa ativamente de instâncias decisórias, como a Comissão Intergestores Bipartite (CIB).<br>
+• <strong>Apoio Técnico:</strong> Oferece suporte, capacitação e intercâmbio de experiências para os gestores e equipes de saúde em todo o estado.<br><br>
+O COSEMS MG se divide em representações regionais, que acompanham de perto a realidade das 28 regionais de saúde de Minas Gerais.""",
+            "https://www.cosemsmg.org.br/",
+            "#3730a3"
+        )
+    
+    with tab_cons:
+        bloco_saude(
+            "Consórcio Intermunicipal de Saúde da Microrregião de Lavras",
+            "CISLAV",
+            """O <strong>CISLAV</strong> é o Consórcio Intermunicipal de Saúde dos Municípios da Microrregião de Lavras. Trata-se de uma associação pública que une prefeituras da região para otimizar recursos e melhorar o atendimento médico pelo SUS.<br><br>
+<strong>O que oferece:</strong><br>
+• Permite que cidades menores compartilhem custos de consultas especializadas, exames e transporte de pacientes (como o Transporta SUS).<br>
+• Fortalece ações regionais de vigilância sanitária.<br>
+• Viabiliza a aquisição conjunta de medicamentos e insumos.<br>
+• Promove a regionalização da saúde, garantindo atendimento mais próximo à população.""",
+            "https://www.cislav.com/",
+            "#312e81"
+        )
+
 def main():
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
@@ -482,22 +712,28 @@ def main():
     if not st.session_state["logged_in"]:
         login_page()
     else:
-        st.sidebar.markdown('<h3 style="color:#22d3ee;text-align:center;letter-spacing:2px;">ABA DE NAVEGAÇÃO</h3>', unsafe_allow_html=True)
+        st.sidebar.markdown('<h3 style="color:#22d3ee;text-align:center;letter-spacing:2px;">MENU PRINCIPAL</h3>', unsafe_allow_html=True)
         st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        if st.sidebar.button("INÍCIO", key="nav_inicio", use_container_width=True):
+        st.sidebar.markdown('<p style="color:#7dd3fc;font-size:12px;letter-spacing:1px;margin-bottom:5px;">GESTÃO FINANCEIRA</p>', unsafe_allow_html=True)
+        if st.sidebar.button("📊 INÍCIO", key="nav_inicio", use_container_width=True):
             st.session_state["page"] = "Dashboard"
             st.rerun()
-        if st.sidebar.button("CADASTRAR CONTAS", key="nav_cadastrar", use_container_width=True):
+        if st.sidebar.button("📝 CADASTRAR CONTAS", key="nav_cadastrar", use_container_width=True):
             st.session_state["page"] = "CADASTRAR CONTAS"
             st.rerun()
-        if st.sidebar.button("CONTAS CADASTRADAS", key="nav_cadastradas", use_container_width=True):
+        if st.sidebar.button("📋 CONTAS CADASTRADAS", key="nav_cadastradas", use_container_width=True):
             st.session_state["page"] = "CONTAS CADASTRADAS"
             st.rerun()
-        if st.sidebar.button("REALIZAR COMPRAS", key="nav_compras", use_container_width=True):
+        if st.sidebar.button("🛒 REALIZAR COMPRAS", key="nav_compras", use_container_width=True):
             st.session_state["page"] = "REALIZAR COMPRAS"
             st.rerun()
         st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        if st.sidebar.button("Sair", key="logout", use_container_width=True):
+        st.sidebar.markdown('<p style="color:#7dd3fc;font-size:12px;letter-spacing:1px;margin-bottom:5px;">SAÚDE PÚBLICA</p>', unsafe_allow_html=True)
+        if st.sidebar.button("🏥 PROGRAMAS DE SAÚDE", key="nav_saude", use_container_width=True):
+            st.session_state["page"] = "PROGRAMAS SAUDE"
+            st.rerun()
+        st.sidebar.markdown('<hr>', unsafe_allow_html=True)
+        if st.sidebar.button("🚪 Sair", key="logout", use_container_width=True):
             st.session_state["logged_in"] = False
             st.session_state.pop("username", None)
             st.rerun()
@@ -516,6 +752,8 @@ def main():
             editar_ordem_compra()
         elif page == "ESFERA DETALHE":
             esfera_detalhe()
+        elif page == "PROGRAMAS SAUDE":
+            programas_saude()
         elif page == "Trocar Senha":
             change_password()
 
