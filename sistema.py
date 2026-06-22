@@ -256,8 +256,6 @@ def editar_conta():
     rid = st.session_state.get("edit_conta_id")
     if not rid: st.error("Nenhuma conta selecionada.")
     if st.button("Voltar"): st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
-    # ... editar_conta continua igual ao código anterior...
-    # (mantive a função completa, vou reproduzir por segurança)
     conn = sqlite3.connect("marmed.db")
     row = conn.execute("SELECT * FROM contas_receber WHERE id=?", (rid,)).fetchone()
     if not row: conn.close(); st.error("Conta não encontrada."); return
@@ -379,39 +377,16 @@ def change_password():
             else: conn.close(); st.error("Senha atual incorreta")
 
 # ============================================================
-# PROGRAMAS DE SAÚDE
+# PROGRAMAS DE SAÚDE - SEM CONTAS
 # ============================================================
 
-def mostrar_contas_do_bloco(esfera):
-    """Mostra as contas individuais de determinada esfera dentro do bloco."""
-    conn = sqlite3.connect("marmed.db")
-    contas = conn.execute("SELECT id, numero_conta, fonte, valor_total FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esfera,)).fetchall()
-    conn.close()
-    if not contas:
-        st.markdown(f'<p style="color:#64748b;font-size:13px;">Nenhuma conta {esfera} cadastrada.</p>', unsafe_allow_html=True)
-        return
-    cards = ""
-    for cid, num, fonte, vtotal in contas:
-        conn2 = sqlite3.connect("marmed.db")
-        gasto = conn2.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE conta_receber_id=?", (cid,)).fetchone()[0]
-        conn2.close()
-        saldo = vtotal - gasto
-        cor_saldo = "#22c55e" if saldo > 0 else "#ef4444"
-        cards += f'<div style="background:rgba(15,23,42,0.7);border-radius:8px;padding:10px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;border-left:3px solid #22d3ee;"><div><span style="color:#e0f2fe;font-weight:600;">{num}</span> <span style="color:#22d3ee;font-size:12px;">Fonte {fonte}</span></div><div><span style="color:#94a3b8;font-size:12px;">Saldo: </span><span style="color:{cor_saldo};font-weight:700;font-size:15px;">{format_currency(saldo)}</span></div></div>'
-    st.markdown(f'<div style="margin-top:8px;margin-bottom:12px;">{cards}</div>', unsafe_allow_html=True)
-
-def bloco_saude(titulo, sigla, explicacao, site_url, cor_topo="#1e40af", esfera_rel=None):
-    """Renderiza um bloco de saúde com explicação, link, contas, upload e busca."""
+def bloco_saude(titulo, sigla, explicacao, site_url, cor_topo="#1e40af"):
+    """Renderiza um bloco de saúde com explicação, link, upload e busca. SEM contas."""
     with st.expander(f"📋 {sigla} - {titulo}", expanded=False):
         st.markdown(f'<div style="background:linear-gradient(135deg,{cor_topo},#0f172a);border-radius:12px;padding:20px;margin-bottom:15px;border-left:6px solid #22d3ee;">', unsafe_allow_html=True)
         st.markdown(f'<h2 style="color:#ffffff;margin:0 0 4px 0;font-size:28px;font-weight:800;letter-spacing:2px;">{sigla}</h2>', unsafe_allow_html=True)
-        st.markdown(f'<p style="color:#b0eaff;font-size:15px;margin-bottom:12px;font-weight:600;">{titulo}</p>', unsafe_allow_html=True)
-        
-        # Mostrar as contas individuais DENTRO do bloco
-        if esfera_rel:
-            st.markdown(f'<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-bottom:6px;">📊 Contas vinculadas - {esfera_rel}</p>', unsafe_allow_html=True)
-            mostrar_contas_do_bloco(esfera_rel)
-        
+        # SUBTÍTULO CORRIGIDO - branco brilhante com destaque
+        st.markdown(f'<p style="color:#e0f2fe;font-size:16px;margin-bottom:12px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,0.4);">📌 {titulo}</p>', unsafe_allow_html=True)
         st.markdown(f'<div style="background:rgba(15,23,42,0.7);border-radius:10px;padding:18px;color:#e0f2fe;font-size:15px;line-height:1.7;">{explicacao}</div>', unsafe_allow_html=True)
         if site_url:
             st.markdown(f'<a href="{site_url}" target="_blank" style="display:inline-block;margin-top:12px;padding:10px 20px;background:#22d3ee;color:#0f172a;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;">🔗 Acessar Site Oficial</a>', unsafe_allow_html=True)
@@ -452,92 +427,92 @@ def bloco_saude(titulo, sigla, explicacao, site_url, cor_topo="#1e40af", esfera_
 
 def programas_saude():
     st.markdown('<h1 style="color:#e0f2fe;font-size:38px;">🏥 PROGRAMAS DE SAÚDE</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="color:#94a3b8;margin-bottom:20px;">Clique em cada bloco para expandir. Dentro de cada bloco, veja as contas vinculadas com saldo individual.</p>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#94a3b8;margin-bottom:20px;">Clique em cada bloco para expandir, anexar documentos e pesquisar.</p>', unsafe_allow_html=True)
     st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
     
     tab_med, tab_gestao, tab_fin, tab_reg, tab_cons = st.tabs(["💊 MEDICAMENTOS", "🏛️ GESTÃO", "💰 FINANCIAMENTO", "📋 REGULAÇÃO", "🤝 CONSÓRCIOS"])
     
     with tab_med:
         bloco_saude("Relação Nacional de Medicamentos Essenciais", "RENAME",
-            """A <strong>RENAME</strong> (Relação Nacional de Medicamentos Essenciais) é a lista oficial do Ministério da Saúde que define quais medicamentos e insumos são oferecidos gratuitamente pelo SUS. Ela serve para orientar o tratamento, garantir o acesso da população e organizar o financiamento entre União, estados e municípios.<br><br>Além de servir de guia para médicos e pacientes, a RENAME é a base utilizada pelo SUS para compras públicas, incentivando o uso racional de remédios padronizados para as doenças mais recorrentes no país.""",
-            "https://www.gov.br/saude/pt-br/assuntos/assistencia-farmaceutica-no-sus/rename", "#0e7490", "Federal")
+            """A <strong>RENAME</strong> (Relação Nacional de Medicamentos Essenciais) é a lista oficial do Ministério da Saúde que define quais medicamentos e insumos são oferecidos gratuitamente pelo SUS. Ela serve para orientar o tratamento, garantir o acesso da população e organizar o financiamento entre União, estados e municípios.<br><br>
+Além de servir de guia para médicos e pacientes, a RENAME é a base utilizada pelo SUS para compras públicas, incentivando o uso racional de remédios padronizados para as doenças mais recorrentes no país. Cada estado e município pode criar a sua própria lista, mas ela deve ser baseada nesta relação nacional.""",
+            "https://www.gov.br/saude/pt-br/assuntos/assistencia-farmaceutica-no-sus/rename", "#0e7490")
         
         bloco_saude("Relação Municipal de Medicamentos Essenciais", "REMUME",
-            """A <strong>REMUME</strong> (Relação Municipal de Medicamentos Essenciais) é a lista oficial de medicamentos disponibilizados gratuitamente pelo SUS na rede pública de cada município.<br><br><strong>Componentes:</strong><br>• <strong>Componente Básico:</strong> Medicamentos para atenção primária (postos de saúde).<br>• <strong>Componente Estratégico:</strong> Fármacos para doenças de controle prioritário.<br>• <strong>Componente Especializado:</strong> Medicamentos de alto custo.""",
-            "https://bvsms.saude.gov.br/bvs/publicacoes/rename_2022.pdf", "#0891b2", "Municipal")
+            """A <strong>REMUME</strong> (Relação Municipal de Medicamentos Essenciais) é a lista oficial de medicamentos disponibilizados gratuitamente pelo SUS na rede pública de cada município.<br><br>
+<strong>Componentes:</strong><br>
+• <strong>Componente Básico:</strong> Medicamentos para atenção primária (postos de saúde).<br>
+• <strong>Componente Estratégico:</strong> Fármacos para doenças de controle prioritário.<br>
+• <strong>Componente Especializado:</strong> Medicamentos de alto custo.""",
+            "https://bvsms.saude.gov.br/bvs/publicacoes/rename_2022.pdf", "#0891b2")
         
         bloco_saude("Relação Nacional de Equipamentos e Materiais Permanentes", "RENEM",
-            """A <strong>RENEM</strong> (Relação Nacional de Equipamentos e Materiais Permanentes) padroniza e determina quais equipamentos e materiais médico-hospitalares podem ser financiados pelo SUS.<br><br><strong>Características:</strong><br>• Inclui desde itens simples (macas) até equipamentos de alta complexidade.<br>• Estabelece valores base que orientam o repasse de verbas federais.<br>• Atualização periódica em parceria com o PROCOT.""",
-            "https://portalfns.saude.gov.br/", "#155e75", "Federal")
+            """A <strong>RENEM</strong> (Relação Nacional de Equipamentos e Materiais Permanentes) padroniza e determina quais equipamentos e materiais médico-hospitalares podem ser financiados pelo SUS.<br><br>
+<strong>Características:</strong><br>
+• Inclui desde itens simples (macas) até equipamentos de alta complexidade.<br>
+• Estabelece valores base que orientam o repasse de verbas federais.<br>
+• Atualização periódica em parceria com o PROCOT.""",
+            "https://portalfns.saude.gov.br/", "#155e75")
         
         bloco_saude("Relação Nacional de Ações e Serviços de Saúde", "RENASES",
-            """A <strong>RENASES</strong> garante o direito à integralidade da assistência, assegurando que o paciente tenha acesso a todo o ciclo de cuidado.<br><br><strong>O que compõe:</strong><br>• <strong>Atenção Primária:</strong> Postos de saúde, consultas básicas, vacinação.<br>• <strong>Urgência e Emergência:</strong> UPAs e pronto-socorros.<br>• <strong>Atenção Especializada:</strong> Consultas com especialistas, exames, internações.<br>• <strong>Atenção Psicossocial:</strong> CAPS.<br>• <strong>Vigilância em Saúde:</strong> Controle de epidemias e saneamento.""",
-            "https://www.gov.br/saude/pt-br/acesso-a-informacao/acoes-e-programas/renases", "#164e63", "Federal")
+            """A <strong>RENASES</strong> garante o direito à integralidade da assistência, assegurando que o paciente tenha acesso a todo o ciclo de cuidado.<br><br>
+<strong>O que compõe:</strong><br>
+• <strong>Atenção Primária:</strong> Postos de saúde, consultas básicas, vacinação.<br>
+• <strong>Urgência e Emergência:</strong> UPAs e pronto-socorros.<br>
+• <strong>Atenção Especializada:</strong> Consultas com especialistas, exames, internações.<br>
+• <strong>Atenção Psicossocial:</strong> CAPS.<br>
+• <strong>Vigilância em Saúde:</strong> Controle de epidemias e saneamento.""",
+            "https://www.gov.br/saude/pt-br/acesso-a-informacao/acoes-e-programas/renases", "#164e63")
     
     with tab_gestao:
         bloco_saude("Plataforma de Gestão da Atenção Primária à Saúde", "E-GESTOR APS",
-            """O <strong>e-Gestor APS</strong> é a plataforma oficial do Governo Federal/Ministério da Saúde voltada para o SUS.<br><br><strong>O que faz:</strong> Centraliza os acessos a sistemas da Atenção Básica, como cobertura, equipes de saúde da família, Mais Médicos e dados de financiamento.""",
-            "https://egestorab.saude.gov.br/", "#0369a1", "Federal")
+            """O <strong>e-Gestor APS</strong> é a plataforma oficial do Governo Federal/Ministério da Saúde voltada para o SUS.<br><br>
+<strong>O que faz:</strong> Centraliza os acessos a sistemas da Atenção Básica, como cobertura, equipes de saúde da família, Mais Médicos e dados de financiamento.<br><br>
+<strong>Acesso:</strong> Área Pública (relatórios e dados abertos) e Área Restrita (gestores municipais e estaduais).""",
+            "https://egestorab.saude.gov.br/", "#0369a1")
         
         bloco_saude("Nova Plataforma de Regulação de Leitos - SES/MG", "CORE SAÚDE MG",
-            """O <strong>Core Saúde MG</strong> é a nova plataforma digital da SES-MG que substituiu o SUSfácil para gerenciar a fila única de leitos, cirurgias, consultas e exames.<br><br><strong>Objetivos:</strong><br>• Fila única e critérios técnicos estaduais.<br>• Decisões baseadas em dados com monitoramento em tempo real.<br>• Regulação 4.0 padronizando fluxos assistenciais em MG.""",
-            "https://www.saude.mg.gov.br/", "#075985", "Estadual")
+            """O <strong>Core Saúde MG</strong> é a nova plataforma digital da SES-MG que substituiu o SUSfácil para gerenciar a fila única de leitos, cirurgias, consultas e exames.<br><br>
+<strong>Objetivos:</strong><br>
+• Fila única e critérios técnicos estaduais.<br>
+• Decisões baseadas em dados com monitoramento em tempo real.<br>
+• Regulação 4.0 padronizando fluxos assistenciais em MG.""",
+            "https://www.saude.mg.gov.br/", "#075985")
     
     with tab_fin:
         bloco_saude("Fundo Nacional de Saúde - Gestor Financeiro do SUS", "FNS",
-            """O <strong>FNS</strong> é o gestor financeiro dos recursos do Ministério da Saúde na esfera federal.<br><br><strong>Custeio:</strong> Manutenção de hospitais, postos, compra de medicamentos, pagamento de profissionais.<br><strong>Investimentos:</strong> Construção de unidades de saúde, reformas, compra de equipamentos.<br><br><strong>Repasses:</strong> Fundo a Fundo (automático) e Convênios (projetos específicos).""",
-            "https://portalfns.saude.gov.br/", "#1d4ed8", "Federal")
+            """O <strong>FNS</strong> é o gestor financeiro dos recursos do Ministério da Saúde na esfera federal.<br><br>
+<strong>Custeio:</strong> Manutenção de hospitais, postos, compra de medicamentos, pagamento de profissionais.<br>
+<strong>Investimentos:</strong> Construção de unidades de saúde, reformas, compra de equipamentos.<br><br>
+<strong>Repasses:</strong> Fundo a Fundo (automático) e Convênios (projetos específicos).""",
+            "https://portalfns.saude.gov.br/", "#1d4ed8")
         
         bloco_saude("Sistema de Gerenciamento da Tabela de Procedimentos", "SIGTAP",
-            """O <strong>SIGTAP</strong> é a tabela oficial que padroniza procedimentos, medicamentos e OPM do SUS.<br><br>• Códigos e valores de cada exame, cirurgia ou consulta.<br>• Regras de compatibilidade entre procedimentos.<br>• Instrumentos de registro (AIH, BPA).<br>• Níveis: Atenção Básica, Média e Alta Complexidade.""",
-            "http://sigtap.datasus.gov.br/tabela-unificada/app/sec/inicio.jsp", "#1e3a8a", "Federal")
+            """O <strong>SIGTAP</strong> é a tabela oficial que padroniza procedimentos, medicamentos e OPM do SUS.<br><br>
+• Códigos e valores de cada exame, cirurgia ou consulta.<br>
+• Regras de compatibilidade entre procedimentos.<br>
+• Instrumentos de registro (AIH, BPA).<br>
+• Níveis: Atenção Básica, Média e Alta Complexidade.""",
+            "http://sigtap.datasus.gov.br/tabela-unificada/app/sec/inicio.jsp", "#1e3a8a")
         
         bloco_saude("Programação Pactuada e Integrada", "PPI",
-            """A <strong>PPI</strong> é o instrumento que organiza a rede de serviços do SUS, definindo o fluxo de pacientes entre municípios.<br><br>A consolidação da PPI unifica metas físicas e orçamentárias (exames, consultas) para controle e distribuição centralizada dos recursos financeiros.""",
-            "http://datasus.saude.gov.br/informacoes-de-saude/tabnet", "#1e40af", "Estadual")
+            """A <strong>PPI</strong> é o instrumento que organiza a rede de serviços do SUS, definindo o fluxo de pacientes entre municípios.<br><br>
+A consolidação da PPI unifica metas físicas e orçamentárias (exames, consultas) para controle e distribuição centralizada dos recursos financeiros.""",
+            "http://datasus.saude.gov.br/informacoes-de-saude/tabnet", "#1e40af")
     
     with tab_reg:
         bloco_saude("Conselho Nacional de Secretarias Municipais de Saúde", "CONASEMS",
-            """O <strong>CONASEMS</strong> representa as Secretarias Municipais de Saúde de todo o Brasil.<br><br><strong>Funções:</strong> Representa os municípios na Comissão Intergestora Tripartite, oferece suporte técnico e promove capacitação.<br><br><strong>Diferença:</strong> CONASEMS (nacional) / COSEMS (estadual) / CONASS (estados)""",
-            "https://conasems.org.br/", "#4338ca", "Federal")
+            """O <strong>CONASEMS</strong> representa as Secretarias Municipais de Saúde de todo o Brasil.<br><br>
+<strong>Funções:</strong> Representa os municípios na Comissão Intergestora Tripartite, oferece suporte técnico e promove capacitação.<br><br>
+<strong>Diferença:</strong> CONASEMS (nacional) / COSEMS (estadual) / CONASS (estados)""",
+            "https://conasems.org.br/", "#4338ca")
         
         bloco_saude("Conselho de Secretarias Municipais de Saúde de MG", "COSEMS MG",
-            """O <strong>COSEMS MG</strong> representa os 853 municípios mineiros. Atua como elo entre Secretários de Saúde e as esferas estadual/federal.<br><br><strong>Funções:</strong> Representação política, participação na CIB, apoio técnico e capacitação para gestores das 28 regionais de saúde.""",
-            "https://www.cosemsmg.org.br/", "#3730a3", "Estadual")
+            """O <strong>COSEMS MG</strong> representa os 853 municípios mineiros. Atua como elo entre Secretários de Saúde e as esferas estadual/federal.<br><br>
+<strong>Funções:</strong> Representação política, participação na CIB, apoio técnico e capacitação para gestores das 28 regionais de saúde.""",
+            "https://www.cosemsmg.org.br/", "#3730a3")
     
     with tab_cons:
         bloco_saude("Consórcio Intermunicipal de Saúde da Microrregião de Lavras", "CISLAV",
-            """O <strong>CISLAV</strong> une prefeituras da região para otimizar recursos e melhorar o atendimento pelo SUS.<br><br>• Compartilhamento de custos de consultas, exames e transporte (Transporta SUS).<br>• Fortalecimento da vigilância sanitária regional.<br>• Aquisição conjunta de medicamentos e insumos.""",
-            "https://www.cislav.com/", "#312e81", "Municipal")
-
-def main():
-    if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
-    if "page" not in st.session_state: st.session_state["page"] = "Dashboard"
-    if not st.session_state["logged_in"]: login_page()
-    else:
-        st.sidebar.markdown('<h3 style="color:#22d3ee;text-align:center;letter-spacing:2px;">MENU PRINCIPAL</h3>', unsafe_allow_html=True)
-        st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        st.sidebar.markdown('<p style="color:#7dd3fc;font-size:12px;letter-spacing:1px;margin-bottom:5px;">GESTÃO FINANCEIRA</p>', unsafe_allow_html=True)
-        if st.sidebar.button("📊 INÍCIO", key="nav_inicio", use_container_width=True): st.session_state["page"] = "Dashboard"; st.rerun()
-        if st.sidebar.button("📝 CADASTRAR CONTAS", key="nav_cadastrar", use_container_width=True): st.session_state["page"] = "CADASTRAR CONTAS"; st.rerun()
-        if st.sidebar.button("📋 CONTAS CADASTRADAS", key="nav_cadastradas", use_container_width=True): st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
-        if st.sidebar.button("🛒 REALIZAR COMPRAS", key="nav_compras", use_container_width=True): st.session_state["page"] = "REALIZAR COMPRAS"; st.rerun()
-        st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        st.sidebar.markdown('<p style="color:#7dd3fc;font-size:12px;letter-spacing:1px;margin-bottom:5px;">SAÚDE PÚBLICA</p>', unsafe_allow_html=True)
-        if st.sidebar.button("🏥 PROGRAMAS DE SAÚDE", key="nav_saude", use_container_width=True): st.session_state["page"] = "PROGRAMAS SAUDE"; st.rerun()
-        st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        if st.sidebar.button("🚪 Sair", key="logout", use_container_width=True):
-            st.session_state["logged_in"] = False; st.session_state.pop("username", None); st.rerun()
-        page = st.session_state["page"]
-        if page == "Dashboard": dashboard()
-        elif page == "CADASTRAR CONTAS": cadastrar_contas()
-        elif page == "CONTAS CADASTRADAS": contas_cadastradas()
-        elif page == "EDITAR CONTA": editar_conta()
-        elif page == "REALIZAR COMPRAS": realizar_compras()
-        elif page == "EDITAR ORDEM COMPRA": editar_ordem_compra()
-        elif page == "ESFERA DETALHE": esfera_detalhe()
-        elif page == "PROGRAMAS SAUDE": programas_saude()
-        elif page == "Trocar Senha": change_password()
-
-if __name__ == "__main__":
-    main()
+            """O <strong>CISLAV</strong> une prefeituras da região para otimizar recursos e melhorar o atendimento pelo SUS.<br><br>
+• Compartilhamento de custos de consultas, exames e transporte (Transporta SUS).<br>
