@@ -295,7 +295,7 @@ def cadastrar_contas():
             if vt > 0:
                 st.markdown(f'<p style="color:#00d4ff;font-size:18px;font-weight:700;margin-top:10px;">Total: {format_currency(vt)}</p>', unsafe_allow_html=True)
         st.markdown('<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">5. Data de Recebimento</p>', unsafe_allow_html=True)
-        st.markdown('<p style="color:#94a3b8;font-size:11px;margin-bottom:5px;">Clique no campo para escolher a data no calendario</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#94a3b8;font-size:11px;margin-bottom:5px;">Clique no campo para abrir o calendario</p>', unsafe_allow_html=True)
         data_receb = st.date_input("* Data Recebimento", value=datetime.now(), format="DD/MM/YYYY", key="data_receb_cad")
         st.markdown('<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">6. Informacoes Adicionais</p>', unsafe_allow_html=True)
         prog = st.text_input("Programa/Politica (opcional)")
@@ -448,6 +448,7 @@ def realizar_compras():
                         with cA:
                             ficha = st.text_input("Ficha")
                             td = st.selectbox("Despesa", ["", "Material de Consumo", "Servico PF", "Servico PJ", "Distribuicao Gratuita"], key=f"td_{esf}_{cid}")
+                            st.markdown('<p style="color:#94a3b8;font-size:11px;">Clique no campo para abrir o calendario</p>', unsafe_allow_html=True)
                             data_c = st.date_input("Data Compra", value=datetime.now(), format="DD/MM/YYYY", key=f"dc_{esf}_{cid}")
                         with cB:
                             valor_c_str = st.text_input("Valor", key=f"vc_{esf}_{cid}")
@@ -466,7 +467,7 @@ def realizar_compras():
                             else:
                                 conn.execute("INSERT INTO ordens_compra (conta_receber_id, esfera, numero_conta, fonte, ficha, tipo_despesa, data_compra, valor_compra, produto_servico, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (cid, esf, num, fonte, ficha, td, data_c.strftime("%d/%m/%Y"), valor_c, prod, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
                                 conn.commit()
-                                st.success("Solicitacao registrada! Os campos serao limpos.")
+                                st.success("Solicitacao registrada! Campos limpos para nova solicitacao.")
                                 st.rerun()
     
     st.markdown('<hr>', unsafe_allow_html=True)
@@ -507,12 +508,12 @@ def realizar_compras():
                 
                 c1, c2 = st.columns(2)
                 with c1:
-                    if st.button(u"\u270f\ufe0f Editar", key=f"eo_{oid}"):
+                    if st.button("Editar", key=f"eo_{oid}"):
                         st.session_state["edit_ordem_id"] = oid
                         st.session_state["page"] = "EDITAR ORDEM COMPRA"
                         st.rerun()
                 with c2:
-                    if st.button(u"\U0001f5d1\ufe0f Excluir", key=f"do_{oid}"):
+                    if st.button("Excluir", key=f"do_{oid}"):
                         conn.execute("DELETE FROM ordens_compra WHERE id=?", (oid,))
                         conn.commit()
                         st.success("Excluida!")
