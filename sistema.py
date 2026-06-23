@@ -69,7 +69,7 @@ def inject_masks():
                     input.addEventListener('input', function() {
                         var v = this.value.replace(/\D/g, '');
                         if (v.length === 0) { this.value = ''; return; }
-                        while (v.length &lt; 3) v = '0' + v;
+                        while (v.length < 3) v = '0' + v;
                         var cents = v.substring(v.length - 2);
                         var reais = v.substring(0, v.length - 2);
                         reais = reais.replace(/^0+/, '');
@@ -94,7 +94,7 @@ def inject_masks():
                     input.addEventListener('input', function() {
                         var v = this.value.replace(/\D/g, '');
                         if (v.length === 0) { this.value = ''; return; }
-                        while (v.length &lt; 3) v = '0' + v;
+                        while (v.length < 3) v = '0' + v;
                         var cents = v.substring(v.length - 2);
                         var reais = v.substring(0, v.length - 2);
                         reais = reais.replace(/^0+/, '');
@@ -306,7 +306,7 @@ def cadastrar_contas():
             if not esfera: erros.append("Esfera")
             if not num_conta: erros.append("Numero da Conta")
             if not tipo_recurso: erros.append("Tipo de Recurso")
-            if vt &lt;= 0: erros.append("Valor (preencha Custeio ou Investimento)")
+            if vt <= 0: erros.append("Valor (preencha Custeio ou Investimento)")
             if erros:
                 st.error(f"Preencha: {', '.join(erros)}")
             else:
@@ -455,12 +455,18 @@ def realizar_compras():
                             if valor_c > saldo: st.markdown(f'<p style="color:#ef4444;">Excede {format_currency(saldo)}</p>', unsafe_allow_html=True)
                         prod = st.text_area("Produto/Servico", height=120)
                         if st.form_submit_button("Solicitar"):
-                            erros = [x for x, v in [("Ficha", ficha), ("Tipo", td), ("Valor", valor_c>0), ("Produto", prod), ("Saldo", valor_c&lt;=saldo)] if not v]
-                            if erros: st.error(f"Preencha: {', '.join(erros)}")
+                            erros = []
+                            if not ficha: erros.append("Ficha")
+                            if not td: erros.append("Tipo")
+                            if valor_c <= 0: erros.append("Valor")
+                            if not prod: erros.append("Produto")
+                            if valor_c > saldo: erros.append("Valor excede saldo")
+                            if erros:
+                                st.error(f"Preencha: {', '.join(erros)}")
                             else:
                                 conn.execute("INSERT INTO ordens_compra (conta_receber_id, esfera, numero_conta, fonte, ficha, tipo_despesa, data_compra, valor_compra, produto_servico, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (cid, esf, num, fonte, ficha, td, data_c.strftime("%d/%m/%Y"), valor_c, prod, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
                                 conn.commit()
-                                st.success("Solicitacao registrada com sucesso! Os campos serao limpos para nova solicitacao.")
+                                st.success("Solicitacao registrada! Os campos serao limpos.")
                                 st.rerun()
     
     st.markdown('<hr>', unsafe_allow_html=True)
@@ -501,12 +507,12 @@ def realizar_compras():
                 
                 c1, c2 = st.columns(2)
                 with c1:
-                    if st.button("✏️ Editar", key=f"eo_{oid}"):
+                    if st.button(u"\u270f\ufe0f Editar", key=f"eo_{oid}"):
                         st.session_state["edit_ordem_id"] = oid
                         st.session_state["page"] = "EDITAR ORDEM COMPRA"
                         st.rerun()
                 with c2:
-                    if st.button("🗑️ Excluir", key=f"do_{oid}"):
+                    if st.button(u"\U0001f5d1\ufe0f Excluir", key=f"do_{oid}"):
                         conn.execute("DELETE FROM ordens_compra WHERE id=?", (oid,))
                         conn.commit()
                         st.success("Excluida!")
