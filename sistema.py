@@ -154,32 +154,60 @@ def esfera_detalhe():
 def cadastrar_contas():
     st.markdown('<h1 style="color:#e0f2fe;">CADASTRAR CONTAS</h1>', unsafe_allow_html=True)
     st.markdown('<hr>', unsafe_allow_html=True)
-    for k in ["esfera_cad", "val_custeio_cad", "val_invest_cad", "tipo_recurso_cad"]:
-        st.session_state.pop(k, None)
+    
     with st.expander("NOVO CADASTRO", expanded=True):
         st.markdown('<p style="color:#fbbf24;font-size:12px;">* Campos obrigatorios</p>', unsafe_allow_html=True)
+        
         esfera = st.selectbox("* Esfera", ["", "Federal", "Estadual", "Municipal"], key="esfera_cad")
+        
+        # MOSTRAR A FONTE AUTOMATICAMENTE QUANDO SELECIONAR A ESFERA
+        if esfera:
+            fonte_mostrada = get_fonte(esfera)
+            cor_fonte = {"Federal": "#3b82f6", "Estadual": "#22c55e", "Municipal": "#eab308"}
+            st.markdown(f'''
+            <div style="background:rgba(30,41,59,0.8);border-radius:10px;padding:12px;margin-bottom:12px;border-left:4px solid {cor_fonte.get(esfera, "#22d3ee")};display:flex;align-items:center;justify-content:space-between;">
+                <div>
+                    <span style="color:#94a3b8;font-size:13px;">Fonte vinculada:</span>
+                    <span style="color:#22d3ee;font-size:24px;font-weight:800;margin-left:10px;">{fonte_mostrada}</span>
+                </div>
+                <div>
+                    <span style="color:{"#3b82f6" if esfera=="Federal" else "#22c55e" if esfera=="Estadual" else "#eab308"};font-size:14px;font-weight:600;">{esfera.upper()}</span>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
+        else:
+            st.markdown('<p style="color:#64748b;font-size:13px;">Selecione uma Esfera para ver a Fonte vinculada</p>', unsafe_allow_html=True)
+        
         num_conta = st.text_input("* Numero da Conta")
-        if esfera: st.markdown(f'<p style="color:#22d3ee;font-weight:600;">Fonte: {get_fonte(esfera)}</p>', unsafe_allow_html=True)
         ref_contrato = st.selectbox("Referencia (opcional)", ["", "Resolucao", "Deliberacao", "Portaria"])
         num_ano_ref = st.text_input("Numero/Ano (opcional)")
         tipo_recurso = st.selectbox("* Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], key="tipo_recurso_cad")
         vc = st.number_input("* Custeio", min_value=0.0, step=0.01, format="%.2f", key="val_custeio_cad")
         vi = st.number_input("* Investimento", min_value=0.0, step=0.01, format="%.2f", key="val_invest_cad")
         vt = vc + vi
-        if vt > 0: st.markdown(f'<p style="color:#00d4ff;font-size:16px;font-weight:700;">Total: {format_currency(vt)}</p>', unsafe_allow_html=True)
+        if vt > 0:
+            st.markdown(f'<p style="color:#00d4ff;font-size:16px;font-weight:700;">Total: {format_currency(vt)}</p>', unsafe_allow_html=True)
         data_receb = st.text_input("* Data Recebimento", value=datetime.now().strftime("%d/%m/%Y"))
         prog = st.text_input("Programa/Politica (opcional)")
         setor = st.text_input("Setor (opcional)")
+        
         if st.button("Salvar Conta"):
-            erros = [x for x, v in [("Esfera", esfera), ("Conta", num_conta), ("Recurso", tipo_recurso), ("Valor", vt>0), ("Data", data_receb)] if not v]
-            if erros: st.error(f"Preencha: {', '.join(erros)}")
+            erros = []
+            if not esfera: erros.append("Esfera")
+            if not num_conta: erros.append("Numero da Conta")
+            if not tipo_recurso: erros.append("Tipo de Recurso")
+            if vt <= 0: erros.append("Valor (Custeio ou Investimento)")
+            if not data_receb: erros.append("Data de Recebimento")
+            if erros:
+                st.error(f"Preencha: {', '.join(erros)}")
             else:
                 conn = sqlite3.connect("marmed.db")
-                conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vt, data_receb, prog, setor))
+                conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vt, data_receb, prog, setor))
                 conn.commit()
                 conn.close()
-                st.success("Conta cadastrada!"); st.rerun()
+                st.success("Conta cadastrada com sucesso!")
+                st.rerun()
 
 def contas_cadastradas():
     st.markdown('<h1 style="color:#e0f2fe;">CONTAS CADASTRADAS</h1>', unsafe_allow_html=True)
@@ -191,10 +219,10 @@ def contas_cadastradas():
             r = conn.execute("SELECT id, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esf,)).fetchall()
             if r:
                 import pandas as pd
-                # r[i] has 12 columns: 0=id, 1=numero_conta, 2=fonte, 3=ref_tipo, 4=ref_num, 5=tipo_rec, 6=val_cust, 7=val_inv, 8=val_total, 9=data, 10=prog, 11=setor
                 d = [(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11]) for x in r]
                 pdf = pd.DataFrame(d, columns=["ID", "Conta", "Fonte", "Ref.", "N/Ano", "Tipo", "Custeio", "Invest.", "Total", "Data", "Programa", "Setor"])
-                for c in ["Custeio", "Invest.", "Total"]: pdf[c] = pdf[c].apply(lambda x: format_currency(x))
+                for c in ["Custeio", "Invest.", "Total"]:
+                    pdf[c] = pdf[c].apply(lambda x: format_currency(x))
                 st.dataframe(pdf, use_container_width=True, hide_index=True)
                 st.markdown(f'<p style="color:#64748b;font-size:12px;">Total: {len(r)} conta(s) {esf}</p>', unsafe_allow_html=True)
                 st.markdown(f'<h4 style="color:#7dd3fc;">Editar / Excluir - {esf}</h4>', unsafe_allow_html=True)
@@ -210,7 +238,8 @@ def contas_cadastradas():
                     with c2:
                         if st.button("Excluir", key=f"d_{tab_idx}_{rid}"):
                             conn.execute("DELETE FROM contas_receber WHERE id=?", (rid,)); conn.commit(); st.success("Excluida!"); st.rerun()
-            else: st.markdown(f'<p style="color:#94a3b8;">Nenhuma conta {esf}.</p>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<p style="color:#94a3b8;">Nenhuma conta {esf}.</p>', unsafe_allow_html=True)
     # Superavit
     st.markdown('<hr>', unsafe_allow_html=True)
     st.markdown('<h2 style="color:#fbbf24;text-align:center;font-size:22px;">RECURSOS DE EXERCICIOS ANTERIORES / SUPERAVIT FINANCEIRO</h2>', unsafe_allow_html=True)
@@ -221,7 +250,8 @@ def contas_cadastradas():
         spd["Saldo Total"] = spd["Saldo Total"].apply(lambda x: format_currency(x))
         spd["Saldo Restante"] = spd["Saldo Restante"].apply(lambda x: format_currency(x))
         st.dataframe(spd, use_container_width=True, hide_index=True)
-    else: st.markdown('<p style="color:#94a3b8;">Nenhum superavit registrado.</p>', unsafe_allow_html=True)
+    else:
+        st.markdown('<p style="color:#94a3b8;">Nenhum superavit registrado.</p>', unsafe_allow_html=True)
     if st.button("MIGRAR SALDOS PARA SUPERAVIT"):
         for esf in ["Federal", "Estadual"]:
             total = conn.execute("SELECT COALESCE(SUM(valor_total),0) FROM contas_receber WHERE esfera=?", (esf,)).fetchone()[0]
@@ -229,8 +259,10 @@ def contas_cadastradas():
                 fo = get_fonte(esf); fs = get_fonte_superavit(esf)
                 exist = conn.execute("SELECT id FROM superavit WHERE esfera=?", (esf,)).fetchone()
                 agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                if exist: conn.execute("UPDATE superavit SET saldo_total=saldo_total+?, saldo_restante=saldo_restante+?, created_at=? WHERE esfera=?", (total, total, agora, esf))
-                else: conn.execute("INSERT INTO superavit (esfera, fonte_original, fonte_superavit, saldo_total, saldo_restante, created_at) VALUES (?,?,?,?,?,?)", (esf, fo, fs, total, total, agora))
+                if exist:
+                    conn.execute("UPDATE superavit SET saldo_total=saldo_total+?, saldo_restante=saldo_restante+?, created_at=? WHERE esfera=?", (total, total, agora, esf))
+                else:
+                    conn.execute("INSERT INTO superavit (esfera, fonte_original, fonte_superavit, saldo_total, saldo_restante, created_at) VALUES (?,?,?,?,?,?)", (esf, fo, fs, total, total, agora))
         conn.commit(); st.success("Saldos migrados!"); st.rerun()
     conn.close()
 
@@ -243,8 +275,9 @@ def editar_conta():
     row = conn.execute("SELECT * FROM contas_receber WHERE id=?", (rid,)).fetchone()
     if not row: conn.close(); st.error("Nao encontrada."); return
     esfera = st.selectbox("* Esfera", ["", "Federal", "Estadual", "Municipal"], index=["", "Federal", "Estadual", "Municipal"].index(row[1]) if row[1] in ["", "Federal", "Estadual", "Municipal"] else 0, key="esf_edit")
+    if esfera:
+        st.markdown(f'<p style="color:#22d3ee;font-weight:600;font-size:18px;">Fonte: {get_fonte(esfera)}</p>', unsafe_allow_html=True)
     num_conta = st.text_input("* NConta", value=row[2] or "")
-    if esfera: st.markdown(f'<p style="color:#22d3ee;">Fonte: {get_fonte(esfera)}</p>', unsafe_allow_html=True)
     ref_contrato = st.selectbox("Ref", ["", "Resolucao", "Deliberacao", "Portaria"], index=["", "Resolucao", "Deliberacao", "Portaria"].index(row[4]) if row[4] in ["", "Resolucao", "Deliberacao", "Portaria"] else 0)
     num_ano_ref = st.text_input("N/Ano", value=row[5] or "")
     tipo_recurso = st.selectbox("* Tipo", ["", "Custeio", "Investimento", "Custeio/Investimento"], index=["", "Custeio", "Investimento", "Custeio/Investimento"].index(row[6]) if row[6] in ["", "Custeio", "Investimento", "Custeio/Investimento"] else 0, key="tipo_edit")
@@ -290,10 +323,10 @@ def realizar_compras():
                 gasto = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE conta_receber_id=?", (cid,)).fetchone()[0]
                 saldo = vtotal - gasto
                 with st.expander(f"{num} - Fonte {fonte}"):
-                    st.markdown(f'<div style="background:rgba(30,41,59,0.6);border-radius:10px;padding:12px;margin-bottom:10px;"><div style="display:flex;justify-content:space-between;"><div style="color:#94a3b8;">Valor: <span style="color:#00d4ff;">{format_currency(vtotal)}</span></div><div style="color:#94a3b8;">Saldo: <span style="color:{"#22c55e" if saldo>0 else "#ef4444"};">{format_currency(saldo)}</span></div></div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="background:rgba(30,41,59,0.6);border-radius:10px;padding:12px;"><div style="display:flex;justify-content:space-between;"><div style="color:#94a3b8;">Valor: <span style="color:#00d4ff;">{format_currency(vtotal)}</span></div><div style="color:#94a3b8;">Saldo: <span style="color:{"#22c55e" if saldo>0 else "#ef4444"};">{format_currency(saldo)}</span></div></div></div>', unsafe_allow_html=True)
                     if esf != "Municipal":
                         ss = conn.execute("SELECT COALESCE(SUM(saldo_restante),0) FROM superavit WHERE esfera=? AND saldo_restante>0", (esf,)).fetchone()[0]
-                        if ss > 0: st.warning(f"Superavit de {format_currency(ss)}. Utilize-o antes.")
+                        if ss > 0: st.warning(f"Superavit de {format_currency(ss)}. Utilize antes.")
                     with st.form(key=f"fc_{esf}_{cid}"):
                         cA, cB = st.columns(2)
                         with cA:
@@ -302,9 +335,9 @@ def realizar_compras():
                             data_c = st.text_input("Data", value=datetime.now().strftime("%d/%m/%Y"))
                         with cB:
                             valor_c = st.number_input("Valor", min_value=0.0, step=0.01, format="%.2f")
-                            if valor_c > saldo: st.markdown(f'<p style="color:#ef4444;font-size:12px;">Excede {format_currency(saldo)}</p>', unsafe_allow_html=True)
+                            if valor_c > saldo: st.markdown(f'<p style="color:#ef4444;">Excede {format_currency(saldo)}</p>', unsafe_allow_html=True)
                         prod = st.text_area("Produto/Servico", height=120)
-                        if st.form_submit_button(f"Solicitar"):
+                        if st.form_submit_button("Solicitar"):
                             erros = [x for x, v in [("Ficha", ficha), ("Tipo", td), ("Data", data_c), ("Valor", valor_c>0), ("Produto", prod), ("Saldo", valor_c<=saldo)] if not v]
                             if erros: st.error(f"Preencha: {', '.join(erros)}")
                             else:
@@ -353,7 +386,6 @@ def change_password():
                 conn.commit(); conn.close(); st.success("Senha alterada!")
             else: conn.close(); st.error("Senha atual incorreta")
 
-# PROGRAMAS DE SAUDE
 def bloco_saude(tit, sig, exp, url, cor="#1e40af"):
     with st.expander(f"{sig} - {tit}", expanded=False):
         st.markdown(f'<div style="background:linear-gradient(135deg,{cor},#0f172a);border-radius:12px;padding:20px;margin-bottom:15px;border-left:6px solid #22d3ee;">', unsafe_allow_html=True)
@@ -365,8 +397,7 @@ def bloco_saude(tit, sig, exp, url, cor="#1e40af"):
         conn = sqlite3.connect("marmed.db")
         up = st.file_uploader("Enviar arquivo", type=["pdf", "docx", "doc", "txt", "csv"], key=f"up_{sig}")
         if up:
-            db = up.read()
-            tx = extract_text_from_bytes(db, up.name)
+            db = up.read(); tx = extract_text_from_bytes(db, up.name)
             conn.execute("INSERT INTO arquivos_saude (bloco, nome_arquivo, conteudo_texto, dados_arquivo, data_upload) VALUES (?,?,?,?,?)", (sig, up.name, tx, db, datetime.now().strftime("%d/%m/%Y %H:%M")))
             conn.commit(); st.success("Arquivo anexado!"); st.rerun()
         arqs = conn.execute("SELECT nome_arquivo, data_upload, conteudo_texto FROM arquivos_saude WHERE bloco=? ORDER BY id DESC", (sig,)).fetchall()
@@ -394,34 +425,22 @@ def programas_saude():
     st.markdown('<hr>', unsafe_allow_html=True)
     t1, t2, t3, t4, t5 = st.tabs(["MEDICAMENTOS", "GESTAO", "FINANCIAMENTO", "REGULACAO", "CONSORCIOS"])
     with t1:
-        bloco_saude("Relacao Nacional de Medicamentos Essenciais", "RENAME",
-            'A <strong>RENAME</strong> e a lista oficial do Ministerio da Saude que define quais medicamentos e insumos sao oferecidos gratuitamente pelo SUS.', "https://www.gov.br/saude/rename", "#0e7490")
-        bloco_saude("Relacao Municipal de Medicamentos Essenciais", "REMUME",
-            'A <strong>REMUME</strong> e a lista oficial de medicamentos disponibilizados pelo SUS na rede municipal.', "", "#0891b2")
-        bloco_saude("Relacao Nacional de Equipamentos e Materiais", "RENEM",
-            'A <strong>RENEM</strong> padroniza equipamentos medico-hospitalares financiados pelo SUS.', "https://portalfns.saude.gov.br/", "#155e75")
-        bloco_saude("Relacao Nacional de Acoes e Servicos de Saude", "RENASES",
-            'A <strong>RENASES</strong> garante o direito a integralidade da assistencia no SUS.', "", "#164e63")
+        bloco_saude("Relacao Nacional de Medicamentos Essenciais", "RENAME", 'A <strong>RENAME</strong> e a lista oficial do Ministerio da Saude que define quais medicamentos e insumos sao oferecidos gratuitamente pelo SUS.', "https://www.gov.br/saude/rename", "#0e7490")
+        bloco_saude("Relacao Municipal de Medicamentos Essenciais", "REMUME", 'A <strong>REMUME</strong> e a lista oficial de medicamentos do SUS na rede municipal.', "", "#0891b2")
+        bloco_saude("Relacao Nacional de Equipamentos", "RENEM", 'A <strong>RENEM</strong> padroniza equipamentos financiados pelo SUS.', "https://portalfns.saude.gov.br/", "#155e75")
+        bloco_saude("Relacao Nacional de Acoes de Saude", "RENASES", 'A <strong>RENASES</strong> garante a integralidade da assistencia no SUS.', "", "#164e63")
     with t2:
-        bloco_saude("Plataforma de Gestao da Atencao Primaria", "E-GESTOR APS",
-            'O <strong>e-Gestor APS</strong> centraliza sistemas da Atencao Basica do SUS.', "https://egestorab.saude.gov.br/", "#0369a1")
-        bloco_saude("Plataforma de Regulacao de Leitos", "CORE SAUDE MG",
-            'O <strong>Core Saude MG</strong> gerencia a fila unica de leitos em MG.', "https://www.saude.mg.gov.br/", "#075985")
+        bloco_saude("e-Gestor Atencao Primaria", "E-GESTOR APS", 'O <strong>e-Gestor APS</strong> centraliza sistemas da Atencao Basica do SUS.', "https://egestorab.saude.gov.br/", "#0369a1")
+        bloco_saude("Core Saude MG", "CORE SAUDE MG", 'O <strong>Core Saude MG</strong> gerencia a fila unica de leitos em MG.', "https://www.saude.mg.gov.br/", "#075985")
     with t3:
-        bloco_saude("Fundo Nacional de Saude", "FNS",
-            'O <strong>FNS</strong> e o gestor financeiro dos recursos do Ministerio da Saude.', "https://portalfns.saude.gov.br/", "#1d4ed8")
-        bloco_saude("Tabela de Procedimentos SUS", "SIGTAP",
-            'O <strong>SIGTAP</strong> padroniza procedimentos, medicamentos e OPM do SUS.', "http://sigtap.datasus.gov.br/", "#1e3a8a")
-        bloco_saude("Programacao Pactuada e Integrada", "PPI",
-            'A <strong>PPI</strong> organiza o fluxo de pacientes entre municipios no SUS.', "", "#1e40af")
+        bloco_saude("Fundo Nacional de Saude", "FNS", 'O <strong>FNS</strong> e o gestor financeiro dos recursos do Ministerio da Saude.', "https://portalfns.saude.gov.br/", "#1d4ed8")
+        bloco_saude("SIGTAP", "SIGTAP", 'O <strong>SIGTAP</strong> padroniza procedimentos e OPM do SUS.', "http://sigtap.datasus.gov.br/", "#1e3a8a")
+        bloco_saude("PPI", "PPI", 'A <strong>PPI</strong> organiza o fluxo de pacientes entre municipios no SUS.', "", "#1e40af")
     with t4:
-        bloco_saude("Conselho Nacional de Secretarias Municipais", "CONASEMS",
-            'O <strong>CONASEMS</strong> representa as Secretarias Municipais de Saude do Brasil.', "https://conasems.org.br/", "#4338ca")
-        bloco_saude("Conselho de Secretarias de Saude de MG", "COSEMS MG",
-            'O <strong>COSEMS MG</strong> representa os 853 municipios mineiros.', "https://www.cosemsmg.org.br/", "#3730a3")
+        bloco_saude("CONASEMS", "CONASEMS", 'O <strong>CONASEMS</strong> representa as Secretarias Municipais de Saude.', "https://conasems.org.br/", "#4338ca")
+        bloco_saude("COSEMS MG", "COSEMS MG", 'O <strong>COSEMS MG</strong> representa os 853 municipios mineiros.', "https://www.cosemsmg.org.br/", "#3730a3")
     with t5:
-        bloco_saude("Consorcio Intermunicipal de Saude de Lavras", "CISLAV",
-            'O <strong>CISLAV</strong> une prefeituras da microrregiao de Lavras para otimizar recursos do SUS.', "https://www.cislav.com/", "#312e81")
+        bloco_saude("CISLAV", "CISLAV", 'O <strong>CISLAV</strong> une prefeituras da microrregiao de Lavras para otimizar recursos do SUS.', "https://www.cislav.com/", "#312e81")
 
 def main():
     if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
