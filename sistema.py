@@ -154,6 +154,10 @@ def esfera_detalhe():
 def cadastrar_contas():
     st.markdown('<h1 style="color:#e0f2fe;">CADASTRAR CONTAS</h1>', unsafe_allow_html=True)
     st.markdown('<hr>', unsafe_allow_html=True)
+    # Limpa session state para garantir formulario vazio
+    for k in ["esfera_cad", "val_custeio_cad", "val_invest_cad", "tipo_recurso_cad", "num_conta_cad"]:
+        if k in st.session_state: del st.session_state[k]
+    
     with st.expander("NOVO CADASTRO", expanded=True):
         st.markdown('<p style="color:#fbbf24;font-size:12px;">* Campos obrigatorios</p>', unsafe_allow_html=True)
         esfera = st.selectbox("* Esfera", ["", "Federal", "Estadual", "Municipal"], key="esfera_cad")
@@ -167,7 +171,7 @@ def cadastrar_contas():
             </div>''', unsafe_allow_html=True)
         else:
             st.markdown('<p style="color:#64748b;font-size:13px;">Selecione uma Esfera para ver a Fonte</p>', unsafe_allow_html=True)
-        num_conta = st.text_input("* Numero da Conta")
+        num_conta = st.text_input("* Numero da Conta", key="num_conta_cad")
         ref_contrato = st.selectbox("Referencia (opcional)", ["", "Resolucao", "Deliberacao", "Portaria"])
         num_ano_ref = st.text_input("Numero/Ano (opcional)")
         tipo_recurso = st.selectbox("* Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], key="tipo_recurso_cad")
@@ -185,7 +189,8 @@ def cadastrar_contas():
                 conn = sqlite3.connect("marmed.db")
                 conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vt, data_receb, prog, setor))
                 conn.commit(); conn.close()
-                st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
+                st.session_state["page"] = "CONTAS CADASTRADAS"
+                st.rerun()
 
 def contas_cadastradas():
     st.markdown('<h1 style="color:#e0f2fe;">CONTAS CADASTRADAS</h1>', unsafe_allow_html=True)
@@ -394,22 +399,22 @@ def programas_saude():
     st.markdown('<hr>', unsafe_allow_html=True)
     t1, t2, t3, t4, t5 = st.tabs(["MEDICAMENTOS", "GESTAO", "FINANCIAMENTO", "REGULACAO", "CONSORCIOS"])
     with t1:
-        bloco_saude("Relacao Nacional de Medicamentos Essenciais", "RENAME", 'A <strong>RENAME</strong> e a lista oficial do Ministerio da Saude que define quais medicamentos sao oferecidos pelo SUS.', "https://www.gov.br/saude/rename", "#0e7490")
-        bloco_saude("Relacao Municipal de Medicamentos", "REMUME", 'A <strong>REMUME</strong> e a lista oficial de medicamentos do SUS na rede municipal.', "", "#0891b2")
+        bloco_saude("Relacao Nacional de Medicamentos Essenciais", "RENAME", 'A <strong>RENAME</strong> e a lista oficial do Ministerio da Saude.', "https://www.gov.br/saude/rename", "#0e7490")
+        bloco_saude("Relacao Municipal de Medicamentos", "REMUME", 'A <strong>REMUME</strong> e a lista oficial de medicamentos do SUS.', "", "#0891b2")
         bloco_saude("Relacao Nacional de Equipamentos", "RENEM", 'A <strong>RENEM</strong> padroniza equipamentos financiados pelo SUS.', "https://portalfns.saude.gov.br/", "#155e75")
-        bloco_saude("Relacao Nacional de Acoes de Saude", "RENASES", 'A <strong>RENASES</strong> garante a integralidade da assistencia no SUS.', "", "#164e63")
+        bloco_saude("Relacao Nacional de Acoes de Saude", "RENASES", 'A <strong>RENASES</strong> garante a integralidade no SUS.', "", "#164e63")
     with t2:
-        bloco_saude("e-Gestor APS", "E-GESTOR", 'O <strong>e-Gestor APS</strong> centraliza sistemas da Atencao Basica do SUS.', "https://egestorab.saude.gov.br/", "#0369a1")
-        bloco_saude("Core Saude MG", "CORE", 'O <strong>Core Saude MG</strong> gerencia a fila unica de leitos em MG.', "https://www.saude.mg.gov.br/", "#075985")
+        bloco_saude("e-Gestor APS", "E-GESTOR", 'O <strong>e-Gestor APS</strong> centraliza sistemas da Atencao Basica.', "https://egestorab.saude.gov.br/", "#0369a1")
+        bloco_saude("Core Saude MG", "CORE", 'O <strong>Core Saude MG</strong> gerencia leitos em MG.', "https://www.saude.mg.gov.br/", "#075985")
     with t3:
-        bloco_saude("Fundo Nacional de Saude", "FNS", 'O <strong>FNS</strong> e o gestor financeiro dos recursos do Ministerio da Saude.', "https://portalfns.saude.gov.br/", "#1d4ed8")
-        bloco_saude("SIGTAP", "SIGTAP", 'O <strong>SIGTAP</strong> padroniza procedimentos e OPM do SUS.', "http://sigtap.datasus.gov.br/", "#1e3a8a")
-        bloco_saude("PPI", "PPI", 'A <strong>PPI</strong> organiza o fluxo de pacientes entre municipios.', "", "#1e40af")
+        bloco_saude("Fundo Nacional de Saude", "FNS", 'O <strong>FNS</strong> e o gestor financeiro do Ministerio da Saude.', "https://portalfns.saude.gov.br/", "#1d4ed8")
+        bloco_saude("SIGTAP", "SIGTAP", 'O <strong>SIGTAP</strong> padroniza procedimentos do SUS.', "http://sigtap.datasus.gov.br/", "#1e3a8a")
+        bloco_saude("PPI", "PPI", 'A <strong>PPI</strong> organiza fluxo de pacientes.', "", "#1e40af")
     with t4:
-        bloco_saude("CONASEMS", "CONASEMS", 'O <strong>CONASEMS</strong> representa as Secretarias Municipais de Saude.', "https://conasems.org.br/", "#4338ca")
-        bloco_saude("COSEMS MG", "COSEMS", 'O <strong>COSEMS MG</strong> representa os 853 municipios mineiros.', "https://www.cosemsmg.org.br/", "#3730a3")
+        bloco_saude("CONASEMS", "CONASEMS", 'O <strong>CONASEMS</strong> representa municipios.', "https://conasems.org.br/", "#4338ca")
+        bloco_saude("COSEMS MG", "COSEMS", 'O <strong>COSEMS MG</strong> representa 853 municipios mineiros.', "https://www.cosemsmg.org.br/", "#3730a3")
     with t5:
-        bloco_saude("CISLAV", "CISLAV", 'O <strong>CISLAV</strong> une prefeituras da microrregiao de Lavras.', "https://www.cislav.com/", "#312e81")
+        bloco_saude("CISLAV", "CISLAV", 'O <strong>CISLAV</strong> une prefeituras de Lavras.', "https://www.cislav.com/", "#312e81")
 
 def plano_municipal_saude():
     st.markdown('<h1 style="color:#e0f2fe;font-size:38px;">PLANO MUNICIPAL DE SAUDE</h1>', unsafe_allow_html=True)
@@ -419,47 +424,33 @@ def plano_municipal_saude():
         <h2 style="color:#fff;margin:0;font-size:24px;font-weight:800;">PMS</h2>
         <p style="color:#e0f2fe;font-size:16px;font-weight:700;">Plano Municipal de Saude</p>
         <div style="background:rgba(15,23,42,0.7);border-radius:10px;padding:18px;color:#e0f2fe;font-size:15px;line-height:1.7;">
-            O <strong>Plano Municipal de Saude (PMS)</strong> e o instrumento basico de planejamento das acoes e servicos de saude no ambito do municipio, elaborado a cada 4 anos. Ele define as diretrizes, objetivos, metas e indicadores que orientarao a gestao municipal do SUS.<br><br>
-            <strong>Eixos Estrategicos:</strong><br>
-            • Atencao Primaria a Saude (APS)<br>
-            • Vigilancia em Saude<br>
-            • Assistencia Farmaceutica<br>
-            • Atencao Especializada e Hospitalar<br>
-            • Gestao do Trabalho e Educacao em Saude<br>
-            • Participacao Social e Controle Social<br><br>
-            <strong>Prazos Legais:</strong><br>
-            • O PMS deve ser aprovado pelo Conselho Municipal de Saude<br>
-            • Deve estar alinhado ao Plano Estadual e Nacional de Saude<br>
-            • A prestacao de contas e anual, com o Relatorio de Gestao
+            O <strong>Plano Municipal de Saude (PMS)</strong> e o instrumento basico de planejamento das acoes e servicos de saude no ambito do municipio, elaborado a cada 4 anos, com diretrizes, objetivos, metas e indicadores para o SUS.
         </div>
-    </div>
-    ''', unsafe_allow_html=True)
-    st.markdown('<h3 style="color:#7dd3fc;">Documentos do Plano Municipal de Saude</h3>', unsafe_allow_html=True)
+    </div>''', unsafe_allow_html=True)
+    st.markdown('<h3 style="color:#7dd3fc;">Documentos do PMS</h3>', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
-    up = st.file_uploader("Enviar arquivo (PDF, Word, TXT, CSV)", type=["pdf", "docx", "doc", "txt", "csv"], key="up_pms")
+    up = st.file_uploader("Enviar arquivo", type=["pdf", "docx", "doc", "txt", "csv"], key="up_pms")
     if up:
         db = up.read(); tx = extract_text_from_bytes(db, up.name)
         conn.execute("INSERT INTO arquivos_saude (bloco, nome_arquivo, conteudo_texto, dados_arquivo, data_upload) VALUES (?,?,?,?,?)", ("PMS", up.name, tx, db, datetime.now().strftime("%d/%m/%Y %H:%M")))
         conn.commit(); st.success("Arquivo anexado!"); st.rerun()
     arqs = conn.execute("SELECT nome_arquivo, data_upload, conteudo_texto FROM arquivos_saude WHERE bloco='PMS' ORDER BY id DESC").fetchall()
     if arqs:
-        st.markdown(f'<p style="color:#94a3b8;">{len(arqs)} arquivo(s) do PMS</p>', unsafe_allow_html=True)
         for a in arqs: st.markdown(f'<div style="background:rgba(30,41,59,0.6);border-radius:6px;padding:8px;margin-bottom:5px;border-left:2px solid #22d3ee;"><span style="color:#e0f2fe;">{a[0]}</span> <span style="color:#64748b;">{a[1]}</span></div>', unsafe_allow_html=True)
-        termo = st.text_input("Buscar nos documentos do PMS", key="busca_pms")
+        termo = st.text_input("Buscar", key="busca_pms")
         if termo:
             achou = False
             for a in arqs:
                 txt = a[2] or ""
                 matches = list(re.finditer(re.escape(termo), txt, re.IGNORECASE))
                 if matches:
-                    achou = True; st.markdown(f'<p style="color:#22d3ee;font-weight:600;">{a[0]}</p>', unsafe_allow_html=True)
+                    achou = True; st.markdown(f'<p style="color:#22d3ee;">{a[0]}</p>', unsafe_allow_html=True)
                     for m in matches[:5]:
                         s = max(0, m.start()-80); e = min(len(txt), m.end()+80)
-                        trecho = txt[s:e]
-                        dest = re.sub(re.escape(termo), f'<span style="background:#fbbf24;color:#000;padding:2px 4px;border-radius:3px;font-weight:700;">{termo}</span>', trecho, flags=re.IGNORECASE)
+                        dest = re.sub(re.escape(termo), f'<span style="background:#fbbf24;color:#000;padding:2px 4px;border-radius:3px;font-weight:700;">{termo}</span>', txt[s:e], flags=re.IGNORECASE)
                         st.markdown(f'<div style="background:rgba(15,23,42,0.5);border-radius:6px;padding:10px;margin-bottom:6px;color:#cbd5e1;font-size:13px;font-family:monospace;">...{dest}...</div>', unsafe_allow_html=True)
             if not achou: st.markdown(f'<p style="color:#94a3b8;">Nada encontrado.</p>', unsafe_allow_html=True)
-    else: st.markdown('<p style="color:#64748b;">Nenhum documento do PMS anexado.</p>', unsafe_allow_html=True)
+    else: st.markdown('<p style="color:#64748b;">Nenhum documento anexado.</p>', unsafe_allow_html=True)
     conn.close()
 
 def norte_minha_gestao():
@@ -468,42 +459,31 @@ def norte_minha_gestao():
     st.markdown('''
     <div style="background:linear-gradient(135deg,#7c3aed,#0f172a);border-radius:12px;padding:20px;margin-bottom:15px;border-left:6px solid #a78bfa;">
         <h2 style="color:#fff;margin:0;font-size:24px;font-weight:800;">DIRETRIZES ESTRATEGICAS</h2>
-        <p style="color:#e0f2fe;font-size:16px;font-weight:700;">Norte da Minha Gestao - Secretaria Municipal de Saude de Luminarias</p>
+        <p style="color:#e0f2fe;font-size:16px;font-weight:700;">Norte da Minha Gestao</p>
         <div style="background:rgba(15,23,42,0.7);border-radius:10px;padding:18px;color:#e0f2fe;font-size:15px;line-height:1.7;">
-            Esta secao reune as <strong>diretrizes, principios e prioridades</strong> que norteiam a gestao municipal de saude. Utilize este espaco como bussola para a tomada de decisoes estrategicas.
+            Secao com as diretrizes, principios e prioridades da gestao municipal de saude.
         </div>
-    </div>
-    ''', unsafe_allow_html=True)
+    </div>''', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#a78bfa;">DIRETRIZES PRIORITARIAS</h3>', unsafe_allow_html=True)
-    diretrizes = [
-        ("Fortalece da Atencao Primaria", "Ampliar cobertura da Estrategia Saude da Familia, garantir acesso com acolhimento e fortalecer o vinculo entre equipe e comunidade.", "#7c3aed"),
-        ("Eficiencia na Gestao Financeira", "Otimizar recursos publicos, garantir transparencia nos repasses e assegurar o cumprimento dos limites constitucionais em saude.", "#2563eb"),
-        ("Valorizacao dos Profissionais", "Investir em capacitacao continua, melhorar condicoes de trabalho e implementar politicas de humanizacao.", "#059669"),
-        ("Integracao Regional", "Fortalecer a parceria com o CISLAV e demais consorcios, ampliando o acesso a consultas especializadas e exames.", "#d97706"),
-        ("Controle Social e Transparencia", "Garantir a participacao da comunidade no Conselho Municipal de Saude e divulgar relatorios de gestao com clareza.", "#dc2626"),
-    ]
-    for titulo, descricao, cor in diretrizes:
-        st.markdown(f'''
-        <div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;margin-bottom:10px;border-left:4px solid {cor};">
-            <p style="color:{cor};font-size:16px;font-weight:700;margin:0;">{titulo}</p>
-            <p style="color:#cbd5e1;font-size:14px;margin:5px 0 0 0;">{descricao}</p>
-        </div>
-        ''', unsafe_allow_html=True)
+    for titulo, descricao, cor in [
+        ("Fortalece da Atencao Primaria", "Ampliar cobertura ESF e fortalecer vinculo equipe-comunidade.", "#7c3aed"),
+        ("Eficiencia na Gestao Financeira", "Otimizar recursos e garantir transparencia.", "#2563eb"),
+        ("Valorizacao dos Profissionais", "Capacitacao e humanizacao.", "#059669"),
+        ("Integracao Regional", "Fortalecer parceria com CISLAV.", "#d97706"),
+        ("Controle Social", "Participacao no Conselho Municipal.", "#dc2626"),
+    ]:
+        st.markdown(f'<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;margin-bottom:10px;border-left:4px solid {cor};"><p style="color:{cor};font-size:16px;font-weight:700;margin:0;">{titulo}</p><p style="color:#cbd5e1;font-size:14px;margin:5px 0 0;">{descricao}</p></div>', unsafe_allow_html=True)
     st.markdown('<hr>', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#a78bfa;">INDICADORES ESTRATEGICOS</h3>', unsafe_allow_html=True)
     col_a, col_b, col_c, col_d = st.columns(4)
-    with col_a:
-        st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #22c55e;"><div style="color:#94a3b8;font-size:11px;">Cobertura ESF</div><div style="color:#22c55e;font-size:24px;font-weight:800;">95%</div></div>', unsafe_allow_html=True)
-    with col_b:
-        st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #3b82f6;"><div style="color:#94a3b8;font-size:11px;">Execucao Financeira</div><div style="color:#3b82f6;font-size:24px;font-weight:800;">78%</div></div>', unsafe_allow_html=True)
-    with col_c:
-        st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #eab308;"><div style="color:#94a3b8;font-size:11px;">Metas PMS</div><div style="color:#eab308;font-size:24px;font-weight:800;">62%</div></div>', unsafe_allow_html=True)
-    with col_d:
-        st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #a78bfa;"><div style="color:#94a3b8;font-size:11px;">Satisfacao</div><div style="color:#a78bfa;font-size:24px;font-weight:800;">71%</div></div>', unsafe_allow_html=True)
+    with col_a: st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #22c55e;"><div style="color:#94a3b8;font-size:11px;">Cobertura ESF</div><div style="color:#22c55e;font-size:24px;font-weight:800;">95%</div></div>', unsafe_allow_html=True)
+    with col_b: st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #3b82f6;"><div style="color:#94a3b8;font-size:11px;">Execucao Financ.</div><div style="color:#3b82f6;font-size:24px;font-weight:800;">78%</div></div>', unsafe_allow_html=True)
+    with col_c: st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #eab308;"><div style="color:#94a3b8;font-size:11px;">Metas PMS</div><div style="color:#eab308;font-size:24px;font-weight:800;">62%</div></div>', unsafe_allow_html=True)
+    with col_d: st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #a78bfa;"><div style="color:#94a3b8;font-size:11px;">Satisfacao</div><div style="color:#a78bfa;font-size:24px;font-weight:800;">71%</div></div>', unsafe_allow_html=True)
     st.markdown('<hr>', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#a78bfa;">Documentos de Referencia</h3>', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
-    up = st.file_uploader("Enviar arquivo de referencia", type=["pdf", "docx", "doc", "txt", "csv"], key="up_norte")
+    up = st.file_uploader("Enviar arquivo", type=["pdf", "docx", "doc", "txt", "csv"], key="up_norte")
     if up:
         db = up.read(); tx = extract_text_from_bytes(db, up.name)
         conn.execute("INSERT INTO arquivos_saude (bloco, nome_arquivo, conteudo_texto, dados_arquivo, data_upload) VALUES (?,?,?,?,?)", ("NORTE_GESTAO", up.name, tx, db, datetime.now().strftime("%d/%m/%Y %H:%M")))
@@ -511,7 +491,7 @@ def norte_minha_gestao():
     arqs = conn.execute("SELECT nome_arquivo, data_upload, conteudo_texto FROM arquivos_saude WHERE bloco='NORTE_GESTAO' ORDER BY id DESC").fetchall()
     if arqs:
         for a in arqs: st.markdown(f'<div style="background:rgba(30,41,59,0.6);border-radius:6px;padding:8px;margin-bottom:5px;border-left:2px solid #a78bfa;"><span style="color:#e0f2fe;">{a[0]}</span> <span style="color:#64748b;">{a[1]}</span></div>', unsafe_allow_html=True)
-        termo = st.text_input("Buscar nos documentos", key="busca_norte")
+        termo = st.text_input("Buscar", key="busca_norte")
         if termo:
             achou = False
             for a in arqs:
@@ -521,8 +501,7 @@ def norte_minha_gestao():
                     achou = True; st.markdown(f'<p style="color:#a78bfa;font-weight:600;">{a[0]}</p>', unsafe_allow_html=True)
                     for m in matches[:5]:
                         s = max(0, m.start()-80); e = min(len(txt), m.end()+80)
-                        trecho = txt[s:e]
-                        dest = re.sub(re.escape(termo), f'<span style="background:#fbbf24;color:#000;padding:2px 4px;border-radius:3px;font-weight:700;">{termo}</span>', trecho, flags=re.IGNORECASE)
+                        dest = re.sub(re.escape(termo), f'<span style="background:#fbbf24;color:#000;padding:2px 4px;border-radius:3px;font-weight:700;">{termo}</span>', txt[s:e], flags=re.IGNORECASE)
                         st.markdown(f'<div style="background:rgba(15,23,42,0.5);border-radius:6px;padding:10px;margin-bottom:6px;color:#cbd5e1;font-size:13px;font-family:monospace;">...{dest}...</div>', unsafe_allow_html=True)
             if not achou: st.markdown(f'<p style="color:#94a3b8;">Nada encontrado.</p>', unsafe_allow_html=True)
     else: st.markdown('<p style="color:#64748b;">Nenhum documento anexado.</p>', unsafe_allow_html=True)
@@ -535,13 +514,13 @@ def main():
     else:
         st.sidebar.markdown('<h3 style="color:#22d3ee;text-align:center;">MENU PRINCIPAL</h3>', unsafe_allow_html=True)
         st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        st.sidebar.markdown('<p style="color:#7dd3fc;font-size:11px;letter-spacing:1px;">GESTAO FINANCEIRA</p>', unsafe_allow_html=True)
+        st.sidebar.markdown('<p style="color:#7dd3fc;font-size:11px;">GESTAO FINANCEIRA</p>', unsafe_allow_html=True)
         if st.sidebar.button("INICIO", use_container_width=True): st.session_state["page"] = "Dashboard"; st.rerun()
         if st.sidebar.button("CADASTRAR CONTAS", use_container_width=True): st.session_state["page"] = "CADASTRAR CONTAS"; st.rerun()
         if st.sidebar.button("CONTAS CADASTRADAS", use_container_width=True): st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
         if st.sidebar.button("REALIZAR COMPRAS", use_container_width=True): st.session_state["page"] = "REALIZAR COMPRAS"; st.rerun()
         st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        st.sidebar.markdown('<p style="color:#7dd3fc;font-size:11px;letter-spacing:1px;">SAUDE PUBLICA</p>', unsafe_allow_html=True)
+        st.sidebar.markdown('<p style="color:#7dd3fc;font-size:11px;">SAUDE PUBLICA</p>', unsafe_allow_html=True)
         if st.sidebar.button("PROGRAMAS DE SAUDE", use_container_width=True): st.session_state["page"] = "PROGRAMAS SAUDE"; st.rerun()
         if st.sidebar.button("PLANO MUNICIPAL DE SAUDE", use_container_width=True): st.session_state["page"] = "PLANO MUNICIPAL"; st.rerun()
         if st.sidebar.button("NORTE DA MINHA GESTAO", use_container_width=True): st.session_state["page"] = "NORTE GESTAO"; st.rerun()
