@@ -358,10 +358,13 @@ def contas_cadastradas():
                 for c in ["Custeio", "Invest.", "Total"]: pdf[c] = pdf[c].apply(lambda x: format_currency(x))
                 st.dataframe(pdf, use_container_width=True, hide_index=True)
                 st.markdown(f'<p style="color:#64748b;">Total: {len(r)} conta(s) {esf}</p>', unsafe_allow_html=True)
+                
+                # AREA EDITAR/EXCLUIR NA PARTE INFERIOR
+                st.markdown('<hr>', unsafe_allow_html=True)
                 st.markdown(f'<h4 style="color:#7dd3fc;">Editar / Excluir - {esf}</h4>', unsafe_allow_html=True)
                 opts = {f"{x[1]} - Fonte {x[2]} (ID {x[0]})": x[0] for x in r}
                 opts["Selecione..."] = None
-                esc = st.selectbox(f"Selecione a conta", list(opts.keys()), key=f"sel_{tab_idx}")
+                esc = st.selectbox(f"Selecione a conta para editar ou excluir", list(opts.keys()), key=f"sel_{tab_idx}")
                 if esc and opts[esc]:
                     rid = opts[esc]
                     c1, c2 = st.columns(2)
