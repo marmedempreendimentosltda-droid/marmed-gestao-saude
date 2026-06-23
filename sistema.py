@@ -411,12 +411,10 @@ def programas_saude():
     with t5:
         bloco_saude("CISLAV", "CISLAV", 'O <strong>CISLAV</strong> une prefeituras da microrregiao de Lavras.', "https://www.cislav.com/", "#312e81")
 
-# NOVAS PÁGINAS
 def plano_municipal_saude():
-    st.markdown('<h1 style="color:#e0f2fe;font-size:38px;">📋 PLANO MUNICIPAL DE SAUDE</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 style="color:#e0f2fe;font-size:38px;">PLANO MUNICIPAL DE SAUDE</h1>', unsafe_allow_html=True)
     st.markdown('<hr>', unsafe_allow_html=True)
-    
-    st.markdown(f'''
+    st.markdown('''
     <div style="background:linear-gradient(135deg,#0e7490,#0f172a);border-radius:12px;padding:20px;margin-bottom:15px;border-left:6px solid #22d3ee;">
         <h2 style="color:#fff;margin:0;font-size:24px;font-weight:800;">PMS</h2>
         <p style="color:#e0f2fe;font-size:16px;font-weight:700;">Plano Municipal de Saude</p>
@@ -436,20 +434,17 @@ def plano_municipal_saude():
         </div>
     </div>
     ''', unsafe_allow_html=True)
-    
-    st.markdown('<h3 style="color:#7dd3fc;">📂 Documentos do Plano Municipal de Saude</h3>', unsafe_allow_html=True)
-    
+    st.markdown('<h3 style="color:#7dd3fc;">Documentos do Plano Municipal de Saude</h3>', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
     up = st.file_uploader("Enviar arquivo (PDF, Word, TXT, CSV)", type=["pdf", "docx", "doc", "txt", "csv"], key="up_pms")
     if up:
         db = up.read(); tx = extract_text_from_bytes(db, up.name)
         conn.execute("INSERT INTO arquivos_saude (bloco, nome_arquivo, conteudo_texto, dados_arquivo, data_upload) VALUES (?,?,?,?,?)", ("PMS", up.name, tx, db, datetime.now().strftime("%d/%m/%Y %H:%M")))
         conn.commit(); st.success("Arquivo anexado!"); st.rerun()
-    
     arqs = conn.execute("SELECT nome_arquivo, data_upload, conteudo_texto FROM arquivos_saude WHERE bloco='PMS' ORDER BY id DESC").fetchall()
     if arqs:
         st.markdown(f'<p style="color:#94a3b8;">{len(arqs)} arquivo(s) do PMS</p>', unsafe_allow_html=True)
-        for a in arqs: st.markdown(f'<div style="background:rgba(30,41,59,0.6);border-radius:6px;padding:8px;margin-bottom:5px;border-left:2px solid #22d3ee;"><span style="color:#e0f2fe;">📄 {a[0]}</span> <span style="color:#64748b;">{a[1]}</span></div>', unsafe_allow_html=True)
+        for a in arqs: st.markdown(f'<div style="background:rgba(30,41,59,0.6);border-radius:6px;padding:8px;margin-bottom:5px;border-left:2px solid #22d3ee;"><span style="color:#e0f2fe;">{a[0]}</span> <span style="color:#64748b;">{a[1]}</span></div>', unsafe_allow_html=True)
         termo = st.text_input("Buscar nos documentos do PMS", key="busca_pms")
         if termo:
             achou = False
@@ -468,10 +463,9 @@ def plano_municipal_saude():
     conn.close()
 
 def norte_minha_gestao():
-    st.markdown('<h1 style="color:#e0f2fe;font-size:38px;">🧭 NORTE DA MINHA GESTAO</h1>', unsafe_allow_html=True>
+    st.markdown('<h1 style="color:#e0f2fe;font-size:38px;">NORTE DA MINHA GESTAO</h1>', unsafe_allow_html=True)
     st.markdown('<hr>', unsafe_allow_html=True)
-    
-    st.markdown(f'''
+    st.markdown('''
     <div style="background:linear-gradient(135deg,#7c3aed,#0f172a);border-radius:12px;padding:20px;margin-bottom:15px;border-left:6px solid #a78bfa;">
         <h2 style="color:#fff;margin:0;font-size:24px;font-weight:800;">DIRETRIZES ESTRATEGICAS</h2>
         <p style="color:#e0f2fe;font-size:16px;font-weight:700;">Norte da Minha Gestao - Secretaria Municipal de Saude de Luminarias</p>
@@ -480,9 +474,7 @@ def norte_minha_gestao():
         </div>
     </div>
     ''', unsafe_allow_html=True)
-    
-    st.markdown('<h3 style="color:#a78bfa;">🎯 DIRETRIZES PRIORITARIAS</h3>', unsafe_allow_html=True>
-    
+    st.markdown('<h3 style="color:#a78bfa;">DIRETRIZES PRIORITARIAS</h3>', unsafe_allow_html=True)
     diretrizes = [
         ("Fortalece da Atencao Primaria", "Ampliar cobertura da Estrategia Saude da Familia, garantir acesso com acolhimento e fortalecer o vinculo entre equipe e comunidade.", "#7c3aed"),
         ("Eficiencia na Gestao Financeira", "Otimizar recursos publicos, garantir transparencia nos repasses e assegurar o cumprimento dos limites constitucionais em saude.", "#2563eb"),
@@ -490,7 +482,6 @@ def norte_minha_gestao():
         ("Integracao Regional", "Fortalecer a parceria com o CISLAV e demais consorcios, ampliando o acesso a consultas especializadas e exames.", "#d97706"),
         ("Controle Social e Transparencia", "Garantir a participacao da comunidade no Conselho Municipal de Saude e divulgar relatorios de gestao com clareza.", "#dc2626"),
     ]
-    
     for titulo, descricao, cor in diretrizes:
         st.markdown(f'''
         <div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;margin-bottom:10px;border-left:4px solid {cor};">
@@ -498,49 +489,28 @@ def norte_minha_gestao():
             <p style="color:#cbd5e1;font-size:14px;margin:5px 0 0 0;">{descricao}</p>
         </div>
         ''', unsafe_allow_html=True)
-    
     st.markdown('<hr>', unsafe_allow_html=True)
-    st.markdown('<h3 style="color:#a78bfa;">📊 INDICADORES ESTRATEGICOS</h3>', unsafe_allow_html=True)
-    
+    st.markdown('<h3 style="color:#a78bfa;">INDICADORES ESTRATEGICOS</h3>', unsafe_allow_html=True)
     col_a, col_b, col_c, col_d = st.columns(4)
     with col_a:
-        st.markdown(f'''
-        <div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #22c55e;">
-            <div style="color:#94a3b8;font-size:11px;">Cobertura ESF</div>
-            <div style="color:#22c55e;font-size:24px;font-weight:800;">95%</div>
-        </div>''', unsafe_allow_html=True)
+        st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #22c55e;"><div style="color:#94a3b8;font-size:11px;">Cobertura ESF</div><div style="color:#22c55e;font-size:24px;font-weight:800;">95%</div></div>', unsafe_allow_html=True)
     with col_b:
-        st.markdown(f'''
-        <div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #3b82f6;">
-            <div style="color:#94a3b8;font-size:11px;">Execucao Financeira</div>
-            <div style="color:#3b82f6;font-size:24px;font-weight:800;">78%</div>
-        </div>''', unsafe_allow_html=True)
+        st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #3b82f6;"><div style="color:#94a3b8;font-size:11px;">Execucao Financeira</div><div style="color:#3b82f6;font-size:24px;font-weight:800;">78%</div></div>', unsafe_allow_html=True)
     with col_c:
-        st.markdown(f'''
-        <div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #eab308;">
-            <div style="color:#94a3b8;font-size:11px;">Metas PMS</div>
-            <div style="color:#eab308;font-size:24px;font-weight:800;">62%</div>
-        </div>''', unsafe_allow_html=True)
+        st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #eab308;"><div style="color:#94a3b8;font-size:11px;">Metas PMS</div><div style="color:#eab308;font-size:24px;font-weight:800;">62%</div></div>', unsafe_allow_html=True)
     with col_d:
-        st.markdown(f'''
-        <div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #a78bfa;">
-            <div style="color:#94a3b8;font-size:11px;">Satisfacao</div>
-            <div style="color:#a78bfa;font-size:24px;font-weight:800;">71%</div>
-        </div>''', unsafe_allow_html=True)
-    
+        st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #a78bfa;"><div style="color:#94a3b8;font-size:11px;">Satisfacao</div><div style="color:#a78bfa;font-size:24px;font-weight:800;">71%</div></div>', unsafe_allow_html=True)
     st.markdown('<hr>', unsafe_allow_html=True)
-    st.markdown('<h3 style="color:#a78bfa;">📁 Documentos de Referencia</h3>', unsafe_allow_html=True)
-    
+    st.markdown('<h3 style="color:#a78bfa;">Documentos de Referencia</h3>', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
     up = st.file_uploader("Enviar arquivo de referencia", type=["pdf", "docx", "doc", "txt", "csv"], key="up_norte")
     if up:
         db = up.read(); tx = extract_text_from_bytes(db, up.name)
         conn.execute("INSERT INTO arquivos_saude (bloco, nome_arquivo, conteudo_texto, dados_arquivo, data_upload) VALUES (?,?,?,?,?)", ("NORTE_GESTAO", up.name, tx, db, datetime.now().strftime("%d/%m/%Y %H:%M")))
         conn.commit(); st.success("Documento anexado!"); st.rerun()
-    
     arqs = conn.execute("SELECT nome_arquivo, data_upload, conteudo_texto FROM arquivos_saude WHERE bloco='NORTE_GESTAO' ORDER BY id DESC").fetchall()
     if arqs:
-        for a in arqs: st.markdown(f'<div style="background:rgba(30,41,59,0.6);border-radius:6px;padding:8px;margin-bottom:5px;border-left:2px solid #a78bfa;"><span style="color:#e0f2fe;">📄 {a[0]}</span> <span style="color:#64748b;">{a[1]}</span></div>', unsafe_allow_html=True)
+        for a in arqs: st.markdown(f'<div style="background:rgba(30,41,59,0.6);border-radius:6px;padding:8px;margin-bottom:5px;border-left:2px solid #a78bfa;"><span style="color:#e0f2fe;">{a[0]}</span> <span style="color:#64748b;">{a[1]}</span></div>', unsafe_allow_html=True)
         termo = st.text_input("Buscar nos documentos", key="busca_norte")
         if termo:
             achou = False
@@ -565,26 +535,19 @@ def main():
     else:
         st.sidebar.markdown('<h3 style="color:#22d3ee;text-align:center;">MENU PRINCIPAL</h3>', unsafe_allow_html=True)
         st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        
-        # GESTAO FINANCEIRA
         st.sidebar.markdown('<p style="color:#7dd3fc;font-size:11px;letter-spacing:1px;">GESTAO FINANCEIRA</p>', unsafe_allow_html=True)
-        if st.sidebar.button("📊 INICIO", use_container_width=True): st.session_state["page"] = "Dashboard"; st.rerun()
-        if st.sidebar.button("📝 CADASTRAR CONTAS", use_container_width=True): st.session_state["page"] = "CADASTRAR CONTAS"; st.rerun()
-        if st.sidebar.button("📋 CONTAS CADASTRADAS", use_container_width=True): st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
-        if st.sidebar.button("🛒 REALIZAR COMPRAS", use_container_width=True): st.session_state["page"] = "REALIZAR COMPRAS"; st.rerun()
-        
+        if st.sidebar.button("INICIO", use_container_width=True): st.session_state["page"] = "Dashboard"; st.rerun()
+        if st.sidebar.button("CADASTRAR CONTAS", use_container_width=True): st.session_state["page"] = "CADASTRAR CONTAS"; st.rerun()
+        if st.sidebar.button("CONTAS CADASTRADAS", use_container_width=True): st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
+        if st.sidebar.button("REALIZAR COMPRAS", use_container_width=True): st.session_state["page"] = "REALIZAR COMPRAS"; st.rerun()
         st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        
-        # SAUDE PUBLICA
         st.sidebar.markdown('<p style="color:#7dd3fc;font-size:11px;letter-spacing:1px;">SAUDE PUBLICA</p>', unsafe_allow_html=True)
-        if st.sidebar.button("🏥 PROGRAMAS DE SAUDE", use_container_width=True): st.session_state["page"] = "PROGRAMAS SAUDE"; st.rerun()
-        if st.sidebar.button("📋 PLANO MUNICIPAL DE SAUDE", use_container_width=True): st.session_state["page"] = "PLANO MUNICIPAL"; st.rerun()
-        if st.sidebar.button("🧭 NORTE DA MINHA GESTAO", use_container_width=True): st.session_state["page"] = "NORTE GESTAO"; st.rerun()
-        
+        if st.sidebar.button("PROGRAMAS DE SAUDE", use_container_width=True): st.session_state["page"] = "PROGRAMAS SAUDE"; st.rerun()
+        if st.sidebar.button("PLANO MUNICIPAL DE SAUDE", use_container_width=True): st.session_state["page"] = "PLANO MUNICIPAL"; st.rerun()
+        if st.sidebar.button("NORTE DA MINHA GESTAO", use_container_width=True): st.session_state["page"] = "NORTE GESTAO"; st.rerun()
         st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        if st.sidebar.button("🚪 Sair", use_container_width=True):
+        if st.sidebar.button("Sair", use_container_width=True):
             st.session_state["logged_in"] = False; st.session_state.pop("username", None); st.rerun()
-        
         p = st.session_state["page"]
         if p == "Dashboard": dashboard()
         elif p == "CADASTRAR CONTAS": cadastrar_contas()
