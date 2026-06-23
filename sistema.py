@@ -46,12 +46,12 @@ def parse_br_currency(val):
         return 0.0
 
 def inject_masks():
-    """Injeta JavaScript para mascaras de data e moeda - SEM ALTERAR NADA DO SISTEMA"""
+    """Injeta JavaScript para mascaras de data e moeda"""
     st.markdown("""
     <script>
     (function() {
         function applyMasks() {
-            // Mascara de DATA (dd/mm/aaaa) - para campos com labels que contem "data" ou "recebimento"
+            // Mascara de DATA (dd/mm/aaaa)
             document.querySelectorAll('[data-testid="stTextInput"]').forEach(function(el) {
                 var label = el.querySelector('label');
                 var input = el.querySelector('input');
@@ -67,12 +67,11 @@ def inject_masks():
                     });
                 }
             });
-            
-            // Mascara de VALOR MONETARIO (1.234,56) - para campos de custeio, investimento, valor
+            // Mascara de VALOR MONETARIO (1.234,56)
             document.querySelectorAll('[data-testid="stTextInput"]').forEach(function(el) {
                 var label = el.querySelector('label');
                 var input = el.querySelector('input');
-                if (label && input && !input.dataset.maskMoney && /custeio|investimento|valor|compra/i.test(label.textContent)) {
+                if (label && input && !input.dataset.maskMoney && /custeio|investimento|valor|compra|ficha/i.test(label.textContent)) {
                     input.dataset.maskMoney = '1';
                     input.inputMode = 'numeric';
                     input.setAttribute('autocomplete', 'off');
@@ -227,52 +226,101 @@ def cadastrar_contas():
     st.markdown('<hr>', unsafe_allow_html=True)
     inject_masks()
     
+    # Limpa estados anteriores
     for k in ["esfera_cad", "num_conta_cad", "tipo_recurso_cad", "val_custeio_cad", "val_invest_cad", "data_receb_cad"]:
         st.session_state.pop(k, None)
     
     with st.expander("NOVO CADASTRO", expanded=True):
         st.markdown('<p style="color:#fbbf24;font-size:12px;">* Campos obrigatorios</p>', unsafe_allow_html=True)
-        esfera = st.selectbox("* Esfera", ["", "Federal", "Estadual", "Municipal"], key="esfera_cad")
+        
+        # PASSO 1: ESCOLHER ESFERA - E JÁ MOSTRA A FONTE ABAIXO
+        esfera = st.selectbox("* 1. Selecione a Esfera", ["", "Federal", "Estadual", "Municipal"], key="esfera_cad")
+        
+        # MOSTRA A FONTE AUTOMATICAMENTE AO SELECIONAR A ESFERA
         if esfera:
             fonte_mostrada = get_fonte(esfera)
             cor_fonte = {"Federal": "#3b82f6", "Estadual": "#22c55e", "Municipal": "#eab308"}
             st.markdown(f'''
-            <div style="background:rgba(30,41,59,0.8);border-radius:10px;padding:12px;margin-bottom:12px;border-left:4px solid {cor_fonte.get(esfera, "#22d3ee")};display:flex;align-items:center;justify-content:space-between;">
-                <div><span style="color:#94a3b8;font-size:13px;">Fonte vinculada:</span><span style="color:#22d3ee;font-size:24px;font-weight:800;margin-left:10px;">{fonte_mostrada}</span></div>
-                <div><span style="color:{"#3b82f6" if esfera=="Federal" else "#22c55e" if esfera=="Estadual" else "#eab308"};font-size:14px;font-weight:600;">{esfera.upper()}</span></div>
+            <div style="background:rgba(30,41,59,0.8);border-radius:10px;padding:15px;margin-bottom:15px;border-left:4px solid {cor_fonte.get(esfera, "#22d3ee")};">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <span style="color:#94a3b8;font-size:13px;">Fonte vinculada automaticamente:</span>
+                        <span style="color:#22d3ee;font-size:28px;font-weight:800;margin-left:10px;">{fonte_mostrada}</span>
+                    </div>
+                    <div>
+                        <span style="background:{"#3b82f6" if esfera=="Federal" else "#22c55e" if esfera=="Estadual" else "#eab308"};color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:700;">{esfera.upper()}</span>
+                    </div>
+                </div>
+                <div style="color:#64748b;font-size:11px;margin-top:6px;border-top:1px solid rgba(34,211,238,0.2);padding-top:6px;">
+                    A fonte e selecionada automaticamente conforme a Esfera escolhida
+                </div>
             </div>''', unsafe_allow_html=True)
         else:
-            st.markdown('<p style="color:#64748b;font-size:13px;">Selecione uma Esfera para ver a Fonte</p>', unsafe_allow_html=True)
+            st.markdown('<p style="color:#64748b;font-size:13px;">Selecione uma Esfera para ver a Fonte vinculada automaticamente</p>', unsafe_allow_html=True)
         
-        num_conta = st.text_input("* Numero da Conta", key="num_conta_cad")
+        # PASSO 2: DADOS DA CONTA
+        num_conta = st.text_input("* 2. Numero da Conta", key="num_conta_cad")
         ref_contrato = st.selectbox("Referencia (opcional)", ["", "Resolucao", "Deliberacao", "Portaria"])
         num_ano_ref = st.text_input("Numero/Ano (opcional)")
+        
+        # PASSO 3: TIPO DE RECURSO - DEFINE QUAIS CAMPOS DE VALOR APARECEM
+        st.markdown('<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">3. Selecione o Tipo de Recurso</p>', unsafe_allow_html=True)
         tipo_recurso = st.selectbox("* Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], key="tipo_recurso_cad")
         
-        # Campos de valor com mascara - Digite apenas numeros, o sistema coloca ponto e virgula automaticamente
-        val_custeio_str = st.text_input("* Custeio", key="val_custeio_cad")
-        val_invest_str = st.text_input("* Investimento", key="val_invest_cad")
+        # PASSO 4: CAMPOS DE VALOR - APARECEM CONFORME O TIPO DE RECURSO
+        val_custeio_str = ""
+        val_invest_str = ""
+        vt = 0.0
         
-        vc = parse_br_currency(val_custeio_str)
-        vi = parse_br_currency(val_invest_str)
-        vt = vc + vi
+        if tipo_recurso:
+            st.markdown(f'<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">4. Informe o(s) Valor(es)</p>', unsafe_allow_html=True)
+            
+            if tipo_recurso in ["Custeio", "Custeio/Investimento"]:
+                c1, c2 = st.columns([1, 3])
+                with c1:
+                    st.markdown('<p style="color:#22d3ee;font-weight:700;margin-top:8px;">R$ CUSTEIO</p>', unsafe_allow_html=True)
+                with c2:
+                    val_custeio_str = st.text_input("", key="val_custeio_cad", label_visibility="collapsed")
+            
+            if tipo_recurso in ["Investimento", "Custeio/Investimento"]:
+                c1, c2 = st.columns([1, 3])
+                with c1:
+                    st.markdown('<p style="color:#22d3ee;font-weight:700;margin-top:8px;">R$ INVESTIMENTO</p>', unsafe_allow_html=True)
+                with c2:
+                    val_invest_str = st.text_input("", key="val_invest_cad", label_visibility="collapsed")
+            
+            vc = parse_br_currency(val_custeio_str)
+            vi = parse_br_currency(val_invest_str)
+            vt = vc + vi
+            
+            if vt > 0:
+                st.markdown(f'<p style="color:#00d4ff;font-size:18px;font-weight:700;margin-top:10px;">Total: {format_currency(vt)}</p>', unsafe_allow_html=True)
         
-        if vt > 0: st.markdown(f'<p style="color:#00d4ff;font-size:16px;font-weight:700;">Total: {format_currency(vt)}</p>', unsafe_allow_html=True)
-        
-        # Campo de data com mascara - Digite apenas numeros, o sistema coloca as barras automaticamente
+        # PASSO 5: DATA DE RECEBIMENTO - COM MASCARA AUTOMATICA
+        st.markdown(f'<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">5. Data de Recebimento</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#94a3b8;font-size:11px;margin-bottom:5px;">Digite apenas numeros que o sistema coloca as barras automaticamente</p>', unsafe_allow_html=True)
         data_receb = st.text_input("* Data Recebimento", key="data_receb_cad")
         if not data_receb:
             data_receb = datetime.now().strftime("%d/%m/%Y")
         
+        # PASSO 6: INFORMACOES ADICIONAIS
+        st.markdown(f'<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">6. Informacoes Adicionais</p>', unsafe_allow_html=True)
         prog = st.text_input("Programa/Politica (opcional)")
         setor = st.text_input("Setor (opcional)")
         
+        # BOTAO SALVAR
         if st.button("Salvar Conta"):
-            erros = [x for x, v in [("Esfera", esfera), ("Conta", num_conta), ("Recurso", tipo_recurso), ("Valor", vt>0), ("Data", data_receb)] if not v]
-            if erros: st.error(f"Preencha: {', '.join(erros)}")
+            erros = []
+            if not esfera: erros.append("Esfera")
+            if not num_conta: erros.append("Numero da Conta")
+            if not tipo_recurso: erros.append("Tipo de Recurso")
+            if vt <= 0: erros.append("Valor (preencha Custeio ou Investimento)")
+            if not data_receb: erros.append("Data de Recebimento")
+            if erros:
+                st.error(f"Preencha: {', '.join(erros)}")
             else:
                 conn = sqlite3.connect("marmed.db")
-                conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vt, data_receb, prog, setor))
+                conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, parse_br_currency(val_custeio_str), parse_br_currency(val_invest_str), vt, data_receb, prog, setor))
                 conn.commit(); conn.close()
                 st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
 
@@ -488,20 +536,20 @@ def programas_saude():
     st.markdown('<hr>', unsafe_allow_html=True)
     t1, t2, t3, t4, t5 = st.tabs(["MEDICAMENTOS", "GESTAO", "FINANCIAMENTO", "REGULACAO", "CONSORCIOS"])
     with t1:
-        bloco_saude("Relacao Nacional de Medicamentos Essenciais", "RENAME", 'A <strong>RENAME</strong> e a lista oficial do Ministerio da Saude.', "https://www.gov.br/saude/rename", "#0e7490")
+        bloco_saude("Relacao Nacional de Medicamentos", "RENAME", 'A <strong>RENAME</strong> e a lista oficial do Ministerio da Saude.', "https://www.gov.br/saude/rename", "#0e7490")
         bloco_saude("Relacao Municipal de Medicamentos", "REMUME", 'A <strong>REMUME</strong> e a lista oficial de medicamentos do SUS.', "", "#0891b2")
-        bloco_saude("Relacao Nacional de Equipamentos", "RENEM", 'A <strong>RENEM</strong> padroniza equipamentos financiados pelo SUS.', "https://portalfns.saude.gov.br/", "#155e75")
-        bloco_saude("Relacao Nacional de Acoes de Saude", "RENASES", 'A <strong>RENASES</strong> garante a integralidade no SUS.', "", "#164e63")
+        bloco_saude("Relacao Nacional de Equipamentos", "RENEM", 'A <strong>RENEM</strong> padroniza equipamentos.', "https://portalfns.saude.gov.br/", "#155e75")
+        bloco_saude("Relacao Nacional de Acoes de Saude", "RENASES", 'A <strong>RENASES</strong> garante integralidade no SUS.', "", "#164e63")
     with t2:
-        bloco_saude("e-Gestor APS", "E-GESTOR", 'O <strong>e-Gestor APS</strong> centraliza sistemas da Atencao Basica.', "https://egestorab.saude.gov.br/", "#0369a1")
+        bloco_saude("e-Gestor APS", "E-GESTOR", 'O <strong>e-Gestor APS</strong> centraliza a atencao basica.', "https://egestorab.saude.gov.br/", "#0369a1")
         bloco_saude("Core Saude MG", "CORE", 'O <strong>Core Saude MG</strong> gerencia leitos em MG.', "https://www.saude.mg.gov.br/", "#075985")
     with t3:
-        bloco_saude("Fundo Nacional de Saude", "FNS", 'O <strong>FNS</strong> e o gestor financeiro do Ministerio da Saude.', "https://portalfns.saude.gov.br/", "#1d4ed8")
-        bloco_saude("SIGTAP", "SIGTAP", 'O <strong>SIGTAP</strong> padroniza procedimentos do SUS.', "http://sigtap.datasus.gov.br/", "#1e3a8a")
+        bloco_saude("Fundo Nacional de Saude", "FNS", 'O <strong>FNS</strong> e o gestor financeiro.', "https://portalfns.saude.gov.br/", "#1d4ed8")
+        bloco_saude("SIGTAP", "SIGTAP", 'O <strong>SIGTAP</strong> padroniza procedimentos.', "http://sigtap.datasus.gov.br/", "#1e3a8a")
         bloco_saude("PPI", "PPI", 'A <strong>PPI</strong> organiza fluxo de pacientes.', "", "#1e40af")
     with t4:
         bloco_saude("CONASEMS", "CONASEMS", 'O <strong>CONASEMS</strong> representa municipios.', "https://conasems.org.br/", "#4338ca")
-        bloco_saude("COSEMS MG", "COSEMS", 'O <strong>COSEMS MG</strong> representa 853 municipios mineiros.', "https://www.cosemsmg.org.br/", "#3730a3")
+        bloco_saude("COSEMS MG", "COSEMS", 'O <strong>COSEMS MG</strong> representa 853 municipios.', "https://www.cosemsmg.org.br/", "#3730a3")
     with t5:
         bloco_saude("CISLAV", "CISLAV", 'O <strong>CISLAV</strong> une prefeituras de Lavras.', "https://www.cislav.com/", "#312e81")
 
@@ -512,9 +560,7 @@ def plano_municipal_saude():
     <div style="background:linear-gradient(135deg,#0e7490,#0f172a);border-radius:12px;padding:20px;margin-bottom:15px;border-left:6px solid #22d3ee;">
         <h2 style="color:#fff;margin:0;font-size:24px;font-weight:800;">PMS</h2>
         <p style="color:#e0f2fe;font-size:16px;font-weight:700;">Plano Municipal de Saude</p>
-        <div style="background:rgba(15,23,42,0.7);border-radius:10px;padding:18px;color:#e0f2fe;font-size:15px;line-height:1.7;">
-            O <strong>Plano Municipal de Saude (PMS)</strong> e o instrumento basico de planejamento das acoes e servicos de saude no ambito do municipio, elaborado a cada 4 anos.
-        </div>
+        <div style="background:rgba(15,23,42,0.7);border-radius:10px;padding:18px;color:#e0f2fe;font-size:15px;line-height:1.7;">O <strong>Plano Municipal de Saude (PMS)</strong> e o instrumento basico de planejamento do SUS no municipio, elaborado a cada 4 anos.</div>
     </div>''', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#7dd3fc;">Documentos do PMS</h3>', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
@@ -562,7 +608,7 @@ def norte_minha_gestao():
     st.markdown('<h3 style="color:#a78bfa;">INDICADORES</h3>', unsafe_allow_html=True)
     col_a, col_b, col_c, col_d = st.columns(4)
     with col_a: st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #22c55e;"><div style="color:#94a3b8;">Cobertura ESF</div><div style="color:#22c55e;font-size:24px;font-weight:800;">95%</div></div>', unsafe_allow_html=True)
-    with col_b: st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #3b82f6;"><div style="color:#94a3b8;">Execucao Financ.</div><div style="color:#3b82f6;font-size:24px;font-weight:800;">78%</div></div>', unsafe_allow_html=True)
+    with col_b: st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #3b82f6;"><div style="color:#94a3b8;">Execucao</div><div style="color:#3b82f6;font-size:24px;font-weight:800;">78%</div></div>', unsafe_allow_html=True)
     with col_c: st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #eab308;"><div style="color:#94a3b8;">Metas PMS</div><div style="color:#eab308;font-size:24px;font-weight:800;">62%</div></div>', unsafe_allow_html=True)
     with col_d: st.markdown('<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;text-align:center;border-top:3px solid #a78bfa;"><div style="color:#94a3b8;">Satisfacao</div><div style="color:#a78bfa;font-size:24px;font-weight:800;">71%</div></div>', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#a78bfa;">Documentos</h3>', unsafe_allow_html=True)
