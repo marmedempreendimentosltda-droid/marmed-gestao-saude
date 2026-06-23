@@ -11,7 +11,6 @@ def format_currency(value):
     if value is None: value = 0.0
     v = float(value)
     inteiro, centavos = f"{v:.2f}".split(".")
-    # Adiciona separador de milhar com ponto
     if len(inteiro) > 3:
         partes = []
         while len(inteiro) > 3:
@@ -58,12 +57,10 @@ def parse_br_currency(val):
         return 0.0
 
 def inject_masks():
-    """Injeta JavaScript para mascaras de data e moeda"""
     st.markdown("""
     <script>
     (function() {
         function aplicarMascaras() {
-            // Mascara de DATA (dd/mm/aaaa)
             document.querySelectorAll('[data-testid="stTextInput"]').forEach(function(el) {
                 var label = el.querySelector('label');
                 var input = el.querySelector('input');
@@ -77,11 +74,9 @@ def inject_masks():
                         else if (v.length > 2) v = v.substring(0,2) + '/' + v.substring(2);
                         this.value = v;
                     });
-                    // Dispara evento para formatar valor inicial se existir
                     if (input.value) { input.dispatchEvent(new Event('input')); }
                 }
             });
-            // Mascara de VALOR MONETARIO BR (1.234,56)
             document.querySelectorAll('[data-testid="stTextInput"]').forEach(function(el) {
                 var label = el.querySelector('label');
                 var input = el.querySelector('input');
@@ -105,11 +100,9 @@ def inject_masks():
                         if (reais.length > 0) partes.unshift(reais);
                         this.value = partes.join('.') + ',' + cents;
                     });
-                    // Dispara evento para formatar valor inicial se existir
                     if (input.value) { input.dispatchEvent(new Event('input')); }
                 }
             });
-            // Mascara também para inputs dentro do Streamlit (campos com label oculta)
             document.querySelectorAll('input:not([type="hidden"])').forEach(function(input) {
                 if (input.dataset.maskMoney || input.dataset.maskDate) return;
                 var parentText = (input.parentElement ? input.parentElement.textContent : '') + ' ' + (input.placeholder || '');
@@ -165,8 +158,14 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, esfera TEXT, numero_conta TEXT, fonte TEXT,
         referencia_tipo TEXT, referencia_numero TEXT, tipo_recurso TEXT,
         valor_pago_custeio REAL DEFAULT 0, valor_pago_investimento REAL DEFAULT 0,
-        valor_total REAL DEFAULT 0, data_recebimento TEXT, programa_politica TEXT, setor_gasto TEXT
+        valor_total REAL DEFAULT 0, data_recebimento TEXT, programa_politica TEXT, setor_gasto TEXT,
+        referencia_uso TEXT DEFAULT ''
     )""")
+    # Adiciona coluna referencia_uso se nao existir (para banco ja criado)
+    try:
+        c.execute("ALTER TABLE contas_receber ADD COLUMN referencia_uso TEXT DEFAULT ''")
+    except:
+        pass
     c.execute("""CREATE TABLE IF NOT EXISTS superavit (
         id INTEGER PRIMARY KEY AUTOINCREMENT, esfera TEXT, fonte_original TEXT, fonte_superavit TEXT,
         saldo_total REAL DEFAULT 0, saldo_restante REAL DEFAULT 0, created_at TEXT
@@ -331,6 +330,8 @@ def cadastrar_contas():
         st.markdown('<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">6. Informacoes Adicionais</p>', unsafe_allow_html=True)
         prog = st.text_input("Programa/Politica (opcional)")
         setor = st.text_input("Setor (opcional)")
+        # NOVO CAMPO: REFERENCIA PARA USO - MATERIAL/SERVICO (ultimo campo)
+        ref_uso = st.text_input("Referencia para Uso - Material/Servico")
         if st.button("Salvar Conta"):
             erros = []
             if not esfera: erros.append("Esfera")
@@ -342,7 +343,7 @@ def cadastrar_contas():
                 st.error(f"Preencha: {', '.join(erros)}")
             else:
                 conn = sqlite3.connect("marmed.db")
-                conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, parse_br_currency(val_custeio_str), parse_br_currency(val_invest_str), vt, data_receb, prog, setor))
+                conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto, referencia_uso) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, parse_br_currency(val_custeio_str), parse_br_currency(val_invest_str), vt, data_receb, prog, setor, ref_uso))
                 conn.commit(); conn.close()
                 st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
 
@@ -353,11 +354,11 @@ def contas_cadastradas():
     tabs = st.tabs(["FEDERAL", "ESTADUAL", "MUNICIPAL"])
     for tab_idx, esf in enumerate(["Federal", "Estadual", "Municipal"]):
         with tabs[tab_idx]:
-            r = conn.execute("SELECT id, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esf,)).fetchall()
+            r = conn.execute("SELECT id, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto, referencia_uso FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esf,)).fetchall()
             if r:
                 import pandas as pd
-                d = [(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11]) for x in r]
-                pdf = pd.DataFrame(d, columns=["ID", "Conta", "Fonte", "Ref.", "N/Ano", "Tipo", "Custeio", "Invest.", "Total", "Data", "Programa", "Setor"])
+                d = [(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12]) for x in r]
+                pdf = pd.DataFrame(d, columns=["ID", "Conta", "Fonte", "Ref.", "N/Ano", "Tipo", "Custeio", "Invest.", "Total", "Data", "Programa", "Setor", "Ref.Uso"])
                 for c in ["Custeio", "Invest.", "Total"]: pdf[c] = pdf[c].apply(lambda x: format_currency(x))
                 st.dataframe(pdf, use_container_width=True, hide_index=True)
                 st.markdown(f'<p style="color:#64748b;">Total: {len(r)} conta(s) {esf}</p>', unsafe_allow_html=True)
@@ -416,10 +417,14 @@ def editar_conta():
     data_receb = st.text_input("Data", value=row[10] or datetime.now().strftime("%d/%m/%Y"), key="data_edit")
     prog = st.text_input("Programa", value=row[11] or "")
     setor = st.text_input("Setor", value=row[12] or "")
+    ref_uso = st.text_input("Ref.Uso - Material/Servico", value=row[13] or "")
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Salvar"):
-            conn.execute("UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?, valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=? WHERE id=?", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vc+vi, data_receb, prog, setor, rid))
+            try:
+                conn.execute("UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?, valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=?, referencia_uso=? WHERE id=?", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vc+vi, data_receb, prog, setor, ref_uso, rid))
+            except:
+                conn.execute("UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?, valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=? WHERE id=?", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vc+vi, data_receb, prog, setor, rid))
             conn.commit(); conn.close(); st.success("Atualizada!"); st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
     with c2:
         if st.button("Voltar"): st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
