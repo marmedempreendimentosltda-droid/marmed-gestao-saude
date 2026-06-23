@@ -34,29 +34,31 @@ def extract_text_from_bytes(file_bytes, filename):
 
 def parse_br_currency(val):
     """Converte valor formatado BR (7.677,35) para float"""
+    if val is None: return 0.0
     if isinstance(val, (int, float)):
         return float(val)
-    if not val or val.strip() == '':
+    if not val or str(val).strip() == '':
         return 0.0
-    v = val.replace('R$ ', '').replace('R$', '').replace('.', '').replace(',', '.')
+    v = str(val).replace('R$ ', '').replace('R$', '').replace('.', '').replace(',', '.')
     try:
         return float(v)
     except:
         return 0.0
 
 def inject_masks():
-    """Injeta JavaScript para mascaras de data e moeda"""
+    """Injeta JavaScript para mascaras de data e moeda - SEM ALTERAR NADA DO SISTEMA"""
     st.markdown("""
     <script>
     (function() {
         function applyMasks() {
-            // Mascara de DATA (dd/mm/aaaa)
+            // Mascara de DATA (dd/mm/aaaa) - para campos com labels que contem "data" ou "recebimento"
             document.querySelectorAll('[data-testid="stTextInput"]').forEach(function(el) {
                 var label = el.querySelector('label');
                 var input = el.querySelector('input');
                 if (label && input && !input.dataset.maskDate && /data|recebimento/i.test(label.textContent)) {
                     input.dataset.maskDate = '1';
                     input.inputMode = 'numeric';
+                    input.setAttribute('autocomplete', 'off');
                     input.addEventListener('input', function() {
                         var v = this.value.replace(/\D/g, '').substring(0, 8);
                         if (v.length > 4) v = v.substring(0,2) + '/' + v.substring(2,4) + '/' + v.substring(4);
@@ -65,24 +67,23 @@ def inject_masks():
                     });
                 }
             });
-            // Mascara de VALOR MONETARIO (1.234,56)
+            
+            // Mascara de VALOR MONETARIO (1.234,56) - para campos de custeio, investimento, valor
             document.querySelectorAll('[data-testid="stTextInput"]').forEach(function(el) {
                 var label = el.querySelector('label');
                 var input = el.querySelector('input');
-                if (label && input && !input.dataset.maskMoney && /custeio|investimento|valor|compra|ficha/i.test(label.textContent)) {
+                if (label && input && !input.dataset.maskMoney && /custeio|investimento|valor|compra/i.test(label.textContent)) {
                     input.dataset.maskMoney = '1';
                     input.inputMode = 'numeric';
+                    input.setAttribute('autocomplete', 'off');
                     input.addEventListener('input', function() {
                         var v = this.value.replace(/\D/g, '');
                         if (v.length === 0) { this.value = ''; return; }
-                        // Padding com zeros a esquerda ate 3 digitos minimo
                         while (v.length < 3) v = '0' + v;
                         var cents = v.substring(v.length - 2);
                         var reais = v.substring(0, v.length - 2);
-                        // Remove leading zeros
                         reais = reais.replace(/^0+/, '');
                         if (reais === '') reais = '0';
-                        // Add thousand separators
                         var partes = [];
                         while (reais.length > 3) {
                             partes.unshift(reais.substring(reais.length - 3));
@@ -93,23 +94,11 @@ def inject_masks():
                     });
                 }
             });
-            // Mascara de DATA nos inputs de data de compra
-            document.querySelectorAll('[data-testid="stDateInput"] input').forEach(function(input) {
-                if (!input.dataset.maskDate) {
-                    input.dataset.maskDate = '1';
-                    input.addEventListener('input', function() {
-                        var v = this.value.replace(/\D/g, '').substring(0, 8);
-                        if (v.length > 4) v = v.substring(0,2) + '/' + v.substring(2,4) + '/' + v.substring(4);
-                        else if (v.length > 2) v = v.substring(0,2) + '/' + v.substring(2);
-                        this.value = v;
-                    });
-                }
-            });
         }
         applyMasks();
         var obs = new MutationObserver(applyMasks);
         obs.observe(document.body, { childList: true, subtree: true });
-        setTimeout(applyMasks, 1500);
+        setTimeout(applyMasks, 2000);
     })();
     </script>
     """, unsafe_allow_html=True)
@@ -162,6 +151,16 @@ def login_page():
         }
         .marmed-title { font-size: 52px; font-weight: 800; text-align: center; color: #e0f2fe; letter-spacing: 6px; margin-bottom: 8px; }
         .subtitle { text-align: center; color: #7dd3fc; font-size: 14px; letter-spacing: 4px; margin-bottom: 36px; text-transform: uppercase; }
+        .stTextInput label { color: #22d3ee !important; font-weight: 600; }
+        .stTextInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
+        .stButton > button { background: linear-gradient(90deg, #06b6d4, #3b82f6) !important; color: #fff !important; font-weight: 700 !important; border-radius: 10px !important; border: none !important; width: 100%; padding: 12px !important; }
+        .stSelectbox > div > div { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; border-radius: 10px !important; color: #e0f2fe !important; }
+        .stNumberInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
+        .stDataFrame { background: rgba(15, 23, 42, 0.6) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; border-radius: 10px !important; }
+        .stDataFrame td { color: #e0f2fe !important; }
+        .stDataFrame th { color: #22d3ee !important; }
+        .stFileUploader > div { background: rgba(30, 41, 59, 0.8) !important; border: 1px dashed rgba(34, 211, 238, 0.4) !important; border-radius: 10px !important; color: #e0f2fe !important; }
+        .stTextArea > div > textarea { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
         </style>
     """, unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -228,7 +227,7 @@ def cadastrar_contas():
     st.markdown('<hr>', unsafe_allow_html=True)
     inject_masks()
     
-    for k in ["esfera_cad", "val_custeio_cad", "val_invest_cad", "tipo_recurso_cad", "num_conta_cad"]:
+    for k in ["esfera_cad", "num_conta_cad", "tipo_recurso_cad", "val_custeio_cad", "val_invest_cad", "data_receb_cad"]:
         st.session_state.pop(k, None)
     
     with st.expander("NOVO CADASTRO", expanded=True):
@@ -250,7 +249,7 @@ def cadastrar_contas():
         num_ano_ref = st.text_input("Numero/Ano (opcional)")
         tipo_recurso = st.selectbox("* Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], key="tipo_recurso_cad")
         
-        # Campos com mascara - agora como text_input com formato BR
+        # Campos de valor com mascara - Digite apenas numeros, o sistema coloca ponto e virgula automaticamente
         val_custeio_str = st.text_input("* Custeio", key="val_custeio_cad")
         val_invest_str = st.text_input("* Investimento", key="val_invest_cad")
         
@@ -260,7 +259,7 @@ def cadastrar_contas():
         
         if vt > 0: st.markdown(f'<p style="color:#00d4ff;font-size:16px;font-weight:700;">Total: {format_currency(vt)}</p>', unsafe_allow_html=True)
         
-        # Data com mascara
+        # Campo de data com mascara - Digite apenas numeros, o sistema coloca as barras automaticamente
         data_receb = st.text_input("* Data Recebimento", key="data_receb_cad")
         if not data_receb:
             data_receb = datetime.now().strftime("%d/%m/%Y")
@@ -269,14 +268,8 @@ def cadastrar_contas():
         setor = st.text_input("Setor (opcional)")
         
         if st.button("Salvar Conta"):
-            erros = []
-            if not esfera: erros.append("Esfera")
-            if not num_conta: erros.append("Numero da Conta")
-            if not tipo_recurso: erros.append("Tipo de Recurso")
-            if vt <= 0: erros.append("Valor (Custeio ou Investimento)")
-            if not data_receb: erros.append("Data de Recebimento")
-            if erros:
-                st.error(f"Preencha: {', '.join(erros)}")
+            erros = [x for x, v in [("Esfera", esfera), ("Conta", num_conta), ("Recurso", tipo_recurso), ("Valor", vt>0), ("Data", data_receb)] if not v]
+            if erros: st.error(f"Preencha: {', '.join(erros)}")
             else:
                 conn = sqlite3.connect("marmed.db")
                 conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vt, data_receb, prog, setor))
@@ -347,16 +340,16 @@ def editar_conta():
     ref_contrato = st.selectbox("Ref", ["", "Resolucao", "Deliberacao", "Portaria"], index=["", "Resolucao", "Deliberacao", "Portaria"].index(row[4]) if row[4] in ["", "Resolucao", "Deliberacao", "Portaria"] else 0)
     num_ano_ref = st.text_input("N/Ano", value=row[5] or "")
     tipo_recurso = st.selectbox("* Tipo", ["", "Custeio", "Investimento", "Custeio/Investimento"], index=["", "Custeio", "Investimento", "Custeio/Investimento"].index(row[6]) if row[6] in ["", "Custeio", "Investimento", "Custeio/Investimento"] else 0, key="tipo_edit")
-    vc = st.text_input("Custeio", value=format_currency(row[7] or 0).replace("R$ ", ""), key="val_custeio_edit")
-    vi = st.text_input("Investimento", value=format_currency(row[8] or 0).replace("R$ ", ""), key="val_invest_edit")
-    vc_f = parse_br_currency(vc); vi_f = parse_br_currency(vi)
+    vc_str = st.text_input("Custeio", value=format_currency(row[7] or 0).replace("R$ ", ""), key="val_custeio_edit")
+    vi_str = st.text_input("Investimento", value=format_currency(row[8] or 0).replace("R$ ", ""), key="val_invest_edit")
+    vc = parse_br_currency(vc_str); vi = parse_br_currency(vi_str)
     data_receb = st.text_input("Data", value=row[10] or datetime.now().strftime("%d/%m/%Y"), key="data_edit")
     prog = st.text_input("Programa", value=row[11] or "")
     setor = st.text_input("Setor", value=row[12] or "")
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Salvar"):
-            conn.execute("UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?, valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=? WHERE id=?", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc_f, vi_f, vc_f+vi_f, data_receb, prog, setor, rid))
+            conn.execute("UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?, valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=? WHERE id=?", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vc+vi, data_receb, prog, setor, rid))
             conn.commit(); conn.close(); st.success("Atualizada!"); st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
     with c2:
         if st.button("Voltar"): st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
@@ -406,13 +399,7 @@ def realizar_compras():
                             if valor_c > saldo: st.markdown(f'<p style="color:#ef4444;">Excede {format_currency(saldo)}</p>', unsafe_allow_html=True)
                         prod = st.text_area("Produto/Servico", height=120)
                         if st.form_submit_button("Solicitar"):
-                            erros = []
-                            if not ficha: erros.append("Ficha")
-                            if not td: erros.append("Tipo")
-                            if not data_c: erros.append("Data")
-                            if valor_c <= 0: erros.append("Valor")
-                            if not prod: erros.append("Produto")
-                            if valor_c > saldo: erros.append("Saldo")
+                            erros = [x for x, v in [("Ficha", ficha), ("Tipo", td), ("Data", data_c), ("Valor", valor_c>0), ("Produto", prod), ("Saldo", valor_c<=saldo)] if not v]
                             if erros: st.error(f"Preencha: {', '.join(erros)}")
                             else:
                                 conn.execute("INSERT INTO ordens_compra (conta_receber_id, esfera, numero_conta, fonte, ficha, tipo_despesa, data_compra, valor_compra, produto_servico, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (cid, esf, num, fonte, ficha, td, data_c, valor_c, prod, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
