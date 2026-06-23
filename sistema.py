@@ -7,8 +7,20 @@ from datetime import datetime
 st.set_page_config(page_title="MARMED", layout="wide")
 
 def format_currency(value):
+    """Formata valor no padrao brasileiro: R$ 7.677,35 (ponto no milhar, virgula no decimal)"""
     if value is None: value = 0.0
-    return f"R$ {float(value):,.2f}"
+    v = float(value)
+    inteiro, centavos = f"{v:.2f}".split(".")
+    # Adiciona separador de milhar com ponto
+    if len(inteiro) > 3:
+        partes = []
+        while len(inteiro) > 3:
+            partes.insert(0, inteiro[-3:])
+            inteiro = inteiro[:-3]
+        if inteiro:
+            partes.insert(0, inteiro)
+        inteiro = ".".join(partes)
+    return f"R$ {inteiro},{centavos}"
 
 def get_fonte(esfera):
     if esfera == "Federal": return "1.600"
@@ -33,6 +45,7 @@ def extract_text_from_bytes(file_bytes, filename):
     return text
 
 def parse_br_currency(val):
+    """Converte valor formatado BR (7.677,35) para float (7677.35)"""
     if val is None: return 0.0
     if isinstance(val, (int, float)):
         return float(val)
@@ -45,10 +58,12 @@ def parse_br_currency(val):
         return 0.0
 
 def inject_masks():
+    """Injeta JavaScript para mascaras de data e moeda"""
     st.markdown("""
     <script>
     (function() {
-        function applyMasks() {
+        function aplicarMascaras() {
+            // Mascara de DATA (dd/mm/aaaa)
             document.querySelectorAll('[data-testid="stTextInput"]').forEach(function(el) {
                 var label = el.querySelector('label');
                 var input = el.querySelector('input');
@@ -62,8 +77,11 @@ def inject_masks():
                         else if (v.length > 2) v = v.substring(0,2) + '/' + v.substring(2);
                         this.value = v;
                     });
+                    // Dispara evento para formatar valor inicial se existir
+                    if (input.value) { input.dispatchEvent(new Event('input')); }
                 }
             });
+            // Mascara de VALOR MONETARIO BR (1.234,56)
             document.querySelectorAll('[data-testid="stTextInput"]').forEach(function(el) {
                 var label = el.querySelector('label');
                 var input = el.querySelector('input');
@@ -87,13 +105,54 @@ def inject_masks():
                         if (reais.length > 0) partes.unshift(reais);
                         this.value = partes.join('.') + ',' + cents;
                     });
+                    // Dispara evento para formatar valor inicial se existir
+                    if (input.value) { input.dispatchEvent(new Event('input')); }
+                }
+            });
+            // Mascara também para inputs dentro do Streamlit (campos com label oculta)
+            document.querySelectorAll('input:not([type="hidden"])').forEach(function(input) {
+                if (input.dataset.maskMoney || input.dataset.maskDate) return;
+                var parentText = (input.parentElement ? input.parentElement.textContent : '') + ' ' + (input.placeholder || '');
+                if (!input.dataset.maskDate && /data|recebimento/i.test(parentText)) {
+                    input.dataset.maskDate = '1';
+                    input.inputMode = 'numeric';
+                    input.addEventListener('input', function() {
+                        var v = this.value.replace(/\D/g, '').substring(0, 8);
+                        if (v.length > 4) v = v.substring(0,2) + '/' + v.substring(2,4) + '/' + v.substring(4);
+                        else if (v.length > 2) v = v.substring(0,2) + '/' + v.substring(2);
+                        this.value = v;
+                    });
+                    if (input.value) { input.dispatchEvent(new Event('input')); }
+                }
+                if (!input.dataset.maskMoney && /custeio|investimento|valor|compra/i.test(parentText)) {
+                    input.dataset.maskMoney = '1';
+                    input.inputMode = 'numeric';
+                    input.addEventListener('input', function() {
+                        var v = this.value.replace(/\D/g, '');
+                        if (v.length === 0) { this.value = ''; return; }
+                        while (v.length < 3) v = '0' + v;
+                        var cents = v.substring(v.length - 2);
+                        var reais = v.substring(0, v.length - 2);
+                        reais = reais.replace(/^0+/, '');
+                        if (reais === '') reais = '0';
+                        var partes = [];
+                        while (reais.length > 3) {
+                            partes.unshift(reais.substring(reais.length - 3));
+                            reais = reais.substring(0, reais.length - 3);
+                        }
+                        if (reais.length > 0) partes.unshift(reais);
+                        this.value = partes.join('.') + ',' + cents;
+                    });
+                    if (input.value) { input.dispatchEvent(new Event('input')); }
                 }
             });
         }
-        applyMasks();
-        var obs = new MutationObserver(applyMasks);
+        aplicarMascaras();
+        var obs = new MutationObserver(aplicarMascaras);
         obs.observe(document.body, { childList: true, subtree: true });
-        setTimeout(applyMasks, 2000);
+        setTimeout(aplicarMascaras, 500);
+        setTimeout(aplicarMascaras, 1500);
+        setTimeout(aplicarMascaras, 3000);
     })();
     </script>
     """, unsafe_allow_html=True)
@@ -230,17 +289,12 @@ def cadastrar_contas():
             st.markdown(f'''
             <div style="background:rgba(30,41,59,0.8);border-radius:10px;padding:15px;margin-bottom:15px;border-left:4px solid {cor_fonte.get(esfera, "#22d3ee")};">
                 <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <div>
-                        <span style="color:#94a3b8;font-size:13px;">Fonte vinculada automaticamente:</span>
-                        <span style="color:#22d3ee;font-size:28px;font-weight:800;margin-left:10px;">{fonte_mostrada}</span>
-                    </div>
-                    <div>
-                        <span style="background:{"#3b82f6" if esfera=="Federal" else "#22c55e" if esfera=="Estadual" else "#eab308"};color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:700;">{esfera.upper()}</span>
-                    </div>
+                    <div><span style="color:#94a3b8;font-size:13px;">Fonte vinculada:</span><span style="color:#22d3ee;font-size:28px;font-weight:800;margin-left:10px;">{fonte_mostrada}</span></div>
+                    <div><span style="background:{"#3b82f6" if esfera=="Federal" else "#22c55e" if esfera=="Estadual" else "#eab308"};color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:700;">{esfera.upper()}</span></div>
                 </div>
             </div>''', unsafe_allow_html=True)
         else:
-            st.markdown('<p style="color:#64748b;font-size:13px;">Selecione uma Esfera para ver a Fonte vinculada automaticamente</p>', unsafe_allow_html=True)
+            st.markdown('<p style="color:#64748b;font-size:13px;">Selecione a Esfera para ver a Fonte</p>', unsafe_allow_html=True)
         num_conta = st.text_input("* 2. Numero da Conta", key="num_conta_cad")
         ref_contrato = st.selectbox("Referencia (opcional)", ["", "Resolucao", "Deliberacao", "Portaria"])
         num_ano_ref = st.text_input("Numero/Ano (opcional)")
@@ -250,7 +304,8 @@ def cadastrar_contas():
         val_invest_str = ""
         vt = 0.0
         if tipo_recurso:
-            st.markdown('<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">4. Informe o(s) Valor(es)</p>', unsafe_allow_html=True)
+            st.markdown('<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">4. Informe o(s) Valor(es) - Digite apenas numeros</p>', unsafe_allow_html=True)
+            st.markdown('<p style="color:#94a3b8;font-size:11px;margin-bottom:5px;">O sistema coloca ponto e virgula automaticamente</p>', unsafe_allow_html=True)
             if tipo_recurso in ["Custeio", "Custeio/Investimento"]:
                 c1, c2 = st.columns([1, 3])
                 with c1:
@@ -268,8 +323,8 @@ def cadastrar_contas():
             vt = vc + vi
             if vt > 0:
                 st.markdown(f'<p style="color:#00d4ff;font-size:18px;font-weight:700;margin-top:10px;">Total: {format_currency(vt)}</p>', unsafe_allow_html=True)
-        st.markdown('<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">5. Data de Recebimento</p>', unsafe_allow_html=True)
-        st.markdown('<p style="color:#94a3b8;font-size:11px;margin-bottom:5px;">Digite apenas numeros - as barras sao inseridas automaticamente</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">5. Data de Recebimento - Digite apenas numeros</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#94a3b8;font-size:11px;margin-bottom:5px;">O sistema coloca as barras automaticamente</p>', unsafe_allow_html=True)
         data_receb = st.text_input("* Data Recebimento", key="data_receb_cad")
         if not data_receb:
             data_receb = datetime.now().strftime("%d/%m/%Y")
