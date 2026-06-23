@@ -7,7 +7,6 @@ from datetime import datetime
 st.set_page_config(page_title="MARMED", layout="wide")
 
 def format_currency(value):
-    """Formata valor no padrao brasileiro: R$ 7.677,35 (ponto no milhar, virgula no decimal)"""
     if value is None: value = 0.0
     v = float(value)
     inteiro, centavos = f"{v:.2f}".split(".")
@@ -44,7 +43,6 @@ def extract_text_from_bytes(file_bytes, filename):
     return text
 
 def parse_br_currency(val):
-    """Converte valor formatado BR (7.677,35) para float (7677.35)"""
     if val is None: return 0.0
     if isinstance(val, (int, float)):
         return float(val)
@@ -161,7 +159,6 @@ def init_db():
         valor_total REAL DEFAULT 0, data_recebimento TEXT, programa_politica TEXT, setor_gasto TEXT,
         referencia_uso TEXT DEFAULT ''
     )""")
-    # Adiciona coluna referencia_uso se nao existir (para banco ja criado)
     try:
         c.execute("ALTER TABLE contas_receber ADD COLUMN referencia_uso TEXT DEFAULT ''")
     except:
@@ -330,7 +327,6 @@ def cadastrar_contas():
         st.markdown('<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">6. Informacoes Adicionais</p>', unsafe_allow_html=True)
         prog = st.text_input("Programa/Politica (opcional)")
         setor = st.text_input("Setor (opcional)")
-        # NOVO CAMPO: REFERENCIA PARA USO - MATERIAL/SERVICO (ultimo campo)
         ref_uso = st.text_input("Referencia para Uso - Material/Servico")
         if st.button("Salvar Conta"):
             erros = []
@@ -350,22 +346,92 @@ def cadastrar_contas():
 def contas_cadastradas():
     st.markdown('<h1 style="color:#e0f2fe;">CONTAS CADASTRADAS</h1>', unsafe_allow_html=True)
     st.markdown('<hr>', unsafe_allow_html=True)
+    
+    # JavaScript para clicar na linha e selecionar no dropdown
+    st.markdown("""
+    <script>
+    (function() {
+        function initRowClick() {
+            document.querySelectorAll('[data-testid="stDataFrame"]').forEach(function(tabela) {
+                if (tabela.dataset.rowClickReady) return;
+                tabela.dataset.rowClickReady = '1';
+                
+                tabela.addEventListener('click', function(e) {
+                    var row = e.target.closest('tr');
+                    if (!row || row.closest('thead')) return;
+                    
+                    var cells = row.querySelectorAll('td');
+                    if (cells.length < 3) return;
+                    
+                    var conta = cells[1] ? cells[1].textContent.trim() : '';
+                    var fonte = cells[2] ? cells[2].textContent.trim() : '';
+                    
+                    if (conta) {
+                        document.querySelectorAll('select').forEach(function(select) {
+                            if (select.id && select.id.includes('sel_')) {
+                                for (var i = 0; i < select.options.length; i++) {
+                                    if (select.options[i].text.includes(conta) && select.options[i].text.includes(fonte)) {
+                                        select.value = select.options[i].value;
+                                        select.dispatchEvent(new Event('input', { bubbles: true }));
+                                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                                        break;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+            });
+        }
+        
+        function limparSelecao() {
+            document.querySelectorAll('select').forEach(function(select) {
+                if (select.id && select.id.includes('sel_')) {
+                    if (select.options.length > 0) {
+                        select.selectedIndex = 0;
+                        select.dispatchEvent(new Event('input', { bubbles: true }));
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                }
+            });
+        }
+        
+        document.addEventListener('click', function(e) {
+            var inTable = e.target.closest('[data-testid="stDataFrame"]');
+            if (!inTable) setTimeout(limparSelecao, 100);
+        });
+        
+        initRowClick();
+        var obs = new MutationObserver(initRowClick);
+        obs.observe(document.body, { childList: true, subtree: true });
+        setTimeout(initRowClick, 1000);
+        setTimeout(initRowClick, 2000);
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+    
     conn = sqlite3.connect("marmed.db")
     tabs = st.tabs(["FEDERAL", "ESTADUAL", "MUNICIPAL"])
     for tab_idx, esf in enumerate(["Federal", "Estadual", "Municipal"]):
         with tabs[tab_idx]:
-            r = conn.execute("SELECT id, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto, referencia_uso FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esf,)).fetchall()
+            r = conn.execute("SELECT id, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto, COALESCE(referencia_uso, '') FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esf,)).fetchall()
             if r:
                 import pandas as pd
                 d = [(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12]) for x in r]
                 pdf = pd.DataFrame(d, columns=["ID", "Conta", "Fonte", "Ref.", "N/Ano", "Tipo", "Custeio", "Invest.", "Total", "Data", "Programa", "Setor", "Ref.Uso"])
                 for c in ["Custeio", "Invest.", "Total"]: pdf[c] = pdf[c].apply(lambda x: format_currency(x))
-                st.dataframe(pdf, use_container_width=True, hide_index=True)
+                st.markdown(f'<div id="tabela-contas-{tab_idx}" class="tabela-contas">', unsafe_allow_html=True)
+                st.dataframe(pdf, use_container_width=True, hide_index=True, key=f"df_contas_{tab_idx}")
+                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown(f'<p style="color:#94a3b8;font-size:11px;margin-top:5px;">Clique em qualquer linha da tabela acima para selecionar automaticamente</p>', unsafe_allow_html=True)
+                st.markdown(f'<p style="color:#64748b;font-size:10px;margin-top:-5px;">Clique fora da tabela para limpar a selecao</p>', unsafe_allow_html=True)
                 st.markdown(f'<p style="color:#64748b;">Total: {len(r)} conta(s) {esf}</p>', unsafe_allow_html=True)
                 st.markdown(f'<h4 style="color:#7dd3fc;">Editar / Excluir - {esf}</h4>', unsafe_allow_html=True)
-                opts = {f"{x[1]} - Fonte {x[2]} (ID {x[0]})": x[0] for x in r}
+                opts = {}
+                for x in r:
+                    opts[f"{x[1]} - Fonte {x[2]} (ID {x[0]})"] = x[0]
                 opts["Selecione..."] = None
-                esc = st.selectbox(f"Selecione", list(opts.keys()), key=f"sel_{tab_idx}")
+                esc = st.selectbox(f"Selecione a conta", list(opts.keys()), key=f"sel_{tab_idx}")
                 if esc and opts[esc]:
                     rid = opts[esc]
                     c1, c2 = st.columns(2)
@@ -417,7 +483,7 @@ def editar_conta():
     data_receb = st.text_input("Data", value=row[10] or datetime.now().strftime("%d/%m/%Y"), key="data_edit")
     prog = st.text_input("Programa", value=row[11] or "")
     setor = st.text_input("Setor", value=row[12] or "")
-    ref_uso = st.text_input("Ref.Uso - Material/Servico", value=row[13] or "")
+    ref_uso = st.text_input("Ref.Uso - Material/Servico", value=row[13] if len(row) > 13 and row[13] else "")
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Salvar"):
