@@ -54,6 +54,12 @@ def parse_br_currency(val):
     except:
         return 0.0
 
+def menor_ou_igual(a, b):
+    return a <= b
+
+def maior_que(a, b):
+    return a > b
+
 def inject_masks():
     st.markdown("""
     <script>
@@ -69,7 +75,7 @@ def inject_masks():
                     input.addEventListener('input', function() {
                         var v = this.value.replace(/\D/g, '');
                         if (v.length === 0) { this.value = ''; return; }
-                        while (v.length &lt; 3) v = '0' + v;
+                        while (v.length < 3) v = '0' + v;
                         var cents = v.substring(v.length - 2);
                         var reais = v.substring(0, v.length - 2);
                         reais = reais.replace(/^0+/, '');
@@ -94,7 +100,7 @@ def inject_masks():
                     input.addEventListener('input', function() {
                         var v = this.value.replace(/\D/g, '');
                         if (v.length === 0) { this.value = ''; return; }
-                        while (v.length &lt; 3) v = '0' + v;
+                        while (v.length < 3) v = '0' + v;
                         var cents = v.substring(v.length - 2);
                         var reais = v.substring(0, v.length - 2);
                         reais = reais.replace(/^0+/, '');
@@ -211,4 +217,70 @@ def login_page():
 def dashboard():
     st.markdown('<h1 style="color:#f8fafc;text-align:center;font-size:48px;font-weight:800;letter-spacing:6px;">MARMED</h1>', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#22d3ee;text-align:center;letter-spacing:4px;margin-bottom:4px;font-weight:700;">SISTEMA INTEGRADO DE GESTAO</h3>', unsafe_allow_html=True)
-    st.markdown('<h2 style="color:#3b82f6;text-align:center;letter-spacing:3px;font-size:20px;font-weight:700;margin-bottom:16px;">PREFEITURA MUNICIPAL 
+    st.markdown('<h2 style="color:#3b82f6;text-align:center;letter-spacing:3px;font-size:20px;font-weight:700;margin-bottom:16px;">PREFEITURA MUNICIPAL DE LUMINARIAS</h2>', unsafe_allow_html=True)
+    st.markdown('<hr style="border-color:rgba(34,211,238,0.4);">', unsafe_allow_html=True)
+    conn = sqlite3.connect("marmed.db")
+    cols = st.columns(5)
+    for i, (tit, esf, cor) in enumerate(zip(
+        ["REPASSE FEDERAL", "REPASSE ESTADUAL", "RECURSO MUNICIPAL", "TRANSFERENCIA", "TRANSPOSICAO"],
+        ["Federal", "Estadual", "Municipal", "Transferencia", "Transposicao"],
+        ["#3b82f6", "#22c55e", "#eab308", "#a855f7", "#ef4444"]
+    )):
+        tc = conn.execute("SELECT COALESCE(SUM(valor_total),0) FROM contas_receber WHERE esfera=?", (esf,)).fetchone()[0]
+        tg = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE esfera=?", (esf,)).fetchone()[0]
+        saldo = tc - tg
+        with cols[i]:
+            st.markdown(f'<div style="background:linear-gradient(135deg,#1a2a3a,#0f2027);border-radius:15px;padding:15px;text-align:center;border-left:5px solid {cor};border:1px solid rgba(34,211,238,0.4);margin-bottom:8px;"><div style="color:#38bdf8;font-size:12px;font-weight:700;">{tit}</div><div style="color:#f8fafc;font-size:20px;font-weight:800;">{format_currency(tc)}</div><div style="color:#cbd5e1;font-size:11px;">Saldo: <span style="color:{cor};font-weight:700;">{format_currency(saldo)}</span></div></div>', unsafe_allow_html=True)
+            if st.button(f"Ver {esf}", key=f"b_{esf}"):
+                st.session_state["esfera_view"] = esf
+                st.session_state["page"] = "ESFERA DETALHE"; st.rerun()
+    tc = conn.execute("SELECT COUNT(*) FROM contas_receber").fetchone()[0]
+    tco = conn.execute("SELECT COUNT(*) FROM ordens_compra").fetchone()[0]
+    conn.close()
+    st.markdown(f'<p style="text-align:center;color:#cbd5e1;font-size:13px;margin-top:10px;">{tc} conta(s) | {tco} ordem(ns) de compra - {datetime.now().strftime("%d/%m/%Y")}</p>', unsafe_allow_html=True)
+
+def esfera_detalhe():
+    esf = st.session_state.get("esfera_view", "Federal")
+    st.markdown(f'<h1 style="color:#f8fafc;">{esf.upper()}</h1>', unsafe_allow_html=True)
+    st.markdown('<hr>', unsafe_allow_html=True)
+    conn = sqlite3.connect("marmed.db")
+    for cid, num, fonte, vtotal in conn.execute("SELECT id, numero_conta, fonte, valor_total FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esf,)).fetchall():
+        gasto = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE conta_receber_id=?", (cid,)).fetchone()[0]
+        saldo = vtotal - gasto
+        with st.expander(f"{num} - Fonte {fonte}"):
+            st.markdown(f'<p style="color:#cbd5e1;">N: <strong style="color:#f8fafc;">{num}</strong> | Fonte: <strong style="color:#22d3ee;">{fonte}</strong> | Original: <strong style="color:#38bdf8;">{format_currency(vtotal)}</strong> | Saldo: <strong style="color:{"#22c55e" if saldo>0 else "#ef4444"}">{format_currency(saldo)}</strong></p>', unsafe_allow_html=True)
+            for o in conn.execute("SELECT ficha, tipo_despesa, data_compra, valor_compra, produto_servico FROM ordens_compra WHERE conta_receber_id=? ORDER BY id DESC", (cid,)).fetchall():
+                st.markdown(f'<div style="background:rgba(30,41,59,0.8);border-radius:10px;padding:12px;margin-bottom:8px;border-left:3px solid #22d3ee;"><div style="color:#cbd5e1;font-size:12px;">Ficha: <strong style="color:#f8fafc;">{o[0] or "--"}</strong> | <strong style="color:#22d3ee;">{o[1] or "--"}</strong> | {o[2] or "--"}</div><div style="color:#38bdf8;font-size:16px;font-weight:700;">{format_currency(o[3])}</div><div style="color:#cbd5e1;font-size:13px;">{o[4][:80]}{"..." if o[4] and len(o[4])>80 else ""}</div></div>', unsafe_allow_html=True)
+    conn.close()
+    if st.button("Voltar ao Inicio"):
+        st.session_state["page"] = "Dashboard"; st.rerun()
+
+def cadastrar_contas():
+    st.markdown('<h1 style="color:#f8fafc;">CADASTRAR CONTAS</h1>', unsafe_allow_html=True)
+    st.markdown('<hr>', unsafe_allow_html=True)
+    inject_masks()
+    with st.expander("NOVO CADASTRO", expanded=True):
+        st.markdown('<p style="color:#fbbf24;font-size:13px;font-weight:700;">* Campos obrigatorios</p>', unsafe_allow_html=True)
+        esfera = st.selectbox("* 1. Selecione a Esfera", ["", "Federal", "Estadual", "Municipal"], key="esfera_cad")
+        if esfera:
+            fonte_mostrada = get_fonte(esfera)
+            cor_fonte = {"Federal": "#3b82f6", "Estadual": "#22c55e", "Municipal": "#eab308"}
+            st.markdown(f'''
+            <div style="background:rgba(30,41,59,0.9);border-radius:10px;padding:15px;margin-bottom:15px;border-left:5px solid {cor_fonte.get(esfera, "#22d3ee")};">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div><span style="color:#cbd5e1;font-size:14px;">Fonte vinculada:</span><span style="color:#22d3ee;font-size:30px;font-weight:800;margin-left:10px;">{fonte_mostrada}</span></div>
+                    <div><span style="background:{"#3b82f6" if esfera=="Federal" else "#22c55e" if esfera=="Estadual" else "#eab308"};color:#fff;padding:6px 14px;border-radius:6px;font-size:14px;font-weight:700;">{esfera.upper()}</span></div>
+                </div>
+            </div>''', unsafe_allow_html=True)
+        else:
+            st.markdown('<p style="color:#cbd5e1;font-size:14px;">Selecione a Esfera para ver a Fonte</p>', unsafe_allow_html=True)
+        num_conta = st.text_input("* 2. Numero da Conta", key="num_conta_cad")
+        ref_contrato = st.selectbox("Referencia (opcional)", ["", "Resolucao", "Deliberacao", "Portaria"])
+        num_ano_ref = st.text_input("Numero/Ano (opcional)")
+        st.markdown('<p style="color:#22d3ee;font-size:15px;font-weight:700;margin-top:12px;">3. Selecione o Tipo de Recurso</p>', unsafe_allow_html=True)
+        tipo_recurso = st.selectbox("* Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], key="tipo_recurso_cad")
+        val_custeio_str = ""
+        val_invest_str = ""
+        vt = 0.0
+        if tipo_recurso:
+            st.markdown('<p 
