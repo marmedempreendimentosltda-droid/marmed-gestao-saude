@@ -248,4 +248,258 @@ def esfera_detalhe():
         gasto = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE conta_receber_id=?", (cid,)).fetchone()[0]
         saldo = vtotal - gasto
         with st.expander(f"{num} - Fonte {fonte}"):
-            st.markdown(f'<p style="color:#cbd5e1;">N: <strong style="color:#f8fafc;">{num}</strong> | Fonte: <strong style="color:#22d3ee;">{fonte}</strong> | Original: <strong style="color:#38bdf8;">{format_currency(vtotal)}</strong> | Saldo: <strong style="color:{"#22c55e" if saldo>0 else "#ef4444"}">{format_currency(saldo)}</strong></p>', 
+            st.markdown(f'<p style="color:#cbd5e1;">N: <strong style="color:#f8fafc;">{num}</strong> | Fonte: <strong style="color:#22d3ee;">{fonte}</strong> | Original: <strong style="color:#38bdf8;">{format_currency(vtotal)}</strong> | Saldo: <strong style="color:{"#22c55e" if saldo>0 else "#ef4444"}">{format_currency(saldo)}</strong></p>', unsafe_allow_html=True)
+            for o in conn.execute("SELECT ficha, tipo_despesa, data_compra, valor_compra, produto_servico FROM ordens_compra WHERE conta_receber_id=? ORDER BY id DESC", (cid,)).fetchall():
+                st.markdown(f'<div style="background:rgba(30,41,59,0.8);border-radius:10px;padding:12px;margin-bottom:8px;border-left:3px solid #22d3ee;"><div style="color:#cbd5e1;font-size:12px;">Ficha: <strong style="color:#f8fafc;">{o[0] or "--"}</strong> | <strong style="color:#22d3ee;">{o[1] or "--"}</strong> | {o[2] or "--"}</div><div style="color:#38bdf8;font-size:16px;font-weight:700;">{format_currency(o[3])}</div><div style="color:#cbd5e1;font-size:13px;">{o[4][:80]}{"..." if o[4] and len(o[4])>80 else ""}</div></div>', unsafe_allow_html=True)
+    conn.close()
+    if st.button("Voltar ao Inicio"):
+        st.session_state["page"] = "Dashboard"; st.rerun()
+
+def cadastrar_contas():
+    st.markdown('<h1 style="color:#f8fafc;">CADASTRAR CONTAS</h1>', unsafe_allow_html=True)
+    st.markdown('<hr>', unsafe_allow_html=True)
+    inject_masks()
+    with st.expander("NOVO CADASTRO", expanded=True):
+        st.markdown('<p style="color:#fbbf24;font-size:13px;font-weight:700;">* Campos obrigatorios</p>', unsafe_allow_html=True)
+        esfera = st.selectbox("* 1. Selecione a Esfera", ["", "Federal", "Estadual", "Municipal"], key="esfera_cad")
+        if esfera:
+            fonte_mostrada = get_fonte(esfera)
+            cor_fonte = {"Federal": "#3b82f6", "Estadual": "#22c55e", "Municipal": "#eab308"}
+            st.markdown(f'''
+            <div style="background:rgba(30,41,59,0.9);border-radius:10px;padding:15px;margin-bottom:15px;border-left:5px solid {cor_fonte.get(esfera, "#22d3ee")};">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div><span style="color:#cbd5e1;font-size:14px;">Fonte vinculada:</span><span style="color:#22d3ee;font-size:30px;font-weight:800;margin-left:10px;">{fonte_mostrada}</span></div>
+                    <div><span style="background:{"#3b82f6" if esfera=="Federal" else "#22c55e" if esfera=="Estadual" else "#eab308"};color:#fff;padding:6px 14px;border-radius:6px;font-size:14px;font-weight:700;">{esfera.upper()}</span></div>
+                </div>
+            </div>''', unsafe_allow_html=True)
+        else:
+            st.markdown('<p style="color:#cbd5e1;font-size:14px;">Selecione a Esfera para ver a Fonte</p>', unsafe_allow_html=True)
+        num_conta = st.text_input("* 2. Numero da Conta", key="num_conta_cad")
+        ref_contrato = st.selectbox("Referencia (opcional)", ["", "Resolucao", "Deliberacao", "Portaria"])
+        num_ano_ref = st.text_input("Numero/Ano (opcional)")
+        st.markdown('<p style="color:#22d3ee;font-size:15px;font-weight:700;margin-top:12px;">3. Selecione o Tipo de Recurso</p>', unsafe_allow_html=True)
+        tipo_recurso = st.selectbox("* Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], key="tipo_recurso_cad")
+        val_custeio_str = ""
+        val_invest_str = ""
+        vt = 0.0
+        if tipo_recurso:
+            st.markdown('<p style="color:#22d3ee;font-size:15px;font-weight:700;margin-top:12px;">4. Informe o(s) Valor(es) - Digite apenas numeros</p>', unsafe_allow_html=True)
+            st.markdown('<p style="color:#cbd5e1;font-size:12px;margin-bottom:5px;">O sistema coloca ponto e virgula automaticamente</p>', unsafe_allow_html=True)
+            if tipo_recurso in ["Custeio", "Custeio/Investimento"]:
+                c1, c2 = st.columns([1, 3])
+                with c1:
+                    st.markdown('<p style="color:#06b6d4;font-weight:800;margin-top:8px;font-size:16px;">R$ CUSTEIO</p>', unsafe_allow_html=True)
+                with c2:
+                    val_custeio_str = st.text_input("", key="val_custeio_cad", label_visibility="collapsed")
+            if tipo_recurso in ["Investimento", "Custeio/Investimento"]:
+                c1, c2 = st.columns([1, 3])
+                with c1:
+                    st.markdown('<p style="color:#06b6d4;font-weight:800;margin-top:8px;font-size:16px;">R$ INVESTIMENTO</p>', unsafe_allow_html=True)
+                with c2:
+                    val_invest_str = st.text_input("", key="val_invest_cad", label_visibility="collapsed")
+            vc = parse_br_currency(val_custeio_str)
+            vi = parse_br_currency(val_invest_str)
+            vt = vc + vi
+            if vt > 0:
+                st.markdown(f'<p style="color:#38bdf8;font-size:20px;font-weight:800;margin-top:10px;">Total: {format_currency(vt)}</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#22d3ee;font-size:15px;font-weight:700;margin-top:12px;">5. Data de Recebimento</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#cbd5e1;font-size:12px;margin-bottom:5px;">Clique no campo para abrir o calendario</p>', unsafe_allow_html=True)
+        data_receb = st.date_input("* Data Recebimento", value=datetime.now(), format="DD/MM/YYYY", key="data_receb_cad")
+        st.markdown('<p style="color:#22d3ee;font-size:15px;font-weight:700;margin-top:12px;">6. Informacoes Adicionais</p>', unsafe_allow_html=True)
+        prog = st.text_input("Programa/Politica (opcional)")
+        setor = st.text_input("Setor (opcional)")
+        ref_uso = st.text_input("Referencia para Uso - Material/Servico")
+        if st.button("Salvar Conta"):
+            erros = []
+            if not esfera: erros.append("Esfera")
+            if not num_conta: erros.append("Numero da Conta")
+            if not tipo_recurso: erros.append("Tipo de Recurso")
+            if menor_ou_igual(vt, 0): erros.append("Valor (preencha Custeio ou Investimento)")
+            if erros:
+                st.error(f"Preencha: {', '.join(erros)}")
+            else:
+                conn = sqlite3.connect("marmed.db")
+                conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto, referencia_uso) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, parse_br_currency(val_custeio_str), parse_br_currency(val_invest_str), vt, data_receb.strftime("%d/%m/%Y"), prog, setor, ref_uso))
+                conn.commit(); conn.close()
+                st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
+
+def contas_cadastradas():
+    st.markdown('<h1 style="color:#f8fafc;">CONTAS CADASTRADAS</h1>', unsafe_allow_html=True)
+    st.markdown('<hr>', unsafe_allow_html=True)
+    conn = sqlite3.connect("marmed.db")
+    tabs = st.tabs(["FEDERAL", "ESTADUAL", "MUNICIPAL"])
+    for tab_idx, esf in enumerate(["Federal", "Estadual", "Municipal"]):
+        with tabs[tab_idx]:
+            r = conn.execute("SELECT id, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto, COALESCE(referencia_uso, '') FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esf,)).fetchall()
+            if r:
+                import pandas as pd
+                d = [(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12]) for x in r]
+                pdf = pd.DataFrame(d, columns=["ID", "Conta", "Fonte", "Ref.", "N/Ano", "Tipo", "Custeio", "Invest.", "Total", "Data", "Programa", "Setor", "Ref.Uso"])
+                for c in ["Custeio", "Invest.", "Total"]: pdf[c] = pdf[c].apply(lambda x: format_currency(x))
+                st.dataframe(pdf, use_container_width=True, hide_index=True)
+                st.markdown(f'<p style="color:#cbd5e1;">Total: <strong style="color:#f8fafc;">{len(r)}</strong> conta(s) {esf}</p>', unsafe_allow_html=True)
+                st.markdown(f'<h4 style="color:#22d3ee;">Editar / Excluir - {esf}</h4>', unsafe_allow_html=True)
+                opts = {f"{x[1]} - Fonte {x[2]} (ID {x[0]})": x[0] for x in r}
+                opts["Selecione..."] = None
+                esc = st.selectbox(f"Selecione a conta", list(opts.keys()), key=f"sel_{tab_idx}")
+                if esc and opts[esc]:
+                    rid = opts[esc]
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("Editar", key=f"e_{tab_idx}_{rid}"): st.session_state["edit_conta_id"] = rid; st.session_state["page"] = "EDITAR CONTA"; st.rerun()
+                    with c2:
+                        if st.button("Excluir", key=f"d_{tab_idx}_{rid}"): conn.execute("DELETE FROM contas_receber WHERE id=?", (rid,)); conn.commit(); st.success("Excluida!"); st.rerun()
+            else: st.markdown(f'<p style="color:#cbd5e1;">Nenhuma conta {esf}.</p>', unsafe_allow_html=True)
+    st.markdown('<hr>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#fbbf24;text-align:center;font-size:22px;font-weight:800;">RECURSOS DE EXERCICIOS ANTERIORES / SUPERAVIT FINANCEIRO</h2>', unsafe_allow_html=True)
+    sup = conn.execute("SELECT id, esfera, fonte_original, fonte_superavit, saldo_total, saldo_restante, created_at FROM superavit ORDER BY id DESC").fetchall()
+    if sup:
+        import pandas as pd
+        spd = pd.DataFrame(sup, columns=["ID", "Esfera", "F. Original", "F. Superavit", "Saldo Total", "Saldo Restante", "Criado em"])
+        spd["Saldo Total"] = spd["Saldo Total"].apply(lambda x: format_currency(x))
+        spd["Saldo Restante"] = spd["Saldo Restante"].apply(lambda x: format_currency(x))
+        st.dataframe(spd, use_container_width=True, hide_index=True)
+    else: st.markdown('<p style="color:#cbd5e1;">Nenhum superavit registrado.</p>', unsafe_allow_html=True)
+    if st.button("MIGRAR SALDOS PARA SUPERAVIT"):
+        for esf in ["Federal", "Estadual"]:
+            total = conn.execute("SELECT COALESCE(SUM(valor_total),0) FROM contas_receber WHERE esfera=?", (esf,)).fetchone()[0]
+            if total > 0:
+                fo = get_fonte(esf); fs = get_fonte_superavit(esf)
+                exist = conn.execute("SELECT id FROM superavit WHERE esfera=?", (esf,)).fetchone()
+                agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                if exist: conn.execute("UPDATE superavit SET saldo_total=saldo_total+?, saldo_restante=saldo_restante+?, created_at=? WHERE esfera=?", (total, total, agora, esf))
+                else: conn.execute("INSERT INTO superavit (esfera, fonte_original, fonte_superavit, saldo_total, saldo_restante, created_at) VALUES (?,?,?,?,?,?)", (esf, fo, fs, total, total, agora))
+        conn.commit(); st.success("Saldos migrados!"); st.rerun()
+    conn.close()
+
+def editar_conta():
+    st.markdown('<h1 style="color:#f8fafc;">EDITAR CONTA</h1>', unsafe_allow_html=True)
+    st.markdown('<hr>', unsafe_allow_html=True)
+    inject_masks()
+    rid = st.session_state.get("edit_conta_id")
+    if not rid: st.error("Nenhuma conta."); return
+    conn = sqlite3.connect("marmed.db")
+    row = conn.execute("SELECT * FROM contas_receber WHERE id=?", (rid,)).fetchone()
+    if not row: conn.close(); st.error("Nao encontrada."); return
+    esfera = st.selectbox("* Esfera", ["", "Federal", "Estadual", "Municipal"], index=["", "Federal", "Estadual", "Municipal"].index(row[1]) if row[1] in ["", "Federal", "Estadual", "Municipal"] else 0, key="esf_edit")
+    if esfera: st.markdown(f'<p style="color:#22d3ee;font-weight:800;font-size:18px;">Fonte: {get_fonte(esfera)}</p>', unsafe_allow_html=True)
+    num_conta = st.text_input("* NConta", value=row[2] or "")
+    ref_contrato = st.selectbox("Ref", ["", "Resolucao", "Deliberacao", "Portaria"], index=["", "Resolucao", "Deliberacao", "Portaria"].index(row[4]) if row[4] in ["", "Resolucao", "Deliberacao", "Portaria"] else 0)
+    num_ano_ref = st.text_input("N/Ano", value=row[5] or "")
+    tipo_recurso = st.selectbox("* Tipo", ["", "Custeio", "Investimento", "Custeio/Investimento"], index=["", "Custeio", "Investimento", "Custeio/Investimento"].index(row[6]) if row[6] in ["", "Custeio", "Investimento", "Custeio/Investimento"] else 0, key="tipo_edit")
+    vc_str = st.text_input("Custeio", value=format_currency(row[7] or 0).replace("R$ ", ""), key="val_custeio_edit")
+    vi_str = st.text_input("Investimento", value=format_currency(row[8] or 0).replace("R$ ", ""), key="val_invest_edit")
+    vc = parse_br_currency(vc_str); vi = parse_br_currency(vi_str)
+    try:
+        data_receb = st.date_input("Data", value=datetime.strptime(row[10], "%d/%m/%Y") if row[10] else datetime.now(), format="DD/MM/YYYY", key="data_edit")
+    except:
+        data_receb = st.date_input("Data", value=datetime.now(), format="DD/MM/YYYY", key="data_edit")
+    prog = st.text_input("Programa", value=row[11] or "")
+    setor = st.text_input("Setor", value=row[12] or "")
+    ref_uso = st.text_input("Ref.Uso - Material/Servico", value=row[13] if len(row) > 13 and row[13] else "")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Salvar"):
+            try:
+                conn.execute("UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?, valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=?, referencia_uso=? WHERE id=?", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vc+vi, data_receb.strftime("%d/%m/%Y"), prog, setor, ref_uso, rid))
+            except:
+                conn.execute("UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?, valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=? WHERE id=?", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vc+vi, data_receb.strftime("%d/%m/%Y"), prog, setor, rid))
+            conn.commit(); conn.close(); st.success("Atualizada!"); st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
+    with c2:
+        if st.button("Voltar"): st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
+    conn.close()
+
+def realizar_compras():
+    st.markdown('<h1 style="color:#f8fafc;">REALIZAR COMPRAS</h1>', unsafe_allow_html=True)
+    st.markdown('<hr>', unsafe_allow_html=True)
+    inject_masks()
+    conn = sqlite3.connect("marmed.db")
+    
+    st.markdown('<h3 style="color:#22d3ee;font-weight:800;">Nova Solicitacao</h3>', unsafe_allow_html=True)
+    tabs = st.tabs(["FEDERAL", "ESTADUAL", "MUNICIPAL"])
+    for tab_idx, esf in enumerate(["Federal", "Estadual", "Municipal"]):
+        with tabs[tab_idx]:
+            contas = conn.execute("""
+                SELECT cr.id, cr.numero_conta, cr.fonte, cr.valor_total, 
+                       cr.programa_politica, cr.setor_gasto, COALESCE(cr.referencia_uso, '') 
+                FROM contas_receber cr WHERE cr.esfera=? ORDER BY cr.id DESC
+            """, (esf,)).fetchall()
+            
+            if not contas:
+                st.markdown(f'<p style="color:#cbd5e1;">Nenhuma conta {esf} disponivel.</p>', unsafe_allow_html=True)
+                continue
+            
+            for cid, num, fonte, vtotal, prog, setor, refuso in contas:
+                gasto = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE conta_receber_id=?", (cid,)).fetchone()[0]
+                saldo = vtotal - gasto
+                
+                with st.expander(f"{num} - Fonte {fonte}"):
+                    st.markdown(f'''
+                    <div style="background:rgba(30,41,59,0.85);border-radius:10px;padding:15px;margin-bottom:10px;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                            <div style="color:#cbd5e1;font-size:14px;">Valor: <span style="color:#38bdf8;font-weight:800;font-size:18px;">{format_currency(vtotal)}</span></div>
+                            <div style="color:#cbd5e1;font-size:14px;">Saldo: <span style="color:{"#22c55e" if saldo>0 else "#ef4444"};font-weight:800;font-size:18px;">{format_currency(saldo)}</span></div>
+                        </div>
+                        <div style="border-top:2px solid rgba(34,211,238,0.25);padding-top:8px;margin-top:4px;">
+                            <div style="color:#f8fafc;font-size:13px;"><strong style="color:#22d3ee;">Programa:</strong> {prog or "--"}</div>
+                            <div style="color:#f8fafc;font-size:13px;margin-top:3px;"><strong style="color:#22d3ee;">Setor:</strong> {setor or "--"}</div>
+                            <div style="color:#f8fafc;font-size:13px;margin-top:3px;"><strong style="color:#22d3ee;">Ref.Uso:</strong> {refuso or "--"}</div>
+                        </div>
+                    </div>''', unsafe_allow_html=True)
+                    
+                    if esf != "Municipal":
+                        ss = conn.execute("SELECT COALESCE(SUM(saldo_restante),0) FROM superavit WHERE esfera=? AND saldo_restante>0", (esf,)).fetchone()[0]
+                        if maior_que(ss, 0): st.warning(f"Superavit de {format_currency(ss)}. Utilize antes.")
+                    
+                    with st.form(key=f"fc_{esf}_{cid}"):
+                        cA, cB = st.columns(2)
+                        with cA:
+                            ficha = st.text_input("Ficha")
+                            td = st.selectbox("Despesa", ["", "Material de Consumo", "Servico PF", "Servico PJ", "Distribuicao Gratuita"], key=f"td_{esf}_{cid}")
+                            st.markdown('<p style="color:#cbd5e1;font-size:12px;">Clique para abrir o calendario</p>', unsafe_allow_html=True)
+                            data_c = st.date_input("Data Compra", value=datetime.now(), format="DD/MM/YYYY", key=f"dc_{esf}_{cid}")
+                        with cB:
+                            valor_c_str = st.text_input("Valor", key=f"vc_{esf}_{cid}")
+                            valor_c = parse_br_currency(valor_c_str)
+                            if maior_que(valor_c, saldo): st.markdown(f'<p style="color:#ef4444;font-weight:700;">Excede {format_currency(saldo)}</p>', unsafe_allow_html=True)
+                        prod = st.text_area("Produto/Servico", height=120)
+                        if st.form_submit_button("Solicitar"):
+                            erros = []
+                            if not ficha: erros.append("Ficha")
+                            if not td: erros.append("Tipo")
+                            if menor_ou_igual(valor_c, 0): erros.append("Valor")
+                            if not prod: erros.append("Produto")
+                            if maior_que(valor_c, saldo): erros.append("Valor excede saldo")
+                            if erros:
+                                st.error(f"Preencha: {', '.join(erros)}")
+                            else:
+                                conn.execute("INSERT INTO ordens_compra (conta_receber_id, esfera, numero_conta, fonte, ficha, tipo_despesa, data_compra, valor_compra, produto_servico, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (cid, esf, num, fonte, ficha, td, data_c.strftime("%d/%m/%Y"), valor_c, prod, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
+                                conn.commit()
+                                st.success("Solicitacao registrada! Campos limpos para nova solicitacao.")
+                                st.rerun()
+    
+    st.markdown('<hr>', unsafe_allow_html=True)
+    st.markdown('<h3 style="color:#22d3ee;font-weight:800;">Editar / Excluir Solicitacoes</h3>', unsafe_allow_html=True)
+    
+    ordens = conn.execute("""
+        SELECT oc.id, oc.esfera, oc.numero_conta, oc.ficha, oc.valor_compra, 
+               oc.produto_servico, oc.data_compra, oc.tipo_despesa,
+               cr.programa_politica, cr.setor_gasto, COALESCE(cr.referencia_uso, '')
+        FROM ordens_compra oc
+        LEFT JOIN contas_receber cr ON oc.conta_receber_id = cr.id
+        ORDER BY oc.id DESC
+    """).fetchall()
+    
+    if ordens:
+        for o in ordens:
+            oid = o[0]; esf_ord = o[1]; num_ord = o[2]; ficha = o[3] or "--"
+            val_ord = o[4]; prod_ord = o[5] or ""; data_ord = o[6] or ""
+            tipo_ord = o[7] or ""; prog_ord = o[8] or ""; setor_ord = o[9] or ""
+            refuso_ord = o[10] or ""
+            
+            with st.expander(f"{esf_ord} - Conta {num_ord} - Ficha {ficha} (R$ {val_ord:.2f})"):
+                st.markdown(f'''
+                <div style="background:rgba(30,41,59,0.85);border-radius:10px;padding:15px;margin-bottom:8px;border-left:4px solid #22d3ee;">
+                    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;">
+                        <div style="color:#cbd5e1;font-size:12px;">Ficha: <strong style="color:#f8fafc;">{ficha}</strong></div>
+     
