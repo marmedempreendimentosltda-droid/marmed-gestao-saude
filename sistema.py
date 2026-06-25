@@ -54,10 +54,10 @@ def parse_br_currency(val):
     except:
         return 0.0
 
-def menor_ou_igual(a, b):
+def eh_menor_ou_igual(a, b):
     return a <= b
 
-def maior_que(a, b):
+def eh_maior_que(a, b):
     return a > b
 
 def inject_masks():
@@ -230,4 +230,24 @@ def dashboard():
         tg = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE esfera=?", (esf,)).fetchone()[0]
         saldo = tc - tg
         with cols[i]:
- 
+            st.markdown(f'<div style="background:linear-gradient(135deg,#1a2a3a,#0f2027);border-radius:15px;padding:15px;text-align:center;border-left:5px solid {cor};border:1px solid rgba(34,211,238,0.4);margin-bottom:8px;"><div style="color:#38bdf8;font-size:12px;font-weight:700;">{tit}</div><div style="color:#f8fafc;font-size:20px;font-weight:800;">{format_currency(tc)}</div><div style="color:#cbd5e1;font-size:11px;">Saldo: <span style="color:{cor};font-weight:700;">{format_currency(saldo)}</span></div></div>', unsafe_allow_html=True)
+            if st.button(f"Ver {esf}", key=f"b_{esf}"):
+                st.session_state["esfera_view"] = esf
+                st.session_state["page"] = "ESFERA DETALHE"; st.rerun()
+    tc = conn.execute("SELECT COUNT(*) FROM contas_receber").fetchone()[0]
+    tco = conn.execute("SELECT COUNT(*) FROM ordens_compra").fetchone()[0]
+    conn.close()
+    st.markdown(f'<p style="text-align:center;color:#cbd5e1;font-size:13px;margin-top:10px;">{tc} conta(s) | {tco} ordem(ns) de compra - {datetime.now().strftime("%d/%m/%Y")}</p>', unsafe_allow_html=True)
+
+def esfera_detalhe():
+    esf = st.session_state.get("esfera_view", "Federal")
+    st.markdown(f'<h1 style="color:#f8fafc;">{esf.upper()}</h1>', unsafe_allow_html=True)
+    st.markdown('<hr>', unsafe_allow_html=True)
+    conn = sqlite3.connect("marmed.db")
+    for cid, num, fonte, vtotal in conn.execute("SELECT id, numero_conta, fonte, valor_total FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esf,)).fetchall():
+        gasto = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE conta_receber_id=?", (cid,)).fetchone()[0]
+        saldo = vtotal - gasto
+        with st.expander(f"{num} - Fonte {fonte}"):
+            st.markdown(f'<p style="color:#cbd5e1;">N: <strong style="color:#f8fafc;">{num}</strong> | Fonte: <strong style="color:#22d3ee;">{fonte}</strong> | Original: <strong style="color:#38bdf8;">{format_currency(vtotal)}</strong> | Saldo: <strong style="color:{"#22c55e" if saldo>0 else "#ef4444"}">{format_currency(saldo)}</strong></p>', unsafe_allow_html=True)
+            for o in conn.execute("SELECT ficha, tipo_despesa, data_compra, valor_compra, produto_servico FROM ordens_compra WHERE conta_receber_id=? ORDER BY id DESC", (cid,)).fetchall():
+                st.markdown(f'<div style="background:rgba(30,41,59,0.8);border-radius:10px;padding:12px;margin-bottom:8px;border-left:3px solid #22d3ee;"><div style="color:#cbd5e1;font-size:12px;">Ficha: <strong style="color:#f8fafc;">{o[0] or "--"}</strong> | <strong 
