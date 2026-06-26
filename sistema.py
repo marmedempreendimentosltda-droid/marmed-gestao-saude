@@ -587,4 +587,218 @@ def get_modalidades(usuario_id):
 def get_modalidades_contratos(usuario_id):
     conn = sqlite3.connect('marmed.db')
     c = conn.cursor()
-    c.execute("SELECT DISTINCT modalidade FROM contratos WHERE usuario_id = ? AND modalidade IS NOT NULL",
+    c.execute("SELECT DISTINCT modalidade FROM contratos WHERE usuario_id = ? AND modalidade IS NOT NULL", (usuario_id,))
+    modalidades = [row[0] for row in c.fetchall()]
+    conn.close()
+    return modalidades
+
+def get_modalidades_licitacoes(usuario_id):
+    conn = sqlite3.connect('marmed.db')
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT modalidade FROM licitacoes WHERE usuario_id = ? AND modalidade IS NOT NULL", (usuario_id,))
+    modalidades = [row[0] for row in c.fetchall()]
+    conn.close()
+    return modalidades
+
+def get_naturezas(usuario_id):
+    conn = sqlite3.connect('marmed.db')
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT natureza_despesa FROM empenhos WHERE usuario_id = ? AND natureza_despesa IS NOT NULL", (usuario_id,))
+    naturezas = [row[0] for row in c.fetchall()]
+    conn.close()
+    return naturezas
+
+def get_acoes(usuario_id):
+    conn = sqlite3.connect('marmed.db')
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT acao FROM empenhos WHERE usuario_id = ? AND acao IS NOT NULL", (usuario_id,))
+    acoes = [row[0] for row in c.fetchall()]
+    conn.close()
+    return acoes
+
+def get_categorias_almoxarifado(usuario_id):
+    conn = sqlite3.connect('marmed.db')
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT categoria FROM almoxarifado WHERE usuario_id = ? AND categoria IS NOT NULL", (usuario_id,))
+    categorias = [row[0] for row in c.fetchall()]
+    conn.close()
+    return categorias
+
+def get_localizacoes_almoxarifado(usuario_id):
+    conn = sqlite3.connect('marmed.db')
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT localizacao FROM almoxarifado WHERE usuario_id = ? AND localizacao IS NOT NULL", (usuario_id,))
+    localizacoes = [row[0] for row in c.fetchall()]
+    conn.close()
+    return localizacoes
+
+def get_cargos_rh(usuario_id):
+    conn = sqlite3.connect('marmed.db')
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT cargo FROM rh WHERE usuario_id = ? AND cargo IS NOT NULL", (usuario_id,))
+    cargos = [row[0] for row in c.fetchall()]
+    conn.close()
+    return cargos
+
+def get_lotacoes_rh(usuario_id):
+    conn = sqlite3.connect('marmed.db')
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT lotacao FROM rh WHERE usuario_id = ? AND lotacao IS NOT NULL", (usuario_id,))
+    lotacoes = [row[0] for row in c.fetchall()]
+    conn.close()
+    return lotacoes
+
+def get_vinculos_rh(usuario_id):
+    conn = sqlite3.connect('marmed.db')
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT tipo_vinculo FROM rh WHERE usuario_id = ? AND tipo_vinculo IS NOT NULL", (usuario_id,))
+    vinculos = [row[0] for row in c.fetchall()]
+    conn.close()
+    return vinculos
+
+def get_situacoes_convenios(usuario_id):
+    conn = sqlite3.connect('marmed.db')
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT situacao FROM convenios WHERE usuario_id = ? AND situacao IS NOT NULL", (usuario_id,))
+    situacoes = [row[0] for row in c.fetchall()]
+    conn.close()
+    return situacoes
+
+init_db()
+
+if 'usuario_id' not in st.session_state:
+    st.session_state.usuario_id = None
+if 'usuario_nome' not in st.session_state:
+    st.session_state.usuario_nome = None
+if 'usuario_tipo' not in st.session_state:
+    st.session_state.usuario_tipo = None
+if 'pagina' not in st.session_state:
+    st.session_state.pagina = 'login'
+
+st.markdown("""
+<style>
+    .stApp {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .login-container {
+        background: white;
+        padding: 2rem;
+        border-radius: 10px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        max-width: 400px;
+        margin: 100px auto;
+    }
+    .login-title {
+        text-align: center;
+        color: #667eea;
+        font-size: 2rem;
+        margin-bottom: 1.5rem;
+    }
+    .stButton button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 0.5rem 2rem;
+        border-radius: 5px;
+        font-weight: bold;
+        width: 100%;
+    }
+    .stButton button:hover {
+        opacity: 0.9;
+    }
+    .success-msg {
+        color: #28a745;
+        text-align: center;
+        padding: 0.5rem;
+    }
+    .error-msg {
+        color: #dc3545;
+        text-align: center;
+        padding: 0.5rem;
+    }
+    .metric-card {
+        background: white;
+        padding: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        text-align: center;
+    }
+    .metric-value {
+        font-size: 1.8rem;
+        font-weight: bold;
+        color: #667eea;
+    }
+    .metric-label {
+        font-size: 0.9rem;
+        color: #666;
+    }
+    .section-title {
+        color: #667eea;
+        font-size: 1.3rem;
+        font-weight: bold;
+        margin: 1rem 0;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #667eea;
+    }
+    .status-ativo {
+        color: #28a745;
+        font-weight: bold;
+    }
+    .status-pendente {
+        color: #ffc107;
+        font-weight: bold;
+    }
+    .status-concluido {
+        color: #17a2b8;
+        font-weight: bold;
+    }
+    .status-inativo {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    .info-card {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #667eea;
+        margin: 0.5rem 0;
+    }
+    .info-label {
+        font-weight: bold;
+        color: #495057;
+    }
+    .info-value {
+        color: #212529;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+if st.session_state.pagina == 'login':
+    with st.container():
+        st.markdown('<div class="login-container">', unsafe_allow_html=True)
+        st.markdown('<div class="login-title">MARMED</div>', unsafe_allow_html=True)
+        st.markdown('<p style="text-align:center;color:#666;">Sistema de Gestao Publica</p>', unsafe_allow_html=True)
+
+        tab1, tab2 = st.tabs(["Entrar", "Cadastrar"])
+
+        with tab1:
+            with st.form("login_form"):
+                email = st.text_input("Email")
+                senha = st.text_input("Senha", type="password")
+                submit = st.form_submit_button("Entrar")
+                if submit:
+                    usuario = verificar_login(email, senha)
+                    if usuario:
+                        st.session_state.usuario_id = usuario[0]
+                        st.session_state.usuario_nome = usuario[1]
+                        st.session_state.usuario_tipo = usuario[4]
+                        st.session_state.pagina = 'dashboard'
+                        st.rerun()
+                    else:
+                        st.error("Email ou senha incorretos!")
+
+        with tab2:
+            with st.form("cadastro_form"):
+                nome = st.text_input("Nome completo")
+                email = st.text_input("Email")
+                senha = st.text_input("Senha", 
