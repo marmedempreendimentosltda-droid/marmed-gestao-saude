@@ -2,7 +2,7 @@ import streamlit as st
 import sqlite3
 import hashlib
 import re
-from datetime import datetime
+from datetime import datetime, date
 
 st.set_page_config(page_title="MARMED", layout="wide")
 
@@ -62,22 +62,6 @@ def inject_masks():
             document.querySelectorAll('[data-testid="stTextInput"]').forEach(function(el) {
                 var label = el.querySelector('label');
                 var input = el.querySelector('input');
-                if (label && input && !input.dataset.maskDate && /data|recebimento/i.test(label.textContent)) {
-                    input.dataset.maskDate = '1';
-                    input.inputMode = 'numeric';
-                    input.setAttribute('autocomplete', 'off');
-                    input.addEventListener('input', function() {
-                        var v = this.value.replace(/\D/g, '').substring(0, 8);
-                        if (v.length > 4) v = v.substring(0,2) + '/' + v.substring(2,4) + '/' + v.substring(4);
-                        else if (v.length > 2) v = v.substring(0,2) + '/' + v.substring(2);
-                        this.value = v;
-                    });
-                    if (input.value) { input.dispatchEvent(new Event('input')); }
-                }
-            });
-            document.querySelectorAll('[data-testid="stTextInput"]').forEach(function(el) {
-                var label = el.querySelector('label');
-                var input = el.querySelector('input');
                 if (label && input && !input.dataset.maskMoney && /custeio|investimento|valor|compra/i.test(label.textContent)) {
                     input.dataset.maskMoney = '1';
                     input.inputMode = 'numeric';
@@ -85,7 +69,7 @@ def inject_masks():
                     input.addEventListener('input', function() {
                         var v = this.value.replace(/\D/g, '');
                         if (v.length === 0) { this.value = ''; return; }
-                        while (v.length &lt; 3) v = '0' + v;
+                        while (v.length < 3) v = '0' + v;
                         var cents = v.substring(v.length - 2);
                         var reais = v.substring(0, v.length - 2);
                         reais = reais.replace(/^0+/, '');
@@ -102,26 +86,15 @@ def inject_masks():
                 }
             });
             document.querySelectorAll('input:not([type="hidden"])').forEach(function(input) {
-                if (input.dataset.maskMoney || input.dataset.maskDate) return;
+                if (input.dataset.maskMoney) return;
                 var parentText = (input.parentElement ? input.parentElement.textContent : '') + ' ' + (input.placeholder || '');
-                if (!input.dataset.maskDate && /data|recebimento/i.test(parentText)) {
-                    input.dataset.maskDate = '1';
-                    input.inputMode = 'numeric';
-                    input.addEventListener('input', function() {
-                        var v = this.value.replace(/\D/g, '').substring(0, 8);
-                        if (v.length > 4) v = v.substring(0,2) + '/' + v.substring(2,4) + '/' + v.substring(4);
-                        else if (v.length > 2) v = v.substring(0,2) + '/' + v.substring(2);
-                        this.value = v;
-                    });
-                    if (input.value) { input.dispatchEvent(new Event('input')); }
-                }
                 if (!input.dataset.maskMoney && /custeio|investimento|valor|compra/i.test(parentText)) {
                     input.dataset.maskMoney = '1';
                     input.inputMode = 'numeric';
                     input.addEventListener('input', function() {
                         var v = this.value.replace(/\D/g, '');
                         if (v.length === 0) { this.value = ''; return; }
-                        while (v.length &lt; 3) v = '0' + v;
+                        while (v.length < 3) v = '0' + v;
                         var cents = v.substring(v.length - 2);
                         var reais = v.substring(0, v.length - 2);
                         reais = reais.replace(/^0+/, '');
@@ -205,6 +178,8 @@ def login_page():
         .stTextInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
         .stButton > button { background: linear-gradient(90deg, #06b6d4, #3b82f6) !important; color: #fff !important; font-weight: 700 !important; border-radius: 10px !important; border: none !important; width: 100%; padding: 12px !important; }
         .stSelectbox > div > div { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; border-radius: 10px !important; color: #e0f2fe !important; }
+        .stDateInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
+        .stDateInput label { color: #22d3ee !important; font-weight: 600; }
         .stNumberInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
         .stDataFrame { background: rgba(15, 23, 42, 0.6) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; border-radius: 10px !important; }
         .stDataFrame td { color: #e0f2fe !important; }
@@ -282,13 +257,13 @@ def cadastrar_contas():
         if esfera:
             fonte_mostrada = get_fonte(esfera)
             cor_fonte = {"Federal": "#3b82f6", "Estadual": "#22c55e", "Municipal": "#eab308"}
-            st.markdown(f'''
-            <div style="background:rgba(30,41,59,0.8);border-radius:10px;padding:15px;margin-bottom:15px;border-left:4px solid {cor_fonte.get(esfera, "#22d3ee")};">
+            st.markdown(f"""
+            <div style="background:rgba(30,41,59,0.8);border-radius:10px;padding:15px;margin-bottom:15px;border-left:4px solid {cor_fonte.get(esfera, '#22d3ee')};">
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                     <div><span style="color:#94a3b8;font-size:13px;">Fonte vinculada:</span><span style="color:#22d3ee;font-size:28px;font-weight:800;margin-left:10px;">{fonte_mostrada}</span></div>
-                    <div><span style="background:{"#3b82f6" if esfera=="Federal" else "#22c55e" if esfera=="Estadual" else "#eab308"};color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:700;">{esfera.upper()}</span></div>
+                    <div><span style="background:{'#3b82f6' if esfera=='Federal' else '#22c55e' if esfera=='Estadual' else '#eab308'};color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:700;">{esfera.upper()}</span></div>
                 </div>
-            </div>''', unsafe_allow_html=True)
+            </div>""", unsafe_allow_html=True)
         else:
             st.markdown('<p style="color:#64748b;font-size:13px;">Selecione a Esfera para ver a Fonte</p>', unsafe_allow_html=True)
         num_conta = st.text_input("* 2. Numero da Conta", key="num_conta_cad")
@@ -320,10 +295,8 @@ def cadastrar_contas():
             if vt > 0:
                 st.markdown(f'<p style="color:#00d4ff;font-size:18px;font-weight:700;margin-top:10px;">Total: {format_currency(vt)}</p>', unsafe_allow_html=True)
         st.markdown('<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">5. Data de Recebimento</p>', unsafe_allow_html=True)
-        st.markdown('<p style="color:#94a3b8;font-size:11px;margin-bottom:5px;">Digite apenas numeros - as barras sao inseridas automaticamente</p>', unsafe_allow_html=True)
-        data_receb = st.text_input("* Data Recebimento", key="data_receb_cad")
-        if not data_receb:
-            data_receb = datetime.now().strftime("%d/%m/%Y")
+        st.markdown('<p style="color:#94a3b8;font-size:11px;margin-bottom:5px;">Clique no campo para escolher a data no calendario</p>', unsafe_allow_html=True)
+        data_receb = st.date_input("* Data Recebimento", value=datetime.now(), format="DD/MM/YYYY", key="data_receb_cad")
         st.markdown('<p style="color:#7dd3fc;font-size:13px;font-weight:600;margin-top:10px;">6. Informacoes Adicionais</p>', unsafe_allow_html=True)
         prog = st.text_input("Programa/Politica (opcional)")
         setor = st.text_input("Setor (opcional)")
@@ -333,13 +306,12 @@ def cadastrar_contas():
             if not esfera: erros.append("Esfera")
             if not num_conta: erros.append("Numero da Conta")
             if not tipo_recurso: erros.append("Tipo de Recurso")
-            if vt &lt;= 0: erros.append("Valor (preencha Custeio ou Investimento)")
-            if not data_receb: erros.append("Data de Recebimento")
+            if vt <= 0: erros.append("Valor (preencha Custeio ou Investimento)")
             if erros:
                 st.error(f"Preencha: {', '.join(erros)}")
             else:
                 conn = sqlite3.connect("marmed.db")
-                conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto, referencia_uso) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, parse_br_currency(val_custeio_str), parse_br_currency(val_invest_str), vt, data_receb, prog, setor, ref_uso))
+                conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto, referencia_uso) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, parse_br_currency(val_custeio_str), parse_br_currency(val_invest_str), vt, data_receb.strftime("%d/%m/%Y"), prog, setor, ref_uso))
                 conn.commit(); conn.close()
                 st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
 
@@ -410,7 +382,10 @@ def editar_conta():
     vc_str = st.text_input("Custeio", value=format_currency(row[7] or 0).replace("R$ ", ""), key="val_custeio_edit")
     vi_str = st.text_input("Investimento", value=format_currency(row[8] or 0).replace("R$ ", ""), key="val_invest_edit")
     vc = parse_br_currency(vc_str); vi = parse_br_currency(vi_str)
-    data_receb = st.text_input("Data", value=row[10] or datetime.now().strftime("%d/%m/%Y"), key="data_edit")
+    try:
+        data_receb = st.date_input("Data", value=datetime.strptime(row[10], "%d/%m/%Y") if row[10] else datetime.now(), format="DD/MM/YYYY", key="data_edit")
+    except:
+        data_receb = st.date_input("Data", value=datetime.now(), format="DD/MM/YYYY", key="data_edit")
     prog = st.text_input("Programa", value=row[11] or "")
     setor = st.text_input("Setor", value=row[12] or "")
     ref_uso = st.text_input("Ref.Uso - Material/Servico", value=row[13] if len(row) > 13 and row[13] else "")
@@ -418,9 +393,9 @@ def editar_conta():
     with c1:
         if st.button("Salvar"):
             try:
-                conn.execute("UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?, valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=?, referencia_uso=? WHERE id=?", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vc+vi, data_receb, prog, setor, ref_uso, rid))
+                conn.execute("UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?, valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=?, referencia_uso=? WHERE id=?", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vc+vi, data_receb.strftime("%d/%m/%Y"), prog, setor, ref_uso, rid))
             except:
-                conn.execute("UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?, valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=? WHERE id=?", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vc+vi, data_receb, prog, setor, rid))
+                conn.execute("UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?, valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=? WHERE id=?", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vc+vi, data_receb.strftime("%d/%m/%Y"), prog, setor, rid))
             conn.commit(); conn.close(); st.success("Atualizada!"); st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
     with c2:
         if st.button("Voltar"): st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
@@ -451,18 +426,18 @@ def realizar_compras():
                 saldo = vtotal - gasto
                 
                 with st.expander(f"{num} - Fonte {fonte}"):
-                    st.markdown(f'''
+                    st.markdown(f"""
                     <div style="background:rgba(30,41,59,0.6);border-radius:10px;padding:12px;margin-bottom:10px;">
                         <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
                             <div style="color:#94a3b8;">Valor: <span style="color:#00d4ff;">{format_currency(vtotal)}</span></div>
-                            <div style="color:#94a3b8;">Saldo: <span style="color:{"#22c55e" if saldo>0 else "#ef4444"};">{format_currency(saldo)}</span></div>
+                            <div style="color:#94a3b8;">Saldo: <span style="color:{'#22c55e' if saldo>0 else '#ef4444'};">{format_currency(saldo)}</span></div>
                         </div>
                         <div style="border-top:1px solid rgba(34,211,238,0.15);padding-top:6px;margin-top:4px;">
                             <div style="color:#b0eaff;font-size:12px;"><strong>Programa:</strong> {prog or "--"}</div>
                             <div style="color:#b0eaff;font-size:12px;margin-top:2px;"><strong>Setor:</strong> {setor or "--"}</div>
                             <div style="color:#b0eaff;font-size:12px;margin-top:2px;"><strong>Ref.Uso:</strong> {refuso or "--"}</div>
                         </div>
-                    </div>''', unsafe_allow_html=True)
+                    </div>""", unsafe_allow_html=True)
                     
                     if esf != "Municipal":
                         ss = conn.execute("SELECT COALESCE(SUM(saldo_restante),0) FROM superavit WHERE esfera=? AND saldo_restante>0", (esf,)).fetchone()[0]
@@ -473,18 +448,20 @@ def realizar_compras():
                         with cA:
                             ficha = st.text_input("Ficha")
                             td = st.selectbox("Despesa", ["", "Material de Consumo", "Servico PF", "Servico PJ", "Distribuicao Gratuita"], key=f"td_{esf}_{cid}")
-                            data_c = st.text_input("Data Compra", value=datetime.now().strftime("%d/%m/%Y"), key=f"dc_{esf}_{cid}")
+                            data_c = st.date_input("Data Compra", value=datetime.now(), format="DD/MM/YYYY", key=f"dc_{esf}_{cid}")
                         with cB:
                             valor_c_str = st.text_input("Valor", key=f"vc_{esf}_{cid}")
                             valor_c = parse_br_currency(valor_c_str)
                             if valor_c > saldo: st.markdown(f'<p style="color:#ef4444;">Excede {format_currency(saldo)}</p>', unsafe_allow_html=True)
                         prod = st.text_area("Produto/Servico", height=120)
                         if st.form_submit_button("Solicitar"):
-                            erros = [x for x, v in [("Ficha", ficha), ("Tipo", td), ("Data", data_c), ("Valor", valor_c>0), ("Produto", prod), ("Saldo", valor_c&lt;=saldo)] if not v]
+                            erros = [x for x, v in [("Ficha", ficha), ("Tipo", td), ("Valor", valor_c>0), ("Produto", prod), ("Saldo", valor_c<=saldo)] if not v]
                             if erros: st.error(f"Preencha: {', '.join(erros)}")
                             else:
-                                conn.execute("INSERT INTO ordens_compra (conta_receber_id, esfera, numero_conta, fonte, ficha, tipo_despesa, data_compra, valor_compra, produto_servico, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (cid, esf, num, fonte, ficha, td, data_c, valor_c, prod, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
-                                conn.commit(); st.success("Registrada!"); st.rerun()
+                                conn.execute("INSERT INTO ordens_compra (conta_receber_id, esfera, numero_conta, fonte, ficha, tipo_despesa, data_compra, valor_compra, produto_servico, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (cid, esf, num, fonte, ficha, td, data_c.strftime("%d/%m/%Y"), valor_c, prod, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
+                                conn.commit()
+                                st.success("Solicitacao registrada com sucesso! Os campos serao limpos para nova solicitacao.")
+                                st.rerun()
     
     st.markdown('<hr>', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#7dd3fc;">Editar / Excluir Solicitacoes</h3>', unsafe_allow_html=True)
@@ -506,7 +483,7 @@ def realizar_compras():
             refuso_ord = o[10] or ""
             
             with st.expander(f"{esf_ord} - Conta {num_ord} - Ficha {ficha} (R$ {val_ord:.2f})"):
-                st.markdown(f'''
+                st.markdown(f"""
                 <div style="background:rgba(30,41,59,0.6);border-radius:10px;padding:12px;margin-bottom:8px;border-left:3px solid #22d3ee;">
                     <div style="display:flex;justify-content:space-between;flex-wrap:wrap;">
                         <div style="color:#94a3b8;font-size:11px;">Ficha: <span style="color:#e0f2fe;">{ficha}</span></div>
@@ -520,16 +497,16 @@ def realizar_compras():
                         <div style="color:#b0eaff;font-size:11px;margin-top:1px;"><strong>Setor:</strong> {setor_ord or "--"}</div>
                         <div style="color:#b0eaff;font-size:11px;margin-top:1px;"><strong>Ref.Uso:</strong> {refuso_ord or "--"}</div>
                     </div>
-                </div>''', unsafe_allow_html=True)
+                </div>""", unsafe_allow_html=True)
                 
                 c1, c2 = st.columns(2)
                 with c1:
-                    if st.button("✏️ Editar", key=f"eo_{oid}"):
+                    if st.button("Editar", key=f"eo_{oid}"):
                         st.session_state["edit_ordem_id"] = oid
                         st.session_state["page"] = "EDITAR ORDEM COMPRA"
                         st.rerun()
                 with c2:
-                    if st.button("🗑️ Excluir", key=f"do_{oid}"):
+                    if st.button("Excluir", key=f"do_{oid}"):
                         conn.execute("DELETE FROM ordens_compra WHERE id=?", (oid,))
                         conn.commit()
                         st.success("Excluida!")
@@ -550,7 +527,10 @@ def editar_ordem_compra():
     if not row: conn.close(); st.error("Nao encontrada."); return
     ficha = st.text_input("Ficha", value=row[5] or "")
     td = st.selectbox("Despesa", ["", "Material de Consumo", "Servico PF", "Servico PJ", "Distribuicao Gratuita"], index=["", "Material de Consumo", "Servico PF", "Servico PJ", "Distribuicao Gratuita"].index(row[6]) if row[6] in ["", "Material de Consumo", "Servico PF", "Servico PJ", "Distribuicao Gratuita"] else 0, key="td_edit")
-    data_c = st.text_input("Data", value=row[7] or datetime.now().strftime("%d/%m/%Y"), key="data_ordem_edit")
+    try:
+        data_c = st.date_input("Data", value=datetime.strptime(row[7], "%d/%m/%Y") if row[7] else datetime.now(), format="DD/MM/YYYY", key="data_ordem_edit")
+    except:
+        data_c = st.date_input("Data", value=datetime.now(), format="DD/MM/YYYY", key="data_ordem_edit")
     valor_c_str = st.text_input("Valor", value=format_currency(row[8] or 0).replace("R$ ", ""), key="valor_ordem_edit")
     valor_c = parse_br_currency(valor_c_str)
     prod = st.text_area("Produto/Servico", height=120, value=row[9] or "")
@@ -558,7 +538,7 @@ def editar_ordem_compra():
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Salvar"):
-            conn.execute("UPDATE ordens_compra SET ficha=?, tipo_despesa=?, data_compra=?, valor_compra=?, produto_servico=? WHERE id=?", (ficha, td, data_c, valor_c, prod, oid))
+            conn.execute("UPDATE ordens_compra SET ficha=?, tipo_despesa=?, data_compra=?, valor_compra=?, produto_servico=? WHERE id=?", (ficha, td, data_c.strftime("%d/%m/%Y"), valor_c, prod, oid))
             conn.commit(); conn.close(); st.success("Atualizada!"); st.session_state["page"] = "REALIZAR COMPRAS"; st.rerun()
     with c2:
         if st.button("Voltar"): st.session_state["page"] = "REALIZAR COMPRAS"; st.rerun()
@@ -641,7 +621,7 @@ def programas_saude():
 def plano_municipal_saude():
     st.markdown('<h1 style="color:#e0f2fe;font-size:38px;">PLANO MUNICIPAL DE SAUDE</h1>', unsafe_allow_html=True)
     st.markdown('<hr>', unsafe_allow_html=True)
-    st.markdown('''<div style="background:linear-gradient(135deg,#0e7490,#0f172a);border-radius:12px;padding:20px;margin-bottom:15px;border-left:6px solid #22d3ee;"><h2 style="color:#fff;margin:0;font-size:24px;font-weight:800;">PMS</h2><p style="color:#e0f2fe;font-size:16px;font-weight:700;">Plano Municipal de Saude</p><div style="background:rgba(15,23,42,0.7);border-radius:10px;padding:18px;color:#e0f2fe;font-size:15px;line-height:1.7;">O <strong>Plano Municipal de Saude (PMS)</strong> e o instrumento basico de planejamento do SUS no municipio.</div></div>''', unsafe_allow_html=True)
+    st.markdown("""<div style="background:linear-gradient(135deg,#0e7490,#0f172a);border-radius:12px;padding:20px;margin-bottom:15px;border-left:6px solid #22d3ee;"><h2 style="color:#fff;margin:0;font-size:24px;font-weight:800;">PMS</h2><p style="color:#e0f2fe;font-size:16px;font-weight:700;">Plano Municipal de Saude</p><div style="background:rgba(15,23,42,0.7);border-radius:10px;padding:18px;color:#e0f2fe;font-size:15px;line-height:1.7;">O <strong>Plano Municipal de Saude (PMS)</strong> e o instrumento basico de planejamento do SUS no municipio.</div></div>""", unsafe_allow_html=True)
     st.markdown('<h3 style="color:#7dd3fc;">Documentos do PMS</h3>', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
     up = st.file_uploader("Enviar arquivo", type=["pdf", "docx", "doc", "txt", "csv"], key="up_pms")
@@ -671,7 +651,7 @@ def plano_municipal_saude():
 def norte_minha_gestao():
     st.markdown('<h1 style="color:#e0f2fe;font-size:38px;">NORTE DA MINHA GESTAO</h1>', unsafe_allow_html=True)
     st.markdown('<hr>', unsafe_allow_html=True)
-    st.markdown('''<div style="background:linear-gradient(135deg,#7c3aed,#0f172a);border-radius:12px;padding:20px;margin-bottom:15px;border-left:6px solid #a78bfa;"><h2 style="color:#fff;margin:0;font-size:24px;font-weight:800;">DIRETRIZES</h2><p style="color:#e0f2fe;font-size:16px;font-weight:700;">Norte da Minha Gestao</p></div>''', unsafe_allow_html=True)
+    st.markdown("""<div style="background:linear-gradient(135deg,#7c3aed,#0f172a);border-radius:12px;padding:20px;margin-bottom:15px;border-left:6px solid #a78bfa;"><h2 style="color:#fff;margin:0;font-size:24px;font-weight:800;">DIRETRIZES</h2><p style="color:#e0f2fe;font-size:16px;font-weight:700;">Norte da Minha Gestao</p></div>""", unsafe_allow_html=True)
     for titulo, descricao, cor in [("Atencao Primaria","Ampliar cobertura ESF.","#7c3aed"),("Eficiencia Financeira","Otimizar recursos.","#2563eb"),("Valorizacao","Capacitacao continua.","#059669"),("Integracao Regional","Fortalecer CISLAV.","#d97706"),("Controle Social","Participacao no Conselho.","#dc2626")]:
         st.markdown(f'<div style="background:rgba(30,41,59,0.7);border-radius:10px;padding:15px;margin-bottom:10px;border-left:4px solid {cor};"><p style="color:{cor};font-size:16px;font-weight:700;margin:0;">{titulo}</p><p style="color:#cbd5e1;font-size:14px;margin:5px 0 0;">{descricao}</p></div>', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
