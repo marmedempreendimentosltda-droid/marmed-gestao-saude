@@ -129,8 +129,6 @@ if 'usuario_tipo' not in st.session_state:
     st.session_state.usuario_tipo = None
 if 'pagina' not in st.session_state:
     st.session_state.pagina = 'login'
-if 'mostrar_senha' not in st.session_state:
-    st.session_state.mostrar_senha = False
 
 # ============================================================
 # CSS MODERNO
@@ -156,7 +154,6 @@ st.markdown("""
     .login-card {
         background: rgba(255, 255, 255, 0.05);
         backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 24px;
         padding: 3rem;
@@ -469,4 +466,12 @@ elif st.session_state.pagina == 'dashboard':
     
     elif menu == "Plano Municipal de Saude":
         st.title("Plano Municipal de Saude")
-        st.info("Modulo do 
+        st.info("Modulo do Plano Municipal de Saude")
+    
+    elif menu == "Norte da Minha Gestao":
+        st.title("Norte da Minha Gestao")
+        st.info("Modulo Norte da Minha Gestao")
+    
+    elif menu == "Conselho Municipal de Saude":
+        st.title("Conselho Municipal de Saude")
+        st.info("Modulo do Conselho Municipal de Saude")
