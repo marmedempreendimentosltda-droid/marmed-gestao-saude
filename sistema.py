@@ -129,8 +129,7 @@ if 'usuario_tipo' not in st.session_state:
     st.session_state.usuario_tipo = None
 if 'pagina' not in st.session_state:
     st.session_state.pagina = 'login'
-
-# ============================================================
+    # ============================================================
 # CSS MODERNO
 # ============================================================
 st.markdown("""
@@ -378,8 +377,7 @@ if st.session_state.pagina == 'login':
     
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
-
-# ============================================================
+    # ============================================================
 # DASHBOARD
 # ============================================================
 elif st.session_state.pagina == 'dashboard':
