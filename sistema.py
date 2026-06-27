@@ -3,7 +3,8 @@ import sqlite3
 import hashlib
 from datetime import datetime, date
 
-st.set_page_config(page_title="MARMED", 
+st.set_page_config(page_title="MARMED", layout="wide", initial_sidebar_state="expanded")
+
 # ============================================================
 # BANCO DE DADOS
 # ============================================================
@@ -11,7 +12,6 @@ def init_db():
     conn = sqlite3.connect('marmed.db')
     c = conn.cursor()
     
-    # Tabela de usuários
     c.execute('''CREATE TABLE IF NOT EXISTS usuarios
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   nome TEXT NOT NULL,
@@ -20,7 +20,6 @@ def init_db():
                   tipo TEXT DEFAULT 'usuario',
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     
-    # Tabela de contas
     c.execute('''CREATE TABLE IF NOT EXISTS contas
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   usuario_id INTEGER,
@@ -33,7 +32,6 @@ def init_db():
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY(usuario_id) REFERENCES usuarios(id))''')
     
-    # Tabela de compras
     c.execute('''CREATE TABLE IF NOT EXISTS compras
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   usuario_id INTEGER,
@@ -45,7 +43,6 @@ def init_db():
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY(usuario_id) REFERENCES usuarios(id))''')
     
-    # Tabela de superavit
     c.execute('''CREATE TABLE IF NOT EXISTS superavit
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   usuario_id INTEGER,
@@ -55,7 +52,6 @@ def init_db():
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY(usuario_id) REFERENCES usuarios(id))''')
     
-    # Tabela de programas de saude
     c.execute('''CREATE TABLE IF NOT EXISTS programas_saude
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   usuario_id INTEGER,
@@ -64,7 +60,6 @@ def init_db():
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY(usuario_id) REFERENCES usuarios(id))''')
     
-    # Tabela de uploads
     c.execute('''CREATE TABLE IF NOT EXISTS uploads
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   usuario_id INTEGER,
@@ -95,11 +90,37 @@ def verificar_login(email, senha):
     conn.close()
     return usuario
 
-# ============================================================
-# INICIALIZACAO
-# ============================================================
+def format_currency(valor):
+    if valor is None:
+        return "R$ 0,00"
+    v = float(valor)
+    inteiro, centavos = f"{v:.2f}".split(".")
+    if len(inteiro) > 3:
+        partes = []
+        while len(inteiro) > 3:
+            partes.insert(0, inteiro[-3:])
+            inteiro = inteiro[:-3]
+        if inteiro:
+            partes.insert(0, inteiro)
+        inteiro = ".".join(partes)
+    return f"R$ {inteiro},{centavos}"
+
+def parse_br_currency(val):
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    v = str(val).replace('R$ ', '').replace('R$', '').replace('.', '').replace(',', '.')
+    try:
+        return float(v)
+    except:
+        return 0.0
+
 init_db()
 
+# ============================================================
+# SESSION STATE
+# ============================================================
 if 'usuario_id' not in st.session_state:
     st.session_state.usuario_id = None
 if 'usuario_nome' not in st.session_state:
@@ -108,9 +129,11 @@ if 'usuario_tipo' not in st.session_state:
     st.session_state.usuario_tipo = None
 if 'pagina' not in st.session_state:
     st.session_state.pagina = 'login'
+if 'mostrar_senha' not in st.session_state:
+    st.session_state.mostrar_senha = False
 
 # ============================================================
-# CSS - DESIGN MODERNO
+# CSS MODERNO
 # ============================================================
 st.markdown("""
 <style>
@@ -122,7 +145,6 @@ st.markdown("""
         background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
     }
     
-    /* TELA DE LOGIN */
     .login-wrapper {
         display: flex;
         justify-content: center;
@@ -165,14 +187,6 @@ st.markdown("""
         margin-top: 0.5rem;
     }
     
-    .login-subtitle {
-        color: #64748b;
-        text-align: center;
-        font-size: 0.85rem;
-        margin-bottom: 1.5rem;
-    }
-    
-    /* CAMPOS DE LOGIN */
     .stTextInput label {
         color: #cbd5e1 !important;
         font-weight: 500 !important;
@@ -199,7 +213,6 @@ st.markdown("""
         color: #475569 !important;
     }
     
-    /* BOTAO */
     .stButton button {
         background: linear-gradient(135deg, #38bdf8, #818cf8) !important;
         color: white !important;
@@ -222,7 +235,6 @@ st.markdown("""
         transform: translateY(0) !important;
     }
     
-    /* ABAS */
     .stTabs [data-baseweb="tab-list"] {
         background: rgba(255, 255, 255, 0.05) !important;
         border-radius: 12px !important;
@@ -242,17 +254,6 @@ st.markdown("""
         color: white !important;
     }
     
-    /* MENSAGENS */
-    .stAlert {
-        border-radius: 12px !important;
-        border: none !important;
-    }
-    
-    .stAlert [data-baseweb="notification"] {
-        border-radius: 12px !important;
-    }
-    
-    /* SIDEBAR */
     section[data-testid="stSidebar"] {
         background: linear-gradient(180deg, #0f172a 0%, #1a2a4a 100%) !important;
         border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
@@ -276,7 +277,6 @@ st.markdown("""
         color: #e2e8f0 !important;
     }
     
-    /* DASHBOARD */
     .dashboard-title {
         font-size: 2rem;
         font-weight: 800;
@@ -312,4 +312,161 @@ st.markdown("""
         background: linear-gradient(135deg, #38bdf8, #818cf8);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-   
+    }
+    
+    .metric-label {
+        color: #94a3b8;
+        font-size: 0.85rem;
+        margin-top: 0.25rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ============================================================
+# TELA DE LOGIN
+# ============================================================
+if st.session_state.pagina == 'login':
+    st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
+    st.markdown('<div class="login-card">', unsafe_allow_html=True)
+    st.markdown('<div class="login-logo"><h1>MARMED</h1><p>Gestao de Saude Municipal</p></div>', unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["Entrar", "Cadastrar"])
+    
+    with tab1:
+        with st.form("login_form"):
+            email = st.text_input("Usuario", placeholder="Digite seu email ou usuario")
+            senha = st.text_input("Senha", type="password", placeholder="Digite sua senha")
+            submit = st.form_submit_button("Entrar")
+            if submit:
+                if not email or not senha:
+                    st.error("Preencha todos os campos!")
+                else:
+                    usuario = verificar_login(email, senha)
+                    if usuario:
+                        st.session_state.usuario_id = usuario[0]
+                        st.session_state.usuario_nome = usuario[1]
+                        st.session_state.usuario_tipo = usuario[4]
+                        st.session_state.pagina = 'dashboard'
+                        st.rerun()
+                    else:
+                        st.error("Usuario ou senha invalidos!")
+    
+    with tab2:
+        with st.form("cadastro_form"):
+            nome = st.text_input("Nome completo")
+            email = st.text_input("Email")
+            senha = st.text_input("Senha", type="password")
+            confirmar_senha = st.text_input("Confirmar senha", type="password")
+            submit = st.form_submit_button("Cadastrar")
+            if submit:
+                if not nome or not email or not senha:
+                    st.error("Preencha todos os campos!")
+                elif senha != confirmar_senha:
+                    st.error("Senhas nao conferem!")
+                elif len(senha) < 6:
+                    st.error("Senha deve ter pelo menos 6 caracteres!")
+                else:
+                    conn = sqlite3.connect('marmed.db')
+                    c = conn.cursor()
+                    senha_hash = hashlib.sha256(senha.encode()).hexdigest()
+                    try:
+                        c.execute("INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)",
+                                  (nome, email, senha_hash))
+                        conn.commit()
+                        st.success("Cadastro realizado com sucesso! Faca login.")
+                    except:
+                        st.error("Email ja cadastrado!")
+                    finally:
+                        conn.close()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ============================================================
+# DASHBOARD
+# ============================================================
+elif st.session_state.pagina == 'dashboard':
+    st.sidebar.markdown(f"**Bem-vindo, {st.session_state.usuario_nome}**")
+    st.sidebar.markdown("---")
+    
+    menu = st.sidebar.selectbox("Menu", [
+        "Dashboard",
+        "Contas",
+        "Compras",
+        "Superavit Financeiro",
+        "Programas de Saude",
+        "Plano Municipal de Saude",
+        "Norte da Minha Gestao",
+        "Conselho Municipal de Saude",
+        "Trocar Senha",
+        "Sair"
+    ])
+    
+    if menu == "Sair":
+        st.session_state.pagina = 'login'
+        st.rerun()
+    
+    elif menu == "Trocar Senha":
+        st.title("Trocar Senha")
+        with st.form("trocar_senha"):
+            senha_atual = st.text_input("Senha atual", type="password")
+            nova_senha = st.text_input("Nova senha", type="password")
+            confirmar = st.text_input("Confirmar nova senha", type="password")
+            submit = st.form_submit_button("Alterar senha")
+            if submit:
+                if not senha_atual or not nova_senha or not confirmar:
+                    st.error("Preencha todos os campos!")
+                elif nova_senha != confirmar:
+                    st.error("Nova senha nao confere!")
+                elif len(nova_senha) < 6:
+                    st.error("Nova senha deve ter pelo menos 6 caracteres!")
+                else:
+                    conn = sqlite3.connect('marmed.db')
+                    c = conn.cursor()
+                    senha_hash_atual = hashlib.sha256(senha_atual.encode()).hexdigest()
+                    c.execute("SELECT id FROM usuarios WHERE id = ? AND senha = ?",
+                              (st.session_state.usuario_id, senha_hash_atual))
+                    if c.fetchone():
+                        nova_hash = hashlib.sha256(nova_senha.encode()).hexdigest()
+                        c.execute("UPDATE usuarios SET senha = ? WHERE id = ?",
+                                  (nova_hash, st.session_state.usuario_id))
+                        conn.commit()
+                        st.success("Senha alterada com sucesso!")
+                    else:
+                        st.error("Senha atual incorreta!")
+                    conn.close()
+    
+    elif menu == "Dashboard":
+        st.markdown('<div class="dashboard-title">Dashboard</div>', unsafe_allow_html=True)
+        st.markdown('<div class="dashboard-subtitle">Visao geral do sistema</div>', unsafe_allow_html=True)
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.markdown('<div class="metric-card"><div class="metric-value">R$ 0,00</div><div class="metric-label">Total de Contas</div></div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown('<div class="metric-card"><div class="metric-value">0</div><div class="metric-label">Compras Pendentes</div></div>', unsafe_allow_html=True)
+        with col3:
+            st.markdown('<div class="metric-card"><div class="metric-value">R$ 0,00</div><div class="metric-label">Superavit</div></div>', unsafe_allow_html=True)
+        with col4:
+            st.markdown('<div class="metric-card"><div class="metric-value">0</div><div class="metric-label">Programas</div></div>', unsafe_allow_html=True)
+    
+    elif menu == "Contas":
+        st.title("Contas")
+        esfera = st.selectbox("Esfera", ["Federal", "Estadual", "Municipal", "Transferencia", "Transposicao"])
+        st.info(f"Contas da esfera: {esfera}")
+    
+    elif menu == "Compras":
+        st.title("Compras")
+        st.info("Modulo de compras")
+    
+    elif menu == "Superavit Financeiro":
+        st.title("Superavit Financeiro")
+        st.info("Modulo de superavit financeiro")
+    
+    elif menu == "Programas de Saude":
+        st.title("Programas de Saude")
+        st.info("Modulo de programas de saude")
+    
+    elif menu == "Plano Municipal de Saude":
+        st.title("Plano Municipal de Saude")
+        st.info("Modulo do 
