@@ -3,8 +3,7 @@ import sqlite3
 import hashlib
 from datetime import datetime, date
 
-st.set_page_config(page_title="MARMED", layout="wide", initial_sidebar_state="expanded")
-
+st.set_page_config(page_title="MARMED", 
 # ============================================================
 # BANCO DE DADOS
 # ============================================================
