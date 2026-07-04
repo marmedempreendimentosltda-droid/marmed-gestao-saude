@@ -54,10 +54,10 @@ def parse_br_currency(val):
     except:
         return 0.0
 
-def eh_menor_ou_igual(a, b):
+def menor_ou_igual(a, b):
     return a &lt;= b
 
-def eh_maior_que(a, b):
+def maior_que(a, b):
     return a > b
 
 def inject_masks():
@@ -95,55 +95,4 @@ def inject_masks():
                 if (input.dataset.maskMoney) return;
                 var parentText = (input.parentElement ? input.parentElement.textContent : '') + ' ' + (input.placeholder || '');
                 if (!input.dataset.maskMoney && /custeio|investimento|valor|compra/i.test(parentText)) {
-                    input.dataset.maskMoney = '1';
-                    input.inputMode = 'numeric';
-                    input.addEventListener('input', function() {
-                        var v = this.value.replace(/\D/g, '');
-                        if (v.length === 0) { this.value = ''; return; }
-                        while (v.length &lt; 3) v = '0' + v;
-                        var cents = v.substring(v.length - 2);
-                        var reais = v.substring(0, v.length - 2);
-                        reais = reais.replace(/^0+/, '');
-                        if (reais === '') reais = '0';
-                        var partes = [];
-                        while (reais.length > 3) {
-                            partes.unshift(reais.substring(reais.length - 3));
-                            reais = reais.substring(0, reais.length - 3);
-                        }
-                        if (reais.length > 0) partes.unshift(reais);
-                        this.value = partes.join('.') + ',' + cents;
-                    });
-                    if (input.value) { input.dispatchEvent(new Event('input')); }
-                }
-            });
-        }
-        aplicarMascaras();
-        var obs = new MutationObserver(aplicarMascaras);
-        obs.observe(document.body, { childList: true, subtree: true });
-        setTimeout(aplicarMascaras, 500);
-        setTimeout(aplicarMascaras, 1500);
-        setTimeout(aplicarMascaras, 3000);
-    })();
-    </script>
-    """, unsafe_allow_html=True)
-
-def init_db():
-    conn = sqlite3.connect("marmed.db")
-    c = conn.cursor()
-    c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT)")
-    c.execute("""CREATE TABLE IF NOT EXISTS contas_receber (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, esfera TEXT, numero_conta TEXT, fonte TEXT,
-        referencia_tipo TEXT, referencia_numero TEXT, tipo_recurso TEXT,
-        valor_pago_custeio REAL DEFAULT 0, valor_pago_investimento REAL DEFAULT 0,
-        valor_total REAL DEFAULT 0, data_recebimento TEXT, programa_politica TEXT, setor_gasto TEXT,
-        referencia_uso TEXT DEFAULT ''
-    )""")
-    try:
-        c.execute("ALTER TABLE contas_receber ADD COLUMN referencia_uso TEXT DEFAULT ''")
-    except:
-        pass
-    c.execute("""CREATE TABLE IF NOT EXISTS superavit (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, esfera TEXT, fonte_original TEXT, fonte_superavit TEXT,
-        saldo_total REAL DEFAULT 0, saldo_restante REAL DEFAULT 0, created_at TEXT
-    )""")
-    c.execute("""CREATE 
+ 
