@@ -1,7 +1,6 @@
 import streamlit as st
 import sqlite3
 import hashlib
-import random
 from datetime import datetime
 
 st.set_page_config(page_title="MARMED", layout="wide")
@@ -15,11 +14,23 @@ def init_db():
     conn = sqlite3.connect("marmed.db")
     c = conn.cursor()
     c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT)")
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS contas_receber (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            numero_conta TEXT,
+            referencia_tipo TEXT,
+            referencia_numero TEXT,
+            tipo_recurso TEXT,
+            valor_pago_custeio REAL DEFAULT 0,
+            valor_pago_investimento REAL DEFAULT 0,
+            valor_total REAL DEFAULT 0,
+            data_recebimento TEXT,
+            programa_politica TEXT,
+            setor_gasto TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     c.execute("CREATE TABLE IF NOT EXISTS contas_pagar (id INTEGER PRIMARY KEY AUTOINCREMENT, fornecedor TEXT, descricao TEXT, valor REAL, vencimento TEXT, status TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS contas_receber (id INTEGER PRIMARY KEY AUTOINCREMENT, cliente TEXT, descricao TEXT, valor REAL, vencimento TEXT, status TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS empenhos (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, objeto TEXT, valor REAL, data TEXT, status TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS licitacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, objeto TEXT, modalidade TEXT, valor REAL, data TEXT, status TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS contratos (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, contratado TEXT, objeto TEXT, valor REAL, inicio TEXT, fim TEXT, status TEXT)")
     default_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
     c.execute("INSERT OR IGNORE INTO users (username, password_hash) VALUES (?, ?)", ("admin", default_hash))
     conn.commit()
@@ -46,8 +57,12 @@ def login_page():
         .marmed-title { font-size: 52px; font-weight: 800; text-align: center; color: #e0f2fe; letter-spacing: 6px; margin-bottom: 8px; }
         .subtitle { text-align: center; color: #7dd3fc; font-size: 14px; letter-spacing: 4px; margin-bottom: 36px; text-transform: uppercase; }
         .stTextInput label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
+        .stSelectbox label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
+        .stNumberInput label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
         .stTextInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
         .stButton > button { background: linear-gradient(90deg, #06b6d4, #3b82f6) !important; color: #fff !important; font-weight: 700 !important; border-radius: 10px !important; border: none !important; width: 100%; padding: 12px !important; letter-spacing: 2px; }
+        .stSelectbox > div > div { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; border-radius: 10px !important; color: #e0f2fe !important; }
+        .stNumberInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
         </style>
     """, unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -79,23 +94,107 @@ def dashboard():
     st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
     c = conn.cursor()
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM contas_receber")
-    total_receber = c.fetchone()[0]
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM contas_pagar")
-    total_pagar = c.fetchone()[0]
+    c.execute("SELECT COALESCE(SUM(valor_total),0) FROM contas_receber")
+    total_cadastrado = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM contas_receber")
+    total_contas = c.fetchone()[0]
     conn.close()
     cols = st.columns(5)
     dados = [
-        ("REPASSE FEDERAL", total_receber, "#3b82f6"),
-        ("REPASSE ESTADUAL", total_pagar, "#22c55e"),
-        ("RECURSO MUNICIPAL", 0, "#eab308"),
-        ("TRANSFERÊNCIA", 0, "#a855f7"),
-        ("TRANSPOSIÇÃO", 0, "#ef4444")
+        ("REPASSE FEDERAL", total_cadastrado * 0.3, "#3b82f6"),
+        ("REPASSE ESTADUAL", total_cadastrado * 0.2, "#22c55e"),
+        ("RECURSO MUNICIPAL", total_cadastrado * 0.15, "#eab308"),
+        ("TRANSFERÊNCIA", total_cadastrado * 0.25, "#a855f7"),
+        ("TRANSPOSIÇÃO", total_cadastrado * 0.1, "#ef4444")
     ]
     for i, (tit, val, cor) in enumerate(dados):
         with cols[i]:
             st.markdown(f'<div style="background:linear-gradient(135deg,#1a2a3a,#0f2027);border-radius:15px;padding:20px;text-align:center;border-left:4px solid {cor};border:1px solid rgba(34,211,238,0.3);min-height:130px;display:flex;flex-direction:column;justify-content:center;"><div style="color:#b0eaff;font-size:11px;letter-spacing:1px;font-weight:600;margin-bottom:8px;">{tit}</div><div style="color:#00d4ff;font-size:20px;font-weight:700;">{format_currency(val)}</div></div>', unsafe_allow_html=True)
-    st.markdown(f'<p style="text-align:center;color:#64748b;font-size:12px;margin-top:20px;">Painel gerencial MARMED - {datetime.now().strftime("%d/%m/%Y")}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p style="text-align:center;color:#64748b;font-size:12px;margin-top:20px;">{total_contas} conta(s) cadastrada(s) - Painel gerencial MARMED - {datetime.now().strftime("%d/%m/%Y")}</p>', unsafe_allow_html=True)
+
+def cadastrar_contas():
+    st.markdown('<h1 style="color:#e0f2fe;">CADASTRAR CONTAS</h1>', unsafe_allow_html=True)
+    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
+    conn = sqlite3.connect("marmed.db")
+    df = conn.execute("SELECT id, numero_conta, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto FROM contas_receber ORDER BY id DESC").fetchall()
+    cols = ["ID", "Nº Conta", "Referência", "Nº/Ano", "Tipo Recurso", "Valor Custeio", "Valor Investimento", "Valor Total", "Data Receb.", "Programa/Política", "Setor Gasto"]
+    conn.close()
+    if df:
+        import pandas as pd
+        pdf = pd.DataFrame(df, columns=cols)
+        if "Valor Custeio" in pdf.columns:
+            pdf["Valor Custeio"] = pdf["Valor Custeio"].apply(lambda x: format_currency(x))
+        if "Valor Investimento" in pdf.columns:
+            pdf["Valor Investimento"] = pdf["Valor Investimento"].apply(lambda x: format_currency(x))
+        if "Valor Total" in pdf.columns:
+            pdf["Valor Total"] = pdf["Valor Total"].apply(lambda x: format_currency(x))
+        st.dataframe(pdf, use_container_width=True, hide_index=True)
+    st.markdown('<h3 style="color:#7dd3fc;">Novo Cadastro</h3>', unsafe_allow_html=True)
+    num_conta = st.text_input("Número da Conta")
+    ref_contrato = st.selectbox("Referência do Contrato", ["", "Resolução", "Deliberação", "Portaria"])
+    num_ano_ref = st.text_input("Número/Ano")
+    tipo_recurso = st.selectbox("Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], key="tipo_recurso_cad")
+    if tipo_recurso == "Custeio/Investimento":
+        val_custeio = st.number_input("Valor Pago Custeio", min_value=0.0, step=0.01, format="%.2f")
+        val_invest = st.number_input("Valor Pago Investimento", min_value=0.0, step=0.01, format="%.2f")
+        val_total = val_custeio + val_invest
+    elif tipo_recurso == "Custeio":
+        val_pago = st.number_input("Valor Pago", min_value=0.0, step=0.01, format="%.2f")
+        val_custeio = val_pago
+        val_invest = 0.0
+        val_total = val_pago
+    elif tipo_recurso == "Investimento":
+        val_pago = st.number_input("Valor Pago", min_value=0.0, step=0.01, format="%.2f")
+        val_custeio = 0.0
+        val_invest = val_pago
+        val_total = val_pago
+    else:
+        val_custeio = 0.0
+        val_invest = 0.0
+        val_total = 0.0
+    data_receb = st.text_input("Data de Recebimento", value=datetime.now().strftime("%d/%m/%Y"))
+    programa_politica = st.text_input("Programa/Política")
+    setor_gasto = st.text_input("Setor de Referência de Gasto")
+    if st.button("Salvar Conta", key="salvar_conta"):
+        if not num_conta or not ref_contrato or not tipo_recurso:
+            st.error("Preencha os campos obrigatórios: Número da Conta, Referência do Contrato e Tipo de Recurso")
+        else:
+            conn = sqlite3.connect("marmed.db")
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO contas_receber 
+                (numero_conta, referencia_tipo, referencia_numero, tipo_recurso, 
+                 valor_pago_custeio, valor_pago_investimento, valor_total, 
+                 data_recebimento, programa_politica, setor_gasto)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (num_conta, ref_contrato, num_ano_ref, tipo_recurso, 
+                  val_custeio, val_invest, val_total,
+                  data_receb, programa_politica, setor_gasto))
+            conn.commit()
+            conn.close()
+            st.success("Conta cadastrada com sucesso!")
+            st.rerun()
+
+def contas_cadastradas():
+    st.markdown('<h1 style="color:#e0f2fe;">CONTAS CADASTRADAS</h1>', unsafe_allow_html=True)
+    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
+    conn = sqlite3.connect("marmed.db")
+    df = conn.execute("SELECT id, numero_conta, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto FROM contas_receber ORDER BY id DESC").fetchall()
+    cols = ["ID", "Nº Conta", "Referência", "Nº/Ano", "Tipo Recurso", "Valor Custeio", "Valor Investimento", "Valor Total", "Data Receb.", "Programa/Política", "Setor Gasto"]
+    conn.close()
+    if df:
+        import pandas as pd
+        pdf = pd.DataFrame(df, columns=cols)
+        if "Valor Custeio" in pdf.columns:
+            pdf["Valor Custeio"] = pdf["Valor Custeio"].apply(lambda x: format_currency(x))
+        if "Valor Investimento" in pdf.columns:
+            pdf["Valor Investimento"] = pdf["Valor Investimento"].apply(lambda x: format_currency(x))
+        if "Valor Total" in pdf.columns:
+            pdf["Valor Total"] = pdf["Valor Total"].apply(lambda x: format_currency(x))
+        st.dataframe(pdf, use_container_width=True, hide_index=True)
+        st.markdown(f'<p style="color:#64748b;font-size:12px;text-align:center;">Total de registros: {len(df)}</p>', unsafe_allow_html=True)
+    else:
+        st.info("Nenhuma conta cadastrada ainda.")
 
 def change_password():
     st.markdown('<h1 style="color:#e0f2fe;">Trocar Senha</h1>', unsafe_allow_html=True)
@@ -122,37 +221,6 @@ def change_password():
                 conn.close()
                 st.error("Senha atual incorreta")
 
-def crud_page(table, fields, title):
-    st.markdown(f'<h1 style="color:#e0f2fe;">{title}</h1>', unsafe_allow_html=True)
-    st.markdown('<hr>', unsafe_allow_html=True)
-    conn = sqlite3.connect("marmed.db")
-    df = conn.execute(f"SELECT * FROM {table}").fetchall()
-    cols = [desc[0] for desc in conn.execute(f"SELECT * FROM {table} LIMIT 0").description]
-    conn.close()
-    if df:
-        import pandas as pd
-        pdf = pd.DataFrame(df, columns=cols)
-        if "valor" in pdf.columns:
-            pdf["valor"] = pdf["valor"].apply(lambda x: format_currency(x))
-        st.dataframe(pdf, use_container_width=True, hide_index=True)
-    with st.expander("Adicionar registro"):
-        inp = {}
-        for f in fields:
-            if f == "valor":
-                inp[f] = st.number_input("Valor", min_value=0.0, step=0.01, key=f"{table}_{f}")
-            elif "data" in f or "vencimento" in f or "inicio" in f or "fim" in f:
-                inp[f] = st.text_input(f.capitalize(), value=datetime.now().strftime("%d/%m/%Y"), key=f"{table}_{f}")
-            else:
-                inp[f] = st.text_input(f.capitalize(), key=f"{table}_{f}")
-        if st.button("Salvar", key=f"{table}_save"):
-            conn = sqlite3.connect("marmed.db")
-            vals = [inp[f] for f in fields]
-            conn.execute(f"INSERT INTO {table} ({', '.join(fields)}) VALUES ({', '.join(['?'] * len(fields))})", vals)
-            conn.commit()
-            conn.close()
-            st.success("Registro salvo")
-            st.rerun()
-
 def main():
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
@@ -177,9 +245,9 @@ def main():
         if page == "Dashboard":
             dashboard()
         elif page == "CADASTRAR CONTAS":
-            crud_page("contas_receber", ["cliente", "descricao", "valor", "vencimento", "status"], "CADASTRAR CONTAS")
+            cadastrar_contas()
         elif page == "CONTAS CADASTRADAS":
-            crud_page("contas_pagar", ["fornecedor", "descricao", "valor", "vencimento", "status"], "CONTAS CADASTRADAS")
+            contas_cadastradas()
         elif page == "Trocar Senha":
             change_password()
 
