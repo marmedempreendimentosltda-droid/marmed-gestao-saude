@@ -1,737 +1,892 @@
 import streamlit as st
-import sqlite3
-import os
-import re
-import hashlib
 import pandas as pd
-from datetime import datetime
+import re
+from datetime import datetime, date
 from io import BytesIO
+import base64
 
-try:
-    import PyPDF2
-    PDF_AVAILABLE = True
-except ImportError:
-    PDF_AVAILABLE = False
+# =============================================================================
+# CONFIGURAÇÃO INICIAL
+# =============================================================================
+st.set_page_config(page_title="MARMED", page_icon="🏥", layout="wide")
 
-try:
-    import docx
-    DOCX_AVAILABLE = True
-except ImportError:
-    DOCX_AVAILABLE = False
+# =============================================================================
+# CSS PERSONALIZADO - ESQUEMA ESCURO COM CORES VIBRANTES
+# =============================================================================
+def aplicar_css():
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
 
-DB_NAME = "marmed.db"
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #cbd5e1;
+        }
 
-ADMIN_USER = "admin"
-ADMIN_PASS = "Diretor2025#"
+        h1, h2, h3, h4, h5, h6 {
+            color: #f8fafc !important;
+            font-weight: 800 !important;
+        }
 
-DARK_CSS = """
-<style>
-    .stApp {
-        background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 50%, #0d0d1a 100%);
-        color: #e0e0ff;
+        .main-title {
+            color: #f8fafc;
+            font-weight: 900;
+            font-size: 2.5rem;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: #22d3ee;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .stDataFrame, .stTable {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .stTextInput>div>div>input,
+        .stNumberInput>div>div>input,
+        .stSelectbox>div>div,
+        .stDateInput>div>div>input,
+        .stTextArea>div>div>textarea {
+            background-color: #1e293b !important;
+            color: #f8fafc !important;
+            border: 1px solid rgba(34, 211, 238, 0.4) !important;
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+        }
+
+        .stTextInput>div>div>input:focus,
+        .stNumberInput>div>div>input:focus,
+        .stSelectbox>div>div:focus,
+        .stDateInput>div>div>input:focus,
+        .stTextArea>div>div>textarea:focus {
+            border: 1px solid #22d3ee !important;
+            box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.25) !important;
+        }
+
+        label, .stSlider > label, .stCheckbox > label, .stRadio > label {
+            color: #22d3ee !important;
+            font-weight: 700 !important;
+        }
+
+        .stButton > button {
+            background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+            color: #0f172a;
+            font-weight: 800 !important;
+            border: none;
+            border-radius: 10px;
+            padding: 0.6rem 1.2rem;
+            transition: all 0.2s ease;
+        }
+
+        .stButton > button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(34, 211, 238, 0.35);
+        }
+
+        .stButton > button:active {
+            transform: translateY(0);
+        }
+
+        .card {
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            border: 1px solid rgba(34, 211, 238, 0.25);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 10px 25px rgba(2, 8, 20, 0.5);
+        }
+
+        .card-title {
+            color: #22d3ee;
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-value {
+            color: #f8fafc;
+            font-weight: 800;
+            font-size: 1.8rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .card-money {
+            color: #38bdf8;
+            font-weight: 800;
+            font-size: 1.6rem;
+        }
+
+        .metric-label {
+            color: #22d3ee;
+            font-weight: 700;
+        }
+
+        .metric-value {
+            color: #f8fafc;
+            font-weight: 700;
+        }
+
+        .stTabs [data-baseweb="tab-list"] {
+            border-bottom: 2px solid rgba(34, 211, 238, 0.2);
+        }
+
+        .stTabs [data-baseweb="tab"] {
+            color: #94a3b8;
+            font-weight: 700;
+        }
+
+        .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+            color: #22d3ee;
+            border-bottom: 2px solid #22d3ee;
+        }
+
+        .stSidebar {
+            background-color: #0f172a;
+        }
+
+        .stSidebar .stButton > button {
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+
+        .alert-success {
+            background-color: rgba(34, 211, 238, 0.15);
+            border: 1px solid rgba(34, 211, 238, 0.4);
+            color: #22d3ee;
+            padding: 1rem;
+            border-radius: 10px;
+            font-weight: 700;
+        }
+
+        .alert-error {
+            background-color: rgba(248, 113, 113, 0.15);
+            border: 1px solid rgba(248, 113, 113, 0.4);
+            color: #f87171;
+            padding: 1rem;
+            border-radius: 10px;
+            font-weight: 700;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# =============================================================================
+# INICIALIZAÇÃO DO ESTADO
+# =============================================================================
+def inicializar_estado():
+    defaults = {
+        "autenticado": False,
+        "usuario": None,
+        "contas": [],
+        "compras": [],
+        "superavit": {"Federal": 0.0, "Estadual": 0.0, "Municipal": 0.0},
+        "programas": [],
+        "plano_municipal": {},
+        "norte_gestao": {},
+        "documentos": [],
+        "menu": "Dashboard",
     }
-    .main-header {
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: #4ecdc4;
-        text-align: center;
-        margin-bottom: 1rem;
-        text-shadow: 0 0 10px rgba(78, 205, 196, 0.3);
-    }
-    .sub-header {
-        font-size: 1.5rem;
-        font-weight: 600;
-        color: #6a93ff;
-        margin-bottom: 0.8rem;
-    }
-    .card {
-        background: rgba(20, 20, 40, 0.7);
-        border: 1px solid rgba(100, 100, 180, 0.3);
-        border-radius: 12px;
-        padding: 1.2rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-        backdrop-filter: blur(10px);
-    }
-    .metric-value {
-        font-size: 1.8rem;
-        font-weight: 700;
-        color: #4ecdc4;
-    }
-    .metric-label {
-        font-size: 0.9rem;
-        color: #a0a0cc;
-    }
-    .stButton>button {
-        background: linear-gradient(135deg, #2a3f8a 0%, #1e2a5e 100%);
-        color: #e0e0ff;
-        border: 1px solid #4ecdc4;
-        border-radius: 8px;
-        padding: 0.5rem 1rem;
-        font-weight: 600;
-        transition: all 0.3s ease;
-    }
-    .stButton>button:hover {
-        background: linear-gradient(135deg, #3a5fd8 0%, #2a3f8a 100%);
-        box-shadow: 0 0 12px rgba(78, 205, 196, 0.4);
-    }
-    .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stSelectbox>div>div {
-        background-color: rgba(15, 15, 30, 0.8);
-        color: #e0e0ff;
-        border: 1px solid rgba(100, 100, 180, 0.4);
-        border-radius: 8px;
-    }
-    .stSidebar {
-        background: linear-gradient(180deg, #0d0d1a 0%, #1a1a2e 100%);
-    }
-    .stSidebar .stRadio label {
-        color: #c0c0ff;
-        font-weight: 500;
-    }
-    .stExpander {
-        background: rgba(20, 20, 40, 0.5);
-        border-radius: 10px;
-        border: 1px solid rgba(100, 100, 180, 0.2);
-    }
-    .info-box {
-        background: rgba(30, 42, 94, 0.4);
-        border-left: 4px solid #4ecdc4;
-        padding: 1rem;
-        border-radius: 0 8px 8px 0;
-        margin: 1rem 0;
-    }
-    .warning-box {
-        background: rgba(94, 70, 30, 0.4);
-        border-left: 4px solid #ff9f43;
-        padding: 1rem;
-        border-radius: 0 8px 8px 0;
-        margin: 1rem 0;
-    }
-</style>
-"""
+    for chave, valor in defaults.items():
+        if chave not in st.session_state:
+            st.session_state[chave] = valor
+
+# =============================================================================
+# FUNÇÕES UTILITÁRIAS
+# =============================================================================
+def formatar_moeda(valor):
+    """Formata um float no padrão brasileiro R$ 1.234,56"""
+    if valor is None:
+        valor = 0.0
+    sinal = "- " if valor < 0 else ""
+    valor_abs = abs(valor)
+    inteiro = str(int(valor_abs))
+    reais = []
+    while len(inteiro) > 3:
+        reais.insert(0, inteiro[-3:])
+        inteiro = inteiro[:-3]
+    reais.insert(0, inteiro)
+    parte_inteira = ".".join(reais)
+    centavos = str(int(round((valor_abs - int(valor_abs)) * 100))).zfill(2)
+    return f"R$ {sinal}{parte_inteira},{centavos}"
 
 
-def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS contas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            esfera TEXT,
-            nome TEXT,
-            valor REAL,
-            data TEXT
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS compras (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            esfera TEXT,
-            descricao TEXT,
-            valor REAL,
-            data TEXT
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS arquivos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            categoria TEXT,
-            nome TEXT,
-            tipo TEXT,
-            texto TEXT,
-            dados BLOB,
-            data_upload TEXT
-        )
-    """)
-    c.execute("SELECT COUNT(*) FROM usuarios WHERE username = ?", (ADMIN_USER,))
-    if c.fetchone()[0] == 0:
-        c.execute("INSERT INTO usuarios (username, password) VALUES (?, ?)", (ADMIN_USER, ADMIN_PASS))
-    conn.commit()
-    conn.close()
-
-
-def get_conn():
-    return sqlite3.connect(DB_NAME)
-
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-
-def login_user(username, password):
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("SELECT password FROM usuarios WHERE username = ?", (username,))
-    row = c.fetchone()
-    conn.close()
-    if row and row[0] == password:
-        return True
-    return False
-
-
-def change_password(username, new_password):
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("UPDATE usuarios SET password = ? WHERE username = ?", (new_password, username))
-    conn.commit()
-    conn.close()
-
-
-def format_currency(value):
-    if value is None:
+def mascara_moeda_input(valor_str):
+    """Aplica máscara de moeda em string digitada."""
+    digitos = re.sub(r"[^0-9]", "", valor_str)
+    if not digitos:
         return "R$ 0,00"
-    return "R$ {:,.2f}".format(value).replace(",", "X").replace(".", ",").replace("X", ".")
+    if len(digitos) == 1:
+        digitos = "00" + digitos
+    elif len(digitos) == 2:
+        digitos = "0" + digitos
+    reais = digitos[:-2]
+    centavos = digitos[-2:]
+    while len(reais) < 3:
+        reais = "0" + reais
+    partes = []
+    while len(reais) > 3:
+        partes.insert(0, reais[-3:])
+        reais = reais[:-3]
+    partes.insert(0, reais)
+    parte_inteira = ".".join(partes)
+    return f"R$ {parte_inteira},{centavos}"
 
 
-def parse_currency(value_str):
-    if not value_str:
+def parse_moeda(valor_str):
+    """Converte string formatada em R$ para float."""
+    if not valor_str:
         return 0.0
-    cleaned = re.sub(r"[^\d,]", "", value_str)
-    cleaned = cleaned.replace(".", "").replace(",", ".")
+    limpo = valor_str.replace("R$", "").replace(" ", "").replace(".", "").replace(",", ".")
     try:
-        return float(cleaned)
+        return float(limpo)
     except ValueError:
         return 0.0
 
 
-def extract_text(file, ext):
-    texto = ""
-    try:
-        if ext == "pdf" and PDF_AVAILABLE:
-            reader = PyPDF2.PdfReader(file)
-            for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    texto += page_text + "\n"
-        elif ext == "docx" and DOCX_AVAILABLE:
-            doc = docx.Document(file)
-            for para in doc.paragraphs:
-                texto += para.text + "\n"
-        elif ext in ["txt", "csv"]:
-            texto = file.read().decode("utf-8", errors="ignore")
-    except Exception as e:
-        texto = "Erro na leitura: " + str(e)
-    return texto
-
-
-def save_uploaded_file(categoria, uploaded_file):
-    if uploaded_file is None:
-        return
-    ext = uploaded_file.name.split(".")[-1].lower()
-    dados = uploaded_file.getvalue()
-    texto = extract_text(BytesIO(dados), ext)
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute(
-        "INSERT INTO arquivos (categoria, nome, tipo, texto, dados, data_upload) VALUES (?, ?, ?, ?, ?, ?)",
-        (categoria, uploaded_file.name, ext, texto, dados, datetime.now().strftime("%d/%m/%Y %H:%M"))
-    )
-    conn.commit()
-    conn.close()
-
-
-def get_files(categoria):
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("SELECT id, nome, tipo, texto, data_upload FROM arquivos WHERE categoria = ? ORDER BY id DESC", (categoria,))
-    rows = c.fetchall()
-    conn.close()
-    return rows
-
-
-def delete_file(file_id):
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("DELETE FROM arquivos WHERE id = ?", (file_id,))
-    conn.commit()
-    conn.close()
-
-
-def search_files(categoria, termo):
-    files = get_files(categoria)
-    if not termo:
-        return files
-    termo_lower = termo.lower()
-    result = []
-    for f in files:
-        if termo_lower in f[1].lower() or (f[3] and termo_lower in f[3].lower()):
-            result.append(f)
-    return result
-
-
-def login_page():
-    st.markdown(DARK_CSS, unsafe_allow_html=True)
-    st.markdown("<div class='main-header'>MARMED - Gestão em Saúde</div>", unsafe_allow_html=True)
+# =============================================================================
+# AUTENTICAÇÃO
+# =============================================================================
+def tela_login():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align: center; color: #6a93ff;'>Acesso ao Sistema</h3>", unsafe_allow_html=True)
-        username = st.text_input("Usuário", key="login_user")
-        password = st.text_input("Senha", type="password", key="login_pass")
-        if st.button("Entrar", use_container_width=True):
-            if login_user(username, password):
-                st.session_state.logged_in = True
-                st.session_state.username = username
-                st.rerun()
-            else:
-                st.error("Usuário ou senha inválidos")
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("<div class='main-title'>🏥 MARMED</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='subtitle'>Sistema de Gestão de Recursos em Saúde</div>",
+            unsafe_allow_html=True,
+        )
+
+        with st.form("login_form"):
+            st.markdown("<h3 style='color:#f8fafc;'>Acesso ao Sistema</h3>", unsafe_allow_html=True)
+            usuario = st.text_input("Usuário", value="")
+            senha = st.text_input("Senha", type="password", value="")
+            submit = st.form_submit_button("Entrar")
+
+            if submit:
+                if usuario == "admin" and senha == "Diretor2025#":
+                    st.session_state["autenticado"] = True
+                    st.session_state["usuario"] = usuario
+                    st.success("Login realizado com sucesso!")
+                    st.rerun()
+                else:
+                    st.error("Usuário ou senha inválidos!")
 
 
+# =============================================================================
+# DASHBOARD
+# =============================================================================
 def dashboard():
-    st.markdown("<div class='main-header'>Dashboard MARMED</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-header'>Visão Geral por Esfera de Gestão</div>", unsafe_allow_html=True)
-    esferas = ["Federal", "Estadual", "Municipal", "Transferência", "Transposição"]
-    cols = st.columns(5)
-    conn = get_conn()
-    c = conn.cursor()
-    for idx, esfera in enumerate(esferas):
-        c.execute("SELECT COALESCE(SUM(valor), 0) FROM contas WHERE esfera = ?", (esfera,))
-        total = c.fetchone()[0]
-        c.execute("SELECT COALESCE(SUM(valor), 0) FROM compras WHERE esfera = ?", (esfera,))
-        gasto = c.fetchone()[0]
-        saldo = total - gasto
-        with cols[idx]:
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            st.markdown("<div class='metric-label'>" + esfera + "</div>", unsafe_allow_html=True)
-            st.markdown("<div class='metric-value'>" + format_currency(saldo) + "</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-    conn.close()
+    st.markdown("<div class='main-title'>Dashboard</div>", unsafe_allow_html=True)
+    st.markdown("<div class='subtitle'>Visão Geral por Esfera de Gestão</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-header'>Resumo Financeiro</div>", unsafe_allow_html=True)
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("SELECT COALESCE(SUM(valor), 0) FROM contas")
-    total_contas = c.fetchone()[0]
-    c.execute("SELECT COALESCE(SUM(valor), 0) FROM compras")
-    total_compras = c.fetchone()[0]
-    superavit = total_contas - total_compras
-    conn.close()
+    esferas = ["Federal", "Estadual", "Municipal"]
+
+    for esfera in esferas:
+        contas_esfera = [c for c in st.session_state["contas"] if c["esfera"] == esfera]
+        total_contas = sum(c["saldo"] for c in contas_esfera)
+        compras_esfera = [c for c in st.session_state["compras"] if c["esfera"] == esfera]
+        total_compras = sum(c["valor_total"] for c in compras_esfera)
+        superavit = st.session_state["superavit"].get(esfera, 0.0)
+        saldo_disponivel = total_contas + superavit - total_compras
+
+        with st.container():
+            st.markdown(f"<h3 style='color:#22d3ee;'>{esfera}</h3>", unsafe_allow_html=True)
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                st.markdown(
+                    f"""
+                    <div class='card'>
+                        <div class='card-title'>Contas Cadastradas</div>
+                        <div class='card-value'>{len(contas_esfera)}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with c2:
+                st.markdown(
+                    f"""
+                    <div class='card'>
+                        <div class='card-title'>Saldo em Contas</div>
+                        <div class='card-money'>{formatar_moeda(total_contas)}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with c3:
+                st.markdown(
+                    f"""
+                    <div class='card'>
+                        <div class='card-title'>Compras Solicitadas</div>
+                        <div class='card-money'>{formatar_moeda(total_compras)}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with c4:
+                st.markdown(
+                    f"""
+                    <div class='card'>
+                        <div class='card-title'>Saldo Disponível</div>
+                        <div class='card-money'>{formatar_moeda(saldo_disponivel)}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+    st.divider()
+
+    # Resumo geral
+    total_geral_contas = sum(c["saldo"] for c in st.session_state["contas"])
+    total_geral_compras = sum(c["valor_total"] for c in st.session_state["compras"])
+    total_geral_superavit = sum(st.session_state["superavit"].values())
+    saldo_geral = total_geral_contas + total_geral_superavit - total_geral_compras
+
+    st.markdown("<h3 style='color:#f8fafc;'>Resumo Geral</h3>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.markdown("<div class='metric-label'>Total em Contas</div>", unsafe_allow_html=True)
-        st.markdown("<div class='metric-value'>" + format_currency(total_contas) + "</div>", unsafe_allow_html=True)
+        st.metric(label="Total em Contas", value=formatar_moeda(total_geral_contas))
     with c2:
-        st.markdown("<div class='metric-label'>Total em Compras</div>", unsafe_allow_html=True)
-        st.markdown("<div class='metric-value'>" + format_currency(total_compras) + "</div>", unsafe_allow_html=True)
+        st.metric(label="Total em Compras", value=formatar_moeda(total_geral_compras))
     with c3:
-        st.markdown("<div class='metric-label'>Superávit Financeiro</div>", unsafe_allow_html=True)
-        st.markdown("<div class='metric-value'>" + format_currency(superavit) + "</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.metric(label="Saldo Geral", value=formatar_moeda(saldo_geral))
 
 
+# =============================================================================
+# CADASTRO DE CONTAS
+# =============================================================================
 def cadastro_contas():
-    st.markdown("<div class='main-header'>Cadastro de Contas</div>", unsafe_allow_html=True)
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    esferas = ["Federal", "Estadual", "Municipal", "Transferência", "Transposição"]
-    esfera = st.selectbox("Esfera", esferas, key="conta_esfera")
-    nome = st.text_input("Nome da Conta / Fonte", key="conta_nome")
-    valor_str = st.text_input("Valor (R$)", value="R$ 0,00", key="conta_valor")
-    data = st.date_input("Data", key="conta_data")
-    if st.button("Salvar Conta", key="btn_salvar_conta"):
-        valor = parse_currency(valor_str)
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO contas (esfera, nome, valor, data) VALUES (?, ?, ?, ?)",
-            (esfera, nome, valor, data.strftime("%d/%m/%Y"))
-        )
-        conn.commit()
-        conn.close()
-        st.success("Conta cadastrada com sucesso!")
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div class='main-title'>Cadastro de Contas</div>", unsafe_allow_html=True)
 
+    esferas = ["Federal", "Estadual", "Municipal"]
 
-def contas_cadastradas():
-    st.markdown("<div class='main-header'>Contas Cadastradas</div>", unsafe_allow_html=True)
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("SELECT id, esfera, nome, valor, data FROM contas ORDER BY id DESC")
-    rows = c.fetchall()
-    conn.close()
-    if not rows:
-        st.info("Nenhuma conta cadastrada.")
-        return
-    for row in rows:
-        conta_id, esfera, nome, valor, data = row
-        with st.expander(esfera + " - " + nome + " - " + format_currency(valor)):
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            edit = st.checkbox("Editar", key="edit_conta_" + str(conta_id))
-            if edit:
-                novo_esfera = st.selectbox("Esfera", ["Federal", "Estadual", "Municipal", "Transferência", "Transposição"], index=["Federal", "Estadual", "Municipal", "Transferência", "Transposição"].index(esfera), key="select_conta_" + str(conta_id))
-                novo_nome = st.text_input("Nome", value=nome, key="nome_conta_" + str(conta_id))
-                novo_valor_str = st.text_input("Valor", value=format_currency(valor), key="valor_conta_" + str(conta_id))
-                novo_data = st.date_input("Data", value=datetime.strptime(data, "%d/%m/%Y"), key="data_conta_" + str(conta_id))
-                if st.button("Atualizar", key="update_conta_" + str(conta_id)):
-                    novo_valor = parse_currency(novo_valor_str)
-                    conn = get_conn()
-                    c = conn.cursor()
-                    c.execute(
-                        "UPDATE contas SET esfera = ?, nome = ?, valor = ?, data = ? WHERE id = ?",
-                        (novo_esfera, novo_nome, novo_valor, novo_data.strftime("%d/%m/%Y"), conta_id)
-                    )
-                    conn.commit()
-                    conn.close()
-                    st.success("Conta atualizada!")
-                    st.rerun()
-            if st.button("Excluir", key="delete_conta_" + str(conta_id)):
-                conn = get_conn()
-                c = conn.cursor()
-                c.execute("DELETE FROM contas WHERE id = ?", (conta_id,))
-                conn.commit()
-                conn.close()
-                st.success("Conta excluída!")
+    with st.form("form_conta"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            esfera = st.selectbox("Esfera", esferas)
+        with col2:
+            banco = st.text_input("Banco")
+        with col3:
+            agencia = st.text_input("Agência")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            numero_conta = st.text_input("Número da Conta")
+        with col2:
+            nome_conta = st.text_input("Nome da Conta / Identificação")
+        with col3:
+            saldo_input = st.text_input("Saldo Inicial", value="R$ 0,00")
+
+        submitted = st.form_submit_button("Cadastrar Conta")
+        if submitted:
+            saldo = parse_moeda(saldo_input)
+            if not banco or not numero_conta or not nome_conta:
+                st.error("Preencha todos os campos obrigatórios!")
+            else:
+                nova_conta = {
+                    "id": len(st.session_state["contas"]) + 1,
+                    "esfera": esfera,
+                    "banco": banco,
+                    "agencia": agencia,
+                    "numero_conta": numero_conta,
+                    "nome_conta": nome_conta,
+                    "saldo": saldo,
+                }
+                st.session_state["contas"].append(nova_conta)
+                st.success("Conta cadastrada com sucesso!")
                 st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+
+    st.divider()
+    st.markdown("<h3 style='color:#f8fafc;'>Contas Cadastradas</h3>", unsafe_allow_html=True)
+
+    abas = st.tabs(esferas)
+    for idx, esfera in enumerate(esferas):
+        with abas[idx]:
+            contas_esfera = [c for c in st.session_state["contas"] if c["esfera"] == esfera]
+            if not contas_esfera:
+                st.info(f"Nenhuma conta cadastrada na esfera {esfera}.")
+            else:
+                df = pd.DataFrame(contas_esfera)
+                df["saldo_fmt"] = df["saldo"].apply(formatar_moeda)
+                st.dataframe(df[["banco", "agencia", "numero_conta", "nome_conta", "saldo_fmt"]],
+                             use_container_width=True, hide_index=True)
+
+                for conta in contas_esfera:
+                    with st.expander(f"Editar / Excluir - {conta['nome_conta']}"):
+                        with st.form(f"editar_conta_{conta['id']}"):
+                            novo_banco = st.text_input("Banco", value=conta["banco"], key=f"banco_{conta['id']}")
+                            nova_agencia = st.text_input("Agência", value=conta["agencia"], key=f"agencia_{conta['id']}")
+                            novo_numero = st.text_input("Número da Conta", value=conta["numero_conta"], key=f"numero_{conta['id']}")
+                            novo_nome = st.text_input("Nome da Conta", value=conta["nome_conta"], key=f"nome_{conta['id']}")
+                            novo_saldo = st.text_input("Saldo", value=formatar_moeda(conta["saldo"]), key=f"saldo_{conta['id']}")
+
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                salvar = st.form_submit_button("Salvar Alterações")
+                            with col2:
+                                excluir = st.form_submit_button("Excluir Conta")
+
+                            if salvar:
+                                conta["banco"] = novo_banco
+                                conta["agencia"] = nova_agencia
+                                conta["numero_conta"] = novo_numero
+                                conta["nome_conta"] = novo_nome
+                                conta["saldo"] = parse_moeda(novo_saldo)
+                                st.success("Conta atualizada com sucesso!")
+                                st.rerun()
+                            if excluir:
+                                st.session_state["contas"] = [c for c in st.session_state["contas"] if c["id"] != conta["id"]]
+                                st.success("Conta excluída com sucesso!")
+                                st.rerun()
 
 
-def realizar_compras():
-    st.markdown("<div class='main-header'>Realizar Compras</div>", unsafe_allow_html=True)
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    esferas = ["Federal", "Estadual", "Municipal", "Transferência", "Transposição"]
-    esfera = st.selectbox("Esfera", esferas, key="compra_esfera")
-    descricao = st.text_input("Descrição da Compra", key="compra_descricao")
-    valor_str = st.text_input("Valor (R$)", value="R$ 0,00", key="compra_valor")
-    data = st.date_input("Data", key="compra_data")
-    if st.button("Registrar Compra", key="btn_salvar_compra"):
-        valor = parse_currency(valor_str)
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO compras (esfera, descricao, valor, data) VALUES (?, ?, ?, ?)",
-            (esfera, descricao, valor, data.strftime("%d/%m/%Y"))
-        )
-        conn.commit()
-        conn.close()
-        st.success("Compra registrada com sucesso!")
-    st.markdown("</div>", unsafe_allow_html=True)
+# =============================================================================
+# COMPRAS
+# =============================================================================
+def compras():
+    st.markdown("<div class='main-title'>Solicitações de Compra</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='sub-header'>Compras Registradas</div>", unsafe_allow_html=True)
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("SELECT id, esfera, descricao, valor, data FROM compras ORDER BY id DESC")
-    rows = c.fetchall()
-    conn.close()
-    for row in rows:
-        compra_id, esfera, descricao, valor, data = row
-        with st.expander(esfera + " - " + descricao + " - " + format_currency(valor)):
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            edit = st.checkbox("Editar", key="edit_compra_" + str(compra_id))
-            if edit:
-                novo_esfera = st.selectbox("Esfera", esferas, index=esferas.index(esfera), key="select_compra_" + str(compra_id))
-                novo_descricao = st.text_input("Descrição", value=descricao, key="desc_compra_" + str(compra_id))
-                novo_valor_str = st.text_input("Valor", value=format_currency(valor), key="valor_compra_" + str(compra_id))
-                novo_data = st.date_input("Data", value=datetime.strptime(data, "%d/%m/%Y"), key="data_compra_" + str(compra_id))
-                if st.button("Atualizar", key="update_compra_" + str(compra_id)):
-                    novo_valor = parse_currency(novo_valor_str)
-                    conn = get_conn()
-                    c = conn.cursor()
-                    c.execute(
-                        "UPDATE compras SET esfera = ?, descricao = ?, valor = ?, data = ? WHERE id = ?",
-                        (novo_esfera, novo_descricao, novo_valor, novo_data.strftime("%d/%m/%Y"), compra_id)
-                    )
-                    conn.commit()
-                    conn.close()
-                    st.success("Compra atualizada!")
-                    st.rerun()
-            if st.button("Excluir", key="delete_compra_" + str(compra_id)):
-                conn = get_conn()
-                c = conn.cursor()
-                c.execute("DELETE FROM compras WHERE id = ?", (compra_id,))
-                conn.commit()
-                conn.close()
-                st.success("Compra excluída!")
+    esferas = ["Federal", "Estadual", "Municipal"]
+
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.markdown("<h3 style='color:#f8fafc;'>Nova Solicitação</h3>", unsafe_allow_html=True)
+        with st.form("form_compra"):
+            esfera = st.selectbox("Esfera", esferas, key="compra_esfera")
+            contas_esfera = [c for c in st.session_state["contas"] if c["esfera"] == esfera]
+            conta_opcoes = {f"{c['nome_conta']} - {c['numero_conta']}": c for c in contas_esfera}
+            conta_selecionada = st.selectbox(
+                "Conta Vinculada", options=list(conta_opcoes.keys()) if conta_opcoes else ["Nenhuma conta disponível"]
+            )
+
+            fornecedor = st.text_input("Fornecedor")
+            produto = st.text_input("Produto / Serviço")
+            quantidade = st.number_input("Quantidade", min_value=1, value=1, step=1)
+            valor_unitario = st.text_input("Valor Unitário", value="R$ 0,00")
+            data_compra = st.date_input("Data da Solicitação", value=date.today(), format="DD/MM/YYYY")
+            observacao = st.text_area("Observação")
+
+            submitted = st.form_submit_button("Solicitar")
+            if submitted:
+                if not conta_opcoes or conta_selecionada == "Nenhuma conta disponível":
+                    st.error("Nenhuma conta disponível para a esfera selecionada.")
+                elif not fornecedor or not produto:
+                    st.error("Preencha fornecedor e produto.")
+                else:
+                    vu = parse_moeda(valor_unitario)
+                    vt = vu * quantidade
+                    if vt <= 0:
+                        st.error("Valor total da compra deve ser maior que zero.")
+                    else:
+                        conta = conta_opcoes[conta_selecionada]
+                        if vt > conta["saldo"]:
+                            st.error("Saldo insuficiente na conta selecionada.")
+                        else:
+                            nova_compra = {
+                                "id": len(st.session_state["compras"]) + 1,
+                                "esfera": esfera,
+                                "conta_id": conta["id"],
+                                "conta_nome": conta["nome_conta"],
+                                "fornecedor": fornecedor,
+                                "produto": produto,
+                                "quantidade": quantidade,
+                                "valor_unitario": vu,
+                                "valor_total": vt,
+                                "data": data_compra.strftime("%d/%m/%Y"),
+                                "observacao": observacao,
+                                "status": "Solicitada",
+                            }
+                            conta["saldo"] -= vt
+                            st.session_state["compras"].append(nova_compra)
+                            st.success("Compra solicitada com sucesso!")
+                            st.rerun()
+
+    with col2:
+        st.markdown("<h3 style='color:#f8fafc;'>Solicitações Realizadas</h3>", unsafe_allow_html=True)
+        if not st.session_state["compras"]:
+            st.info("Nenhuma solicitação de compra realizada.")
+        else:
+            df = pd.DataFrame(st.session_state["compras"])
+            df["valor_unitario_fmt"] = df["valor_unitario"].apply(formatar_moeda)
+            df["valor_total_fmt"] = df["valor_total"].apply(formatar_moeda)
+            st.dataframe(
+                df[["esfera", "conta_nome", "fornecedor", "produto", "quantidade", "valor_total_fmt", "data", "status"]],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            for compra in st.session_state["compras"]:
+                with st.expander(f"Editar / Excluir - {compra['produto']} ({compra['esfera']})"):
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        if st.button("Editar", key=f"edit_compra_{compra['id']}"):
+                            st.session_state["compra_edicao"] = compra
+                            st.rerun()
+                    with col_b:
+                        if st.button("Excluir", key=f"del_compra_{compra['id']}"):
+                            conta = next((c for c in st.session_state["contas"] if c["id"] == compra["conta_id"]), None)
+                            if conta:
+                                conta["saldo"] += compra["valor_total"]
+                            st.session_state["compras"] = [c for c in st.session_state["compras"] if c["id"] != compra["id"]]
+                            st.success("Solicitação excluída com sucesso!")
+                            st.rerun()
+
+    if "compra_edicao" in st.session_state and st.session_state["compra_edicao"]:
+        compra = st.session_state["compra_edicao"]
+        st.divider()
+        st.markdown("<h3 style='color:#f8fafc;'>Editar Solicitação</h3>", unsafe_allow_html=True)
+        with st.form("editar_compra"):
+            novo_fornecedor = st.text_input("Fornecedor", value=compra["fornecedor"])
+            novo_produto = st.text_input("Produto", value=compra["produto"])
+            nova_quantidade = st.number_input("Quantidade", min_value=1, value=compra["quantidade"], step=1)
+            novo_valor_unitario = st.text_input("Valor Unitário", value=formatar_moeda(compra["valor_unitario"]))
+            nova_data = st.date_input("Data", value=datetime.strptime(compra["data"], "%d/%m/%Y").date(), format="DD/MM/YYYY")
+            novo_status = st.selectbox("Status", ["Solicitada", "Aprovada", "Reprovada", "Cancelada"], index=["Solicitada", "Aprovada", "Reprovada", "Cancelada"].index(compra["status"]))
+
+            col1, col2 = st.columns(2)
+            with col1:
+                salvar = st.form_submit_button("Salvar")
+            with col2:
+                cancelar = st.form_submit_button("Cancelar Edição")
+
+            if salvar:
+                conta = next((c for c in st.session_state["contas"] if c["id"] == compra["conta_id"]), None)
+                if conta:
+                    conta["saldo"] += compra["valor_total"]
+                    novo_vu = parse_moeda(novo_valor_unitario)
+                    novo_vt = novo_vu * nova_quantidade
+                    if novo_vt <= 0:
+                        st.error("Valor total deve ser maior que zero.")
+                        conta["saldo"] -= compra["valor_total"]
+                    elif novo_vt > conta["saldo"]:
+                        st.error("Saldo insuficiente na conta.")
+                        conta["saldo"] -= compra["valor_total"]
+                    else:
+                        compra["fornecedor"] = novo_fornecedor
+                        compra["produto"] = novo_produto
+                        compra["quantidade"] = nova_quantidade
+                        compra["valor_unitario"] = novo_vu
+                        compra["valor_total"] = novo_vt
+                        compra["data"] = nova_data.strftime("%d/%m/%Y")
+                        compra["status"] = novo_status
+                        conta["saldo"] -= novo_vt
+                        st.session_state["compra_edicao"] = None
+                        st.success("Solicitação atualizada com sucesso!")
+                        st.rerun()
+            if cancelar:
+                st.session_state["compra_edicao"] = None
                 st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
 
 
-def superavit_financeiro():
-    st.markdown("<div class='main-header'>Superávit Financeiro</div>", unsafe_allow_html=True)
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("SELECT COALESCE(SUM(valor), 0) FROM contas")
-    total_contas = c.fetchone()[0]
-    c.execute("SELECT COALESCE(SUM(valor), 0) FROM compras")
-    total_compras = c.fetchone()[0]
-    superavit = total_contas - total_compras
-    conn.close()
+# =============================================================================
+# SUPERÁVIT FINANCEIRO
+# =============================================================================
+def superavit():
+    st.markdown("<div class='main-title'>Superávit Financeiro</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("<div class='metric-label'>Total em Contas</div>", unsafe_allow_html=True)
-        st.markdown("<div class='metric-value'>" + format_currency(total_contas) + "</div>", unsafe_allow_html=True)
-    with c2:
-        st.markdown("<div class='metric-label'>Total em Compras</div>", unsafe_allow_html=True)
-        st.markdown("<div class='metric-value'>" + format_currency(total_compras) + "</div>", unsafe_allow_html=True)
-    with c3:
-        st.markdown("<div class='metric-label'>Superávit</div>", unsafe_allow_html=True)
-        st.markdown("<div class='metric-value'>" + format_currency(superavit) + "</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    esferas = ["Federal", "Estadual", "Municipal"]
 
-    if superavit > 0:
-        st.markdown("<div class='info-box'>Situação financeira: SUPERÁVIT POSITIVO</div>", unsafe_allow_html=True)
-    elif superavit < 0:
-        st.markdown("<div class='warning-box'>Situação financeira: DÉFICIT - atenção aos gastos</div>", unsafe_allow_html=True)
-    else:
-        st.markdown("<div class='info-box'>Situação financeira: EQUILÍBRIO</div>", unsafe_allow_html=True)
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.markdown("<h3 style='color:#f8fafc;'>Lançar Superávit</h3>", unsafe_allow_html=True)
+        with st.form("form_superavit"):
+            esfera = st.selectbox("Esfera", esferas)
+            valor = st.text_input("Valor", value="R$ 0,00")
+            data_superavit = st.date_input("Data", value=date.today(), format="DD/MM/YYYY")
+            descricao = st.text_area("Descrição / Origem")
+            submitted = st.form_submit_button("Lançar Superávit")
+            if submitted:
+                v = parse_moeda(valor)
+                if v <= 0:
+                    st.error("Valor deve ser maior que zero.")
+                else:
+                    st.session_state["superavit"][esfera] = st.session_state["superavit"].get(esfera, 0.0) + v
+                    if "historico_superavit" not in st.session_state:
+                        st.session_state["historico_superavit"] = []
+                    st.session_state["historico_superavit"].append({
+                        "esfera": esfera,
+                        "valor": v,
+                        "data": data_superavit.strftime("%d/%m/%Y"),
+                        "descricao": descricao,
+                    })
+                    st.success("Superávit lançado com sucesso!")
+                    st.rerun()
 
-    st.markdown("<div class='sub-header'>Distribuição por Esfera</div>", unsafe_allow_html=True)
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("SELECT esfera, COALESCE(SUM(valor), 0) FROM contas GROUP BY esfera")
-    contas_por_esfera = c.fetchall()
-    c.execute("SELECT esfera, COALESCE(SUM(valor), 0) FROM compras GROUP BY esfera")
-    compras_por_esfera = c.fetchall()
-    conn.close()
-    saldos = {}
-    for esfera, valor in contas_por_esfera:
-        saldos[esfera] = valor
-    for esfera, valor in compras_por_esfera:
-        saldos[esfera] = saldos.get(esfera, 0) - valor
-    if saldos:
-        df = pd.DataFrame([{"Esfera": k, "Saldo": v} for k, v in saldos.items()])
-        st.bar_chart(df.set_index("Esfera"))
+    with col2:
+        st.markdown("<h3 style='color:#f8fafc;'>Saldo de Superávit por Esfera</h3>", unsafe_allow_html=True)
+        for esfera in esferas:
+            valor = st.session_state["superavit"].get(esfera, 0.0)
+            st.markdown(
+                f"""
+                <div class='card'>
+                    <div class='card-title'>{esfera}</div>
+                    <div class='card-money'>{formatar_moeda(valor)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        if "historico_superavit" in st.session_state and st.session_state["historico_superavit"]:
+            st.markdown("<h4 style='color:#22d3ee;'>Histórico de Lançamentos</h4>", unsafe_allow_html=True)
+            df = pd.DataFrame(st.session_state["historico_superavit"])
+            df["valor_fmt"] = df["valor"].apply(formatar_moeda)
+            st.dataframe(df[["esfera", "valor_fmt", "data", "descricao"]], use_container_width=True, hide_index=True)
 
 
+# =============================================================================
+# PROGRAMAS DE SAÚDE
+# =============================================================================
 def programas_saude():
-    st.markdown("<div class='main-header'>Programas de Saúde</div>", unsafe_allow_html=True)
-    aba1, aba2 = st.tabs(["MEDICAMENTOS", "PROGRAMAS DE SAÚDE"])
+    st.markdown("<div class='main-title'>Programas de Saúde</div>", unsafe_allow_html=True)
 
-    with aba1:
-        st.markdown("<div class='sub-header'>Medicamentos</div>", unsafe_allow_html=True)
-        medicamentos = ["RENAME", "REMUME", "RENEM", "RENASES"]
-        for med in medicamentos:
-            with st.expander(med):
-                st.markdown("<div class='card'>", unsafe_allow_html=True)
-                uploaded = st.file_uploader("Upload de arquivo - " + med, type=["pdf", "docx", "txt", "csv"], key="upload_med_" + med)
-                if st.button("Enviar arquivo - " + med, key="btn_med_" + med):
-                    save_uploaded_file("MEDICAMENTOS_" + med, uploaded)
-                    st.success("Arquivo enviado!")
-                busca = st.text_input("Buscar em documentos - " + med, key="busca_med_" + med)
-                arquivos = search_files("MEDICAMENTOS_" + med, busca)
-                if arquivos:
-                    for arq in arquivos:
-                        arq_id, nome, tipo, texto, data_upload = arq
-                        st.write("- " + nome + " (" + data_upload + ")")
-                        st.download_button("Download", data=BytesIO(texto.encode()) if texto else b"", file_name=nome, key="down_med_" + med + "_" + str(arq_id))
-                        if st.button("Excluir", key="del_med_" + med + "_" + str(arq_id)):
-                            delete_file(arq_id)
-                            st.rerun()
-                else:
-                    st.info("Nenhum documento encontrado.")
-                st.markdown("</div>", unsafe_allow_html=True)
+    esferas = ["Federal", "Estadual", "Municipal"]
 
-    with aba2:
-        st.markdown("<div class='sub-header'>Programas de Saúde</div>", unsafe_allow_html=True)
-        programas = ["PAS", "RDQA", "RAG"]
-        for prog in programas:
-            with st.expander(prog):
-                st.markdown("<div class='card'>", unsafe_allow_html=True)
-                uploaded = st.file_uploader("Upload de arquivo - " + prog, type=["pdf", "docx", "txt", "csv"], key="upload_prog_" + prog)
-                if st.button("Enviar arquivo - " + prog, key="btn_prog_" + prog):
-                    save_uploaded_file("PROGRAMAS_" + prog, uploaded)
-                    st.success("Arquivo enviado!")
-                busca = st.text_input("Buscar em documentos - " + prog, key="busca_prog_" + prog)
-                arquivos = search_files("PROGRAMAS_" + prog, busca)
-                if arquivos:
-                    for arq in arquivos:
-                        arq_id, nome, tipo, texto, data_upload = arq
-                        st.write("- " + nome + " (" + data_upload + ")")
-                        st.download_button("Download", data=BytesIO(texto.encode()) if texto else b"", file_name=nome, key="down_prog_" + prog + "_" + str(arq_id))
-                        if st.button("Excluir", key="del_prog_" + prog + "_" + str(arq_id)):
-                            delete_file(arq_id)
-                            st.rerun()
-                else:
-                    st.info("Nenhum documento encontrado.")
-                st.markdown("</div>", unsafe_allow_html=True)
-
-
-def upload_arquivos():
-    st.markdown("<div class='main-header'>Upload de Arquivos</div>", unsafe_allow_html=True)
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    categoria = st.text_input("Categoria do Documento", key="upload_categoria")
-    uploaded = st.file_uploader("Selecione o arquivo", type=["pdf", "docx", "txt", "csv", "xlsx"], key="upload_geral")
-    if st.button("Enviar", key="btn_upload_geral"):
-        cat = categoria if categoria else "GERAL"
-        save_uploaded_file(cat, uploaded)
-        st.success("Arquivo enviado com sucesso!")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("<div class='sub-header'>Buscar Documentos</div>", unsafe_allow_html=True)
-    busca = st.text_input("Termo de busca", key="busca_geral")
-    if busca:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute("SELECT id, categoria, nome, tipo, data_upload FROM arquivos WHERE LOWER(nome) LIKE ? OR LOWER(texto) LIKE ?", ("%" + busca.lower() + "%", "%" + busca.lower() + "%"))
-        rows = c.fetchall()
-        conn.close()
-        if rows:
-            for row in rows:
-                arq_id, cat, nome, tipo, data_upload = row
-                st.write("[" + cat + "] " + nome + " - " + data_upload)
-                if st.button("Excluir", key="del_geral_" + str(arq_id)):
-                    delete_file(arq_id)
-                    st.rerun()
-        else:
-            st.info("Nenhum documento encontrado.")
-
-
-def plano_municipal_saude():
-    st.markdown("<div class='main-header'>Plano Municipal de Saúde</div>", unsafe_allow_html=True)
-    st.markdown("<div class='info-box'>Gerencie os documentos, metas e ações do Plano Municipal de Saúde.</div>", unsafe_allow_html=True)
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    uploaded = st.file_uploader("Upload de documento do PMS", type=["pdf", "docx", "txt", "csv"], key="upload_pms")
-    if st.button("Enviar documento PMS", key="btn_pms"):
-        save_uploaded_file("PLANO_MUNICIPAL_SAUDE", uploaded)
-        st.success("Documento enviado!")
-    busca = st.text_input("Buscar no PMS", key="busca_pms")
-    arquivos = search_files("PLANO_MUNICIPAL_SAUDE", busca)
-    if arquivos:
-        for arq in arquivos:
-            arq_id, nome, tipo, texto, data_upload = arq
-            st.write("- " + nome + " (" + data_upload + ")")
-            if st.button("Excluir", key="del_pms_" + str(arq_id)):
-                delete_file(arq_id)
+    with st.form("form_programa"):
+        col1, col2 = st.columns(2)
+        with col1:
+            esfera = st.selectbox("Esfera", esferas)
+        with col2:
+            nome_programa = st.text_input("Nome do Programa")
+        descricao = st.text_area("Descrição do Programa")
+        data_inicio = st.date_input("Data de Início", value=date.today(), format="DD/MM/YYYY")
+        data_fim = st.date_input("Data de Término", value=date.today(), format="DD/MM/YYYY")
+        submitted = st.form_submit_button("Cadastrar Programa")
+        if submitted:
+            if not nome_programa:
+                st.error("Informe o nome do programa.")
+            else:
+                st.session_state["programas"].append({
+                    "id": len(st.session_state["programas"]) + 1,
+                    "esfera": esfera,
+                    "nome": nome_programa,
+                    "descricao": descricao,
+                    "data_inicio": data_inicio.strftime("%d/%m/%Y"),
+                    "data_fim": data_fim.strftime("%d/%m/%Y"),
+                })
+                st.success("Programa cadastrado com sucesso!")
                 st.rerun()
+
+    st.divider()
+    st.markdown("<h3 style='color:#f8fafc;'>Programas Cadastrados</h3>", unsafe_allow_html=True)
+    if not st.session_state["programas"]:
+        st.info("Nenhum programa cadastrado.")
     else:
-        st.info("Nenhum documento encontrado.")
-    st.markdown("</div>", unsafe_allow_html=True)
+        filtro_esfera = st.selectbox("Filtrar por Esfera", ["Todas"] + esferas)
+        programas_filtrados = st.session_state["programas"]
+        if filtro_esfera != "Todas":
+            programas_filtrados = [p for p in programas_filtrados if p["esfera"] == filtro_esfera]
+        df = pd.DataFrame(programas_filtrados)
+        st.dataframe(df[["esfera", "nome", "descricao", "data_inicio", "data_fim"]], use_container_width=True, hide_index=True)
 
 
+# =============================================================================
+# PLANO MUNICIPAL DE SAÚDE
+# =============================================================================
+def plano_municipal():
+    st.markdown("<div class='main-title'>Plano Municipal de Saúde</div>", unsafe_allow_html=True)
+
+    with st.form("form_plano"):
+        titulo = st.text_input("Título do Plano")
+        objetivo = st.text_area("Objetivo Geral")
+        metas = st.text_area("Metas e Indicadores")
+        acoes = st.text_area("Ações e Estratégias")
+        vigencia_inicio = st.date_input("Início da Vigência", value=date.today(), format="DD/MM/YYYY")
+        vigencia_fim = st.date_input("Fim da Vigência", value=date.today(), format="DD/MM/YYYY")
+        submitted = st.form_submit_button("Salvar Plano")
+        if submitted:
+            st.session_state["plano_municipal"] = {
+                "titulo": titulo,
+                "objetivo": objetivo,
+                "metas": metas,
+                "acoes": acoes,
+                "vigencia_inicio": vigencia_inicio.strftime("%d/%m/%Y"),
+                "vigencia_fim": vigencia_fim.strftime("%d/%m/%Y"),
+            }
+            st.success("Plano Municipal de Saúde salvo com sucesso!")
+            st.rerun()
+
+    st.divider()
+    if st.session_state["plano_municipal"]:
+        plano = st.session_state["plano_municipal"]
+        st.markdown(
+            f"""
+            <div class='card'>
+                <div class='card-title'>{plano.get('titulo', 'Sem título')}</div>
+                <p><strong style='color:#22d3ee;'>Objetivo:</strong> {plano.get('objetivo', '')}</p>
+                <p><strong style='color:#22d3ee;'>Metas:</strong> {plano.get('metas', '')}</p>
+                <p><strong style='color:#22d3ee;'>Ações:</strong> {plano.get('acoes', '')}</p>
+                <p><strong style='color:#22d3ee;'>Vigência:</strong> {plano.get('vigencia_inicio', '')} a {plano.get('vigencia_fim', '')}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("Nenhum Plano Municipal de Saúde cadastrado.")
+
+
+# =============================================================================
+# NORTE DA MINHA GESTÃO
+# =============================================================================
 def norte_gestao():
-    st.markdown("<div class='main-header'>Norte da Minha Gestão</div>", unsafe_allow_html=True)
-    st.markdown("<div class='info-box'>Diretrizes estratégicas, indicadores e prioridades da gestão em saúde.</div>", unsafe_allow_html=True)
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    uploaded = st.file_uploader("Upload de documento", type=["pdf", "docx", "txt", "csv"], key="upload_norte")
-    if st.button("Enviar documento", key="btn_norte"):
-        save_uploaded_file("NORTE_GESTAO", uploaded)
-        st.success("Documento enviado!")
-    busca = st.text_input("Buscar documentos", key="busca_norte")
-    arquivos = search_files("NORTE_GESTAO", busca)
-    if arquivos:
-        for arq in arquivos:
-            arq_id, nome, tipo, texto, data_upload = arq
-            st.write("- " + nome + " (" + data_upload + ")")
-            if st.button("Excluir", key="del_norte_" + str(arq_id)):
-                delete_file(arq_id)
-                st.rerun()
+    st.markdown("<div class='main-title'>Norte da Minha Gestão</div>", unsafe_allow_html=True)
+
+    with st.form("form_norte"):
+        missao = st.text_area("Missão")
+        visao = st.text_area("Visão")
+        valores = st.text_area("Valores")
+        diretrizes = st.text_area("Diretrizes Estratégicas")
+        submitted = st.form_submit_button("Salvar Norte da Gestão")
+        if submitted:
+            st.session_state["norte_gestao"] = {
+                "missao": missao,
+                "visao": visao,
+                "valores": valores,
+                "diretrizes": diretrizes,
+            }
+            st.success("Norte da Gestão salvo com sucesso!")
+            st.rerun()
+
+    st.divider()
+    if st.session_state["norte_gestao"]:
+        norte = st.session_state["norte_gestao"]
+        st.markdown(
+            f"""
+            <div class='card'>
+                <div class='card-title'>Norte da Minha Gestão</div>
+                <p><strong style='color:#22d3ee;'>Missão:</strong> {norte.get('missao', '')}</p>
+                <p><strong style='color:#22d3ee;'>Visão:</strong> {norte.get('visao', '')}</p>
+                <p><strong style='color:#22d3ee;'>Valores:</strong> {norte.get('valores', '')}</p>
+                <p><strong style='color:#22d3ee;'>Diretrizes:</strong> {norte.get('diretrizes', '')}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     else:
-        st.info("Nenhum documento encontrado.")
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.info("Nenhum registro do Norte da Gestão cadastrado.")
 
 
-def conselho_municipal_saude():
-    st.markdown("<div class='main-header'>CONSELHO MUNICIPAL DE SAÚDE</div>", unsafe_allow_html=True)
-    st.markdown("<div class='info-box'>O Conselho Municipal de Saúde (CMS) é um órgão colegiado de composição paritária entre usuários, trabalhadores e gestor do SUS, responsável por fiscalizar, acompanhar e contribuir na elaboração de políticas públicas de saúde no município. Aqui são armazenados atas, resoluções, pareceres e demais documentos do CMS.</div>", unsafe_allow_html=True)
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    uploaded = st.file_uploader("Upload de documento do CMS", type=["pdf", "docx", "txt", "csv"], key="upload_cms")
-    if st.button("Enviar documento CMS", key="btn_cms"):
-        save_uploaded_file("CONSELHO_MUNICIPAL_SAUDE", uploaded)
-        st.success("Documento enviado!")
-    busca = st.text_input("Buscar nos documentos do CMS", key="busca_cms")
-    arquivos = search_files("CONSELHO_MUNICIPAL_SAUDE", busca)
-    if arquivos:
-        for arq in arquivos:
-            arq_id, nome, tipo, texto, data_upload = arq
-            st.write("- " + nome + " (" + data_upload + ")")
-            if st.button("Excluir", key="del_cms_" + str(arq_id)):
-                delete_file(arq_id)
-                st.rerun()
+# =============================================================================
+# UPLOAD E BUSCA EM DOCUMENTOS
+# =============================================================================
+def documentos():
+    st.markdown("<div class='main-title'>Upload e Busca em Documentos</div>", unsafe_allow_html=True)
+
+    uploaded_file = st.file_uploader("Envie um documento (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
+    if uploaded_file is not None:
+        bytes_data = uploaded_file.getvalue()
+        st.session_state["documentos"].append({
+            "nome": uploaded_file.name,
+            "tipo": uploaded_file.type,
+            "data": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "conteudo": bytes_data,
+        })
+        st.success(f"Documento '{uploaded_file.name}' enviado com sucesso!")
+
+    st.divider()
+    st.markdown("<h3 style='color:#f8fafc;'>Documentos Armazenados</h3>", unsafe_allow_html=True)
+
+    if not st.session_state["documentos"]:
+        st.info("Nenhum documento armazenado.")
     else:
-        st.info("Nenhum documento encontrado.")
-    st.markdown("</div>", unsafe_allow_html=True)
+        termo = st.text_input("Buscar nos documentos")
+        for doc in st.session_state["documentos"]:
+            exibir = True
+            if termo:
+                if doc["tipo"] == "text/plain":
+                    try:
+                        texto = doc["conteudo"].decode("utf-8", errors="ignore")
+                    except Exception:
+                        texto = ""
+                    exibir = termo.lower() in texto.lower() or termo.lower() in doc["nome"].lower()
+                else:
+                    exibir = termo.lower() in doc["nome"].lower()
+            if exibir:
+                with st.expander(f"{doc['nome']} - {doc['data']}"):
+                    st.write(f"Tipo: {doc['tipo']}")
+                    if doc["tipo"] == "text/plain":
+                        try:
+                            texto = doc["conteudo"].decode("utf-8", errors="ignore")
+                            st.text_area("Conteúdo", value=texto, height=200, key=f"txt_{doc['nome']}")
+                        except Exception as e:
+                            st.error(f"Erro ao exibir conteúdo: {e}")
+                    st.download_button(
+                        label="Baixar Documento",
+                        data=doc["conteudo"],
+                        file_name=doc["nome"],
+                        mime=doc["tipo"],
+                        key=f"download_{doc['nome']}",
+                    )
 
 
-def trocar_senha():
-    st.markdown("<div class='main-header'>Trocar Senha</div>", unsafe_allow_html=True)
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    atual = st.text_input("Senha atual", type="password", key="senha_atual")
-    nova = st.text_input("Nova senha", type="password", key="senha_nova")
-    confirma = st.text_input("Confirmar nova senha", type="password", key="senha_confirma")
-    if st.button("Alterar Senha", key="btn_trocar_senha"):
-        if not login_user(st.session_state.username, atual):
-            st.error("Senha atual incorreta.")
-        elif nova != confirma:
-            st.error("As senhas não conferem.")
-        elif len(nova) < 6:
-            st.error("A nova senha deve ter pelo menos 6 caracteres.")
-        else:
-            change_password(st.session_state.username, nova)
-            st.success("Senha alterada com sucesso!")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def main():
-    st.set_page_config(page_title="MARMED - Gestão em Saúde", page_icon="🏥", layout="wide")
-    st.markdown(DARK_CSS, unsafe_allow_html=True)
-    init_db()
-
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
-    if "username" not in st.session_state:
-        st.session_state.username = ""
-    if "menu" not in st.session_state:
-        st.session_state.menu = "DASHBOARD"
-
-    if not st.session_state.logged_in:
-        login_page()
-        return
-
+# =============================================================================
+# MENU LATERAL
+# =============================================================================
+def menu_lateral():
     with st.sidebar:
-        st.markdown("<div class='main-header' style='font-size:1.5rem;'>MARMED</div>", unsafe_allow_html=True)
-        st.markdown("<div style='text-align:center; color:#a0a0cc;'>Usuário: " + st.session_state.username + "</div>", unsafe_allow_html=True)
-        st.markdown("<hr>", unsafe_allow_html=True)
-        menu_options = [
-            "DASHBOARD",
-            "CADASTRO DE CONTAS",
-            "CONTAS CADASTRADAS",
-            "REALIZAR COMPRAS",
-            "SUPERÁVIT FINANCEIRO",
-            "PROGRAMAS DE SAÚDE",
-            "UPLOAD DE ARQUIVOS",
-            "PLANO MUNICIPAL DE SAÚDE",
-            "NORTE DA MINHA GESTAO",
-            "CONSELHO MUNICIPAL SAÚDE",
-            "TROCAR SENHA",
-            "SAIR"
-        ]
-        menu = st.radio("Menu", menu_options, label_visibility="collapsed")
+        st.markdown("<div class='main-title'>🏥 MARMED</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color:#22d3ee; font-weight:700; text-align:center;'>Usuário: {st.session_state['usuario']}</div>", unsafe_allow_html=True)
+        st.divider()
 
-    if menu == "DASHBOARD":
-        dashboard()
-    elif menu == "CADASTRO DE CONTAS":
-        cadastro_contas()
-    elif menu == "CONTAS CADASTRADAS":
-        contas_cadastradas()
-    elif menu == "REALIZAR COMPRAS":
-        realizar_compras()
-    elif menu == "SUPERÁVIT FINANCEIRO":
-        superavit_financeiro()
-    elif menu == "PROGRAMAS DE SAÚDE":
-        programas_saude()
-    elif menu == "UPLOAD DE ARQUIVOS":
-        upload_arquivos()
-    elif menu == "PLANO MUNICIPAL DE SAÚDE":
-        plano_municipal_saude()
-    elif menu == "NORTE DA MINHA GESTAO":
-        norte_gestao()
-    elif menu == "CONSELHO MUNICIPAL SAÚDE":
-        conselho_municipal_saude()
-    elif menu == "TROCAR SENHA":
-        trocar_senha()
-    elif menu == "SAIR":
-        st.session_state.logged_in = False
-        st.session_state.username = ""
-        st.rerun()
+        opcoes = [
+            "Dashboard",
+            "Cadastro de Contas",
+            "Compras",
+            "Superávit Financeiro",
+            "Programas de Saúde",
+            "Plano Municipal de Saúde",
+            "Norte da Minha Gestão",
+            "Documentos",
+        ]
+        for opcao in opcoes:
+            if st.button(opcao, key=f"menu_{opcao}"):
+                st.session_state["menu"] = opcao
+                st.rerun()
+
+        st.divider()
+        if st.button("Sair"):
+            st.session_state["autenticado"] = False
+            st.session_state["usuario"] = None
+            st.session_state["menu"] = "Dashboard"
+            st.rerun()
+
+
+# =============================================================================
+# ROTEAMENTO
+# =============================================================================
+def main():
+    aplicar_css()
+    inicializar_estado()
+
+    if not st.session_state["autenticado"]:
+        tela_login()
+    else:
+        menu_lateral()
+        opcao = st.session_state.get("menu", "Dashboard")
+
+        if opcao == "Dashboard":
+            dashboard()
+        elif opcao == "Cadastro de Contas":
+            cadastro_contas()
+        elif opcao == "Compras":
+            compras()
+        elif opcao == "Superávit Financeiro":
+            superavit()
+        elif opcao == "Programas de Saúde":
+            programas_saude()
+        elif opcao == "Plano Municipal de Saúde":
+            plano_municipal()
+        elif opcao == "Norte da Minha Gestão":
+            norte_gestao()
+        elif opcao == "Documentos":
+            documentos()
 
 
 if __name__ == "__main__":
