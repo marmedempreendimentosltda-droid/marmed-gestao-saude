@@ -193,9 +193,9 @@ st.markdown(
     .mm-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; text-align: center; }
     .mm-card-value { font-size: 22px; font-weight: 800; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .mm-card-label { color: #cbd5e1; font-size: 12px; margin-top: 6px; }
-    .mm-brand-title { font-size: 96px; font-weight: 800; color: #f8fafc; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
-    .mm-brand-subtitle { font-size: 34px; font-weight: 600; color: #7dd3fc; text-align: center; margin-bottom: 3px; }
-    .mm-brand-institution { font-size: 24px; font-weight: 500; color: #cbd5e1; text-align: center; margin-bottom: 20px; }
+    .mm-brand-title { font-size: 120px; font-weight: 800; color: #f8fafc; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
+    .mm-brand-subtitle { font-size: 42px; font-weight: 600; color: #7dd3fc; text-align: center; margin-bottom: 3px; }
+    .mm-brand-institution { font-size: 30px; font-weight: 500; color: #cbd5e1; text-align: center; margin-bottom: 20px; }
     header[data-testid="stHeader"] { background: transparent !important; box-shadow: none !important; }
     div[data-testid="stToolbar"] { background: transparent !important; }
     div[data-testid="stDecoration"] { background: transparent !important; display: none !important; }
@@ -232,7 +232,7 @@ def tela_login():
                 0 0 0 1px rgba(129,140,248,0.18);
         }
         .login-title {
-            font-size: 84px;
+            font-size: 100px;
             font-weight: 800;
             text-align: center;
             background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
