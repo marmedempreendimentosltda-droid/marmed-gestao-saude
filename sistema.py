@@ -1,250 +1,791 @@
 import streamlit as st
-import hashlib
 import sqlite3
+import hashlib
 import pandas as pd
-from datetime import datetime, date
+import datetime
+import random
+import time
+import os
 
+# ================= CONFIG =================
 st.set_page_config(
-    page_title="MARMED - Gestão em Saúde Pública",
-    page_icon=":hospital:",
+    page_title="MARMED - Gestão em Saúde Pública de Luminárias-MG",
+    page_icon="🏥",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-DEFAULT_USER = "admin"
-DEFAULT_PASS = "Diretor2025#"
-DEFAULT_HASH = hashlib.sha256(DEFAULT_PASS.encode()).hexdigest()
-
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "page" not in st.session_state:
-    st.session_state.page = "Dashboard"
-
-def init_db():
-    conn = sqlite3.connect("marmed.db", check_same_thread=False)
-    c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS contas_pagar (id INTEGER PRIMARY KEY AUTOINCREMENT, descricao TEXT, credor TEXT, valor REAL, vencimento TEXT, status TEXT, categoria TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS contas_receber (id INTEGER PRIMARY KEY AUTOINCREMENT, descricao TEXT, devedor TEXT, valor REAL, vencimento TEXT, status TEXT, categoria TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS empenhos (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, descricao TEXT, valor REAL, data TEXT, fonte TEXT, status TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS licitacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, objeto TEXT, modalidade TEXT, valor REAL, data_abertura TEXT, status TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS contratos (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, contratado TEXT, objeto TEXT, valor REAL, inicio TEXT, fim TEXT, status TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS repasses_federal (id INTEGER PRIMARY KEY AUTOINCREMENT, descricao TEXT, valor REAL, data TEXT, programa TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS repasses_estadual (id INTEGER PRIMARY KEY AUTOINCREMENT, descricao TEXT, valor REAL, data TEXT, programa TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS recursos_municipal (id INTEGER PRIMARY KEY AUTOINCREMENT, descricao TEXT, valor REAL, data TEXT, origem TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS transferencias (id INTEGER PRIMARY KEY AUTOINCREMENT, descricao TEXT, origem TEXT, destino TEXT, valor REAL, data TEXT, tipo TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS transposicoes (id INTEGER PRIMARY KEY AUTOINCREMENT, descricao TEXT, origem TEXT, destino TEXT, valor REAL, data TEXT, tipo TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, usuario TEXT UNIQUE, senha_hash TEXT)""")
-    c.execute("""INSERT OR IGNORE INTO usuarios (usuario, senha_hash) VALUES (?, ?)""", (DEFAULT_USER, DEFAULT_HASH))
-    conn.commit()
-    return conn
-
-conn = init_db()
-
-def format_currency(val):
-    try:
-        return f"R$ {val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except:
-        return "R$ 0,00"
-
-LOGIN_CSS = """
+# ================= CSS GLOBAL =================
+CUSTOM_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
-.stApp { background: linear-gradient(135deg, #050510 0%, #0a0a20 50%, #02020a 100%); }
-.login-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
-.title-3d { font-family: 'Orbitron', sans-serif; font-size: 5rem; font-weight: 900; color: #00d4ff; text-align: center; perspective: 1000px; margin-bottom: 10px; text-shadow: 0 0 10px #00d4ff, 0 0 30px #00d4ff, 0 0 60px #008cff; }
-.title-3d span { display: inline-block; opacity: 0; transform-style: preserve-3d; }
-.title-3d .m1 { --tx: -500px; --ty: -300px; --tz: 800px; --rx: 120deg; --ry: -80deg; }
-.title-3d .a1 { --tx: 400px; --ty: -250px; --tz: -600px; --rx: -100deg; --ry: 90deg; }
-.title-3d .r1 { --tx: -300px; --ty: 350px; --tz: 500px; --rx: 80deg; --ry: -120deg; }
-.title-3d .m2 { --tx: 500px; --ty: 300px; --tz: -400px; --rx: -70deg; --ry: 100deg; }
-.title-3d .e1 { --tx: -400px; --ty: -200px; --tz: 700px; --rx: 110deg; --ry: -90deg; }
-.title-3d .d1 { --tx: 300px; --ty: 250px; --tz: -800px; --rx: -130deg; --ry: 70deg; }
-@keyframes flyIn { 0% { opacity: 0; transform: translate3d(var(--tx), var(--ty), var(--tz)) rotateX(var(--rx)) rotateY(var(--ry)); } 60% { opacity: 1; } 100% { opacity: 1; transform: translate3d(0, 0, 0) rotateX(0deg) rotateY(0deg); } }
-@keyframes glowPulse { 0%, 100% { text-shadow: 0 0 10px #00d4ff, 0 0 30px #00d4ff, 0 0 60px #008cff; } 50% { text-shadow: 0 0 20px #00d4ff, 0 0 50px #00d4ff, 0 0 100px #008cff, 0 0 150px #ffffff; } }
-@keyframes flash { 0% { text-shadow: 0 0 5px #fff, 0 0 20px #ffd700; color: #ffffff; } 50% { text-shadow: 0 0 50px #ffd700, 0 0 100px #ffffff; color: #ffd700; } 100% { text-shadow: 0 0 10px #00d4ff, 0 0 30px #00d4ff; color: #00d4ff; } }
-.title-3d span { animation: flyIn 3s ease-out forwards, glowPulse 2s ease-in-out infinite 3s, flash 0.4s ease-out 3s; }
-.title-3d .m1 { animation-delay: 0s, 3s, 3s; }
-.title-3d .a1 { animation-delay: 0.18s, 3.18s, 3.18s; }
-.title-3d .r1 { animation-delay: 0.36s, 3.36s, 3.36s; }
-.title-3d .m2 { animation-delay: 0.54s, 3.54s, 3.54s; }
-.title-3d .e1 { animation-delay: 0.72s, 3.72s, 3.72s; }
-.title-3d .d1 { animation-delay: 0.90s, 3.90s, 3.90s; }
-.subtitle-cyan { color: #00d4ff; font-size: 1.5rem; text-align: center; font-family: 'Orbitron', sans-serif; margin-top: 0; }
-.subtitle-blue { color: #87cefa; font-size: 1.2rem; text-align: center; margin-top: 5px; }
-.glass-card { background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(16px); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 20px; padding: 40px; width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); margin-top: 30px; }
-.field-label { color: #e0f7ff; font-weight: 600; margin-bottom: 5px; display: block; }
-.stTextInput > div > div > input { background: rgba(255, 255, 255, 0.15) !important; border: 2px solid #00d4ff !important; color: #ffffff !important; border-radius: 10px !important; padding: 12px !important; }
-.stTextInput > div > div > input:focus { border-color: #ffd700 !important; box-shadow: 0 0 15px #ffd700 !important; }
-.stButton > button { width: 100%; background: linear-gradient(90deg, #00d4ff, #008cff) !important; color: #ffffff !important; border: none !important; border-radius: 10px !important; padding: 12px !important; font-weight: 700 !important; }
-.stButton > button:hover { box-shadow: 0 0 25px #00d4ff !important; transform: translateY(-2px) !important; }
-#particles-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600;700&display=swap');
+
+:root {
+    --primary: #00d4ff;
+    --secondary: #ff006e;
+    --accent: #8338ec;
+    --success: #06d6a0;
+    --warning: #ffd166;
+    --danger: #ef476f;
+    --bg: #0a0f1c;
+    --card: rgba(255, 255, 255, 0.07);
+    --card-border: rgba(255, 255, 255, 0.12);
+    --text: #ffffff;
+    --muted: rgba(255, 255, 255, 0.7);
+}
+
+html, body, [class*="stApp"] {
+    background-color: var(--bg) !important;
+    color: var(--text) !important;
+    font-family: 'Inter', sans-serif;
+}
+
+/* Particles background */
+#particles-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* Glassmorphism */
+.glass-card {
+    background: var(--card) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: 20px !important;
+    padding: 1.5rem !important;
+    box-shadow: 0 8px 32px rgba(0, 212, 255, 0.1) !important;
+    transition: all 0.3s ease !important;
+}
+.glass-card:hover {
+    transform: translateY(-4px) !important;
+    box-shadow: 0 12px 40px rgba(0, 212, 255, 0.18) !important;
+    border-color: rgba(0, 212, 255, 0.4) !important;
+}
+
+/* 3D Animated Title */
+.title-3d {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: clamp(3rem, 10vw, 7rem);
+    text-align: center;
+    color: var(--primary);
+    text-shadow:
+        0 0 10px rgba(0, 212, 255, 0.8),
+        0 0 40px rgba(0, 212, 255, 0.5),
+        0 0 80px rgba(0, 212, 255, 0.3);
+    perspective: 1000px;
+    letter-spacing: 0.2em;
+    margin: 0;
+    line-height: 1.1;
+}
+.letter {
+    display: inline-block;
+    animation: flyIn 1.2s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+    opacity: 0;
+    transform: translateZ(-800px) rotateY(90deg) scale(0.3);
+}
+@keyframes flyIn {
+    0% { opacity: 0; transform: translateZ(-800px) rotateY(90deg) scale(0.3); }
+    60% { opacity: 1; transform: translateZ(50px) rotateY(-10deg) scale(1.1); }
+    100% { opacity: 1; transform: translateZ(0) rotateY(0deg) scale(1); }
+}
+
+/* Subtitle glow */
+.subtitle {
+    text-align: center;
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 1.2rem;
+    color: var(--muted);
+    margin-top: 1rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background: rgba(10, 15, 28, 0.95) !important;
+    border-right: 1px solid var(--card-border) !important;
+}
+[data-testid="stSidebar"] .css-1d391kg, [data-testid="stSidebar"] .css-qri22k {
+    color: white !important;
+}
+
+/* Buttons */
+.stButton>button {
+    border-radius: 12px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
+    border: 1px solid rgba(0, 212, 255, 0.4) !important;
+    background: rgba(0, 212, 255, 0.12) !important;
+    color: white !important;
+}
+.stButton>button:hover {
+    background: rgba(0, 212, 255, 0.25) !important;
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.4) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* Inputs */
+.stTextInput>div>div>input, .stNumberInput>div>div>input, .stDateInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: 12px !important;
+    color: white !important;
+}
+.stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus, .stDateInput>div>div>input:focus, .stSelectbox>div>div>div:focus, .stTextArea>div>div>textarea:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.3) !important;
+}
+
+/* DataFrames */
+.stDataFrame {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-radius: 16px !important;
+    border: 1px solid var(--card-border) !important;
+}
+.stDataFrame th {
+    background: rgba(0, 212, 255, 0.12) !important;
+    color: white !important;
+    font-weight: 700 !important;
+}
+.stDataFrame td {
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* Metric cards */
+.metric-card {
+    background: rgba(255, 255, 255, 0.06) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 20px !important;
+    padding: 1.5rem !important;
+    text-align: center !important;
+    transition: all 0.3s ease !important;
+}
+.metric-card:hover {
+    transform: translateY(-6px) !important;
+    box-shadow: 0 12px 35px rgba(0, 212, 255, 0.15) !important;
+}
+.metric-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--primary);
+    text-shadow: 0 0 20px rgba(0, 212, 255, 0.4);
+}
+.metric-label {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 0.5rem;
+}
+
+/* Hide hamburger */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 12px !important;
+}
+.stTabs [data-baseweb="tab"] {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-radius: 12px !important;
+    color: white !important;
+    font-weight: 600 !important;
+    border: 1px solid var(--card-border) !important;
+}
+.stTabs [aria-selected="true"] {
+    background: rgba(0, 212, 255, 0.2) !important;
+    border-color: var(--primary) !important;
+    color: white !important;
+}
 </style>
-<<canvas id="particles-canvas"></canvas>
+"""
+
+PARTICLES_JS = """
 <script>
-(function(){ const canvas = document.getElementById('particles-canvas'); if (!canvas) return; const ctx = canvas.getContext('2d'); let particles = []; function resize(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; } window.addEventListener('resize', resize); resize(); for (let i = 0; i < 80; i++) { particles.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, r: Math.random() * 2 + 1, dx: (Math.random() - 0.5) * 0.5, dy: (Math.random() - 0.5) * 0.5, alpha: Math.random() * 0.5 + 0.2 }); } function animate(){ ctx.clearRect(0, 0, canvas.width, canvas.height); particles.forEach(p => { p.x += p.dx; p.y += p.dy; if (p.x < 0 || p.x > canvas.width) p.dx *= -1; if (p.y < 0 || p.y > canvas.height) p.dy *= -1; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0, 212, 255, ' + p.alpha + ')'; ctx.fill(); }); requestAnimationFrame(animate); } animate(); })();
+(function() {
+    const canvas = document.createElement('canvas');
+    canvas.id = 'particles-canvas';
+    document.body.prepend(canvas);
+    const ctx = canvas.getContext('2d');
+    let width, height, particles = [];
+    function resize() { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; }
+    window.addEventListener('resize', resize);
+    resize();
+    for (let i = 0; i < 70; i++) {
+        particles.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            vx: (Math.random() - 0.5) * 0.5,
+            vy: (Math.random() - 0.5) * 0.5,
+            r: Math.random() * 2 + 1,
+            a: Math.random() * 0.5 + 0.2
+        });
+    }
+    function animate() {
+        ctx.clearRect(0, 0, width, height);
+        for (let p of particles) {
+            p.x += p.vx; p.y += p.vy;
+            if (p.x < 0 || p.x > width) p.vx *= -1;
+            if (p.y < 0 || p.y > height) p.vy *= -1;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0, 212, 255, ' + p.a + ')';
+            ctx.fill();
+        }
+        for (let i = 0; i < particles.length; i++) {
+            for (let j = i + 1; j < particles.length; j++) {
+                const dx = particles[i].x - particles[j].x;
+                const dy = particles[i].y - particles[j].y;
+                const d = Math.sqrt(dx*dx + dy*dy);
+                if (d < 120) {
+                    ctx.beginPath();
+                    ctx.moveTo(particles[i].x, particles[i].y);
+                    ctx.lineTo(particles[j].x, particles[j].y);
+                    ctx.strokeStyle = 'rgba(0, 212, 255, ' + (0.12 * (1 - d/120)) + ')';
+                    ctx.stroke();
+                }
+            }
+        }
+        requestAnimationFrame(animate);
+    }
+    animate();
+})();
 </script>
 """
 
+# ================= BANCO DE DADOS =================
+DB_PATH = "marmed.db"
+
+
+def get_connection():
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
+
+
+def init_db():
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            nome TEXT,
+            perfil TEXT DEFAULT 'admin'
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS contas_pagar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fornecedor TEXT NOT NULL,
+            descricao TEXT,
+            valor REAL NOT NULL,
+            vencimento DATE NOT NULL,
+            status TEXT DEFAULT 'Pendente',
+            categoria TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS contas_receber (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente TEXT NOT NULL,
+            descricao TEXT,
+            valor REAL NOT NULL,
+            vencimento DATE NOT NULL,
+            status TEXT DEFAULT 'Pendente',
+            categoria TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS empenhos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            numero TEXT NOT NULL,
+            fornecedor TEXT NOT NULL,
+            objeto TEXT,
+            valor REAL NOT NULL,
+            data_empenho DATE NOT NULL,
+            status TEXT DEFAULT 'Ativo',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS licitacoes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            numero TEXT NOT NULL,
+            modalidade TEXT NOT NULL,
+            objeto TEXT,
+            valor_estimado REAL NOT NULL,
+            data_abertura DATE NOT NULL,
+            status TEXT DEFAULT 'Em Andamento',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS contratos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            numero TEXT NOT NULL,
+            fornecedor TEXT NOT NULL,
+            objeto TEXT,
+            valor REAL NOT NULL,
+            inicio DATE NOT NULL,
+            fim DATE NOT NULL,
+            status TEXT DEFAULT 'Vigente',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    # Usuario padrao
+    default_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
+    c.execute("SELECT id FROM usuarios WHERE username = ?", ("admin",))
+    if not c.fetchone():
+        c.execute(
+            "INSERT INTO usuarios (username, password_hash, nome, perfil) VALUES (?, ?, ?, ?)",
+            ("admin", default_hash, "Administrador", "admin"),
+        )
+    conn.commit()
+    conn.close()
+
+
+# ================= UTILITARIOS =================
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def format_currency(value):
+    if value is None:
+        return "R$ 0,00"
+    return f"R$ {value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def authenticate(username, password):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, username, nome, perfil FROM usuarios WHERE username = ? AND password_hash = ?",
+        (username, hash_password(password)),
+    )
+    user = c.fetchone()
+    conn.close()
+    return user
+
+
+def update_password(username, new_password):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE usuarios SET password_hash = ? WHERE username = ?",
+        (hash_password(new_password), username),
+    )
+    conn.commit()
+    conn.close()
+
+
+def load_table(table, order_by="id DESC"):
+    conn = get_connection()
+    df = pd.read_sql_query(f"SELECT * FROM {table} ORDER BY {order_by}", conn)
+    conn.close()
+    return df
+
+
+def insert_row(table, columns, values):
+    conn = get_connection()
+    c = conn.cursor()
+    placeholders = ", ".join(["?"] * len(values))
+    c.execute(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", values)
+    conn.commit()
+    row_id = c.lastrowid
+    conn.close()
+    return row_id
+
+
+def update_row(table, id_value, updates):
+    conn = get_connection()
+    c = conn.cursor()
+    cols = ", ".join([f"{k} = ?" for k in updates.keys()])
+    vals = list(updates.values()) + [id_value]
+    c.execute(f"UPDATE {table} SET {cols} WHERE id = ?", vals)
+    conn.commit()
+    conn.close()
+
+
+def delete_row(table, id_value):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(f"DELETE FROM {table} WHERE id = ?", (id_value,))
+    conn.commit()
+    conn.close()
+
+
+def count_rows(table, where=None):
+    conn = get_connection()
+    c = conn.cursor()
+    if where:
+        c.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}")
+    else:
+        c.execute(f"SELECT COUNT(*) FROM {table}")
+    result = c.fetchone()[0]
+    conn.close()
+    return result
+
+
+def sum_column(table, column, where=None):
+    conn = get_connection()
+    c = conn.cursor()
+    if where:
+        c.execute(f"SELECT COALESCE(SUM({column}), 0) FROM {table} WHERE {where}")
+    else:
+        c.execute(f"SELECT COALESCE(SUM({column}), 0) FROM {table}")
+    result = c.fetchone()[0]
+    conn.close()
+    return result
+
+
+def render_title_3d(text):
+    letters = ""
+    for i, ch in enumerate(text):
+        delay = 0.1 * i
+        letters += f'<span class="letter" style="animation-delay: {delay}s">{ch}</span>'
+    st.markdown(
+        f'<div class="title-3d">{letters}</div><div class="subtitle">Gestão em Saúde Pública de Luminárias-MG</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def metric_card(label, value, col):
+    with col:
+        st.markdown(
+            f'<div class="metric-card"><div class="metric-value">{value}</div><div class="metric-label">{label}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+
+# ================= PAGINAS =================
 def login_page():
-    st.markdown(LOGIN_CSS, unsafe_allow_html=True)
-    st.markdown("""
-    <div class="login-container">
-        <div class="title-3d">
-            <span class="m1">M</span><span class="a1">A</span><span class="r1">R</span><span class="m2">M</span><span class="e1">E</span><span class="d1">D</span>
-        </div>
-        <div class="subtitle-cyan">Gestão em Saúde Pública</div>
-        <div class="subtitle-blue">Luminárias - MG</div>
-    </div>
-    """, unsafe_allow_html=True)
-    with st.container():
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<<span class='field-label'>Usuário</span>", unsafe_allow_html=True)
-        usuario = st.text_input("", key="user_login", label_visibility="collapsed")
-        st.markdown("<<span class='field-label'>Senha</span>", unsafe_allow_html=True)
-        senha = st.text_input("", type="password", key="pass_login", label_visibility="collapsed")
-        if st.button("Entrar", key="btn_login"):
-            h = hashlib.sha256(senha.encode()).hexdigest()
-            c = conn.cursor()
-            c.execute("SELECT * FROM usuarios WHERE usuario=? AND senha_hash=?", (usuario, h))
-            if c.fetchone():
+    st.markdown('<div class="glass-card" style="max-width: 500px; margin: auto; margin-top: 10vh;">', unsafe_allow_html=True)
+    render_title_3d("MARMED")
+    st.markdown("<<h3 style='text-align:center; color: white; margin-top: 2rem;'>Acesso ao Sistema</h3>", unsafe_allow_html=True)
+    with st.form("login_form"):
+        username = st.text_input("Usuário", value="admin")
+        password = st.text_input("Senha", type="password")
+        submit = st.form_submit_button("Entrar no Sistema")
+        if submit:
+            user = authenticate(username, password)
+            if user:
                 st.session_state.logged_in = True
-                st.session_state.page = "Dashboard"
-                st.success("Login realizado!")
+                st.session_state.username = user[1]
+                st.session_state.nome = user[2]
+                st.session_state.perfil = user[3]
+                st.success("Login realizado com sucesso!")
+                time.sleep(0.6)
                 st.rerun()
             else:
-                st.error("Usuário ou senha inválidos.")
-        st.markdown("</div>", unsafe_allow_html=True)
+                st.error("Usuário ou senha incorretos.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-APP_CSS = """
-<style>
-.stApp { background: linear-gradient(135deg, #050510 0%, #0a0a20 50%, #02020a 100%); }
-h1, h2, h3 { color: #00d4ff; }
-.metric-card { background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(12px); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 15px; padding: 20px; text-align: center; }
-.metric-card h3 { margin: 0; font-size: 0.95rem; color: #87cefa; }
-.metric-card p { margin: 10px 0 0; font-size: 1.5rem; font-weight: 700; color: #00d4ff; }
-.glass-card { background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(12px); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 15px; padding: 20px; margin-bottom: 20px; }
-.stButton > button { background: linear-gradient(90deg, #00d4ff, #008cff) !important; color: #fff !important; border: none !important; border-radius: 8px !important; font-weight: 600 !important; }
-.stButton > button:hover { box-shadow: 0 0 20px #00d4ff !important; }
-.stTextInput > div > div > input, .stNumberInput > div > div > input, .stDateInput > div > div > input, .stSelectbox > div > div > div { background: rgba(255, 255, 255, 0.12) !important; border: 1px solid rgba(0, 212, 255, 0.5) !important; color: #fff !important; border-radius: 8px !important; }
-</style>
-"""
-
-def totals():
-    c = conn.cursor()
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM repasses_federal")
-    f = c.fetchone()[0] or 1250000
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM repasses_estadual")
-    e = c.fetchone()[0] or 890000
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM recursos_municipal")
-    m = c.fetchone()[0] or 450000
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM transferencias")
-    t = c.fetchone()[0] or 320000
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM transposicoes")
-    tp = c.fetchone()[0] or 180000
-    return {"REPASSE FEDERAL": f, "REPASSE ESTADUAL": e, "RECURSO MUNICIPAL": m, "TRANSFERENCIA": t, "TRANSPOSICAO": tp}
 
 def dashboard_page():
-    st.title("Dashboard")
-    values = totals()
-    cols = st.columns(5)
-    for col, (label, value) in zip(cols, values.items()):
-        col.markdown(f'<div class="metric-card"><h3>{label}</h3><p>R$ {value:,.2f}</p></div>', unsafe_allow_html=True)
-
-def sidebar():
-    menu = ["Dashboard", "Contas a Pagar", "Contas a Receber", "Empenhos", "Licitações", "Contratos", "Relatórios", "Trocar Senha", "Sair"]
-    st.sidebar.markdown('<h1 style="text-align:center; color:#00d4ff;">MARMED</h1>', unsafe_allow_html=True)
-    st.sidebar.markdown('<p style="text-align:center; color:#87cefa;">Luminárias - MG</p>', unsafe_allow_html=True)
-    for item in menu:
-        if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True):
-            if item == "Sair":
-                st.session_state.logged_in = False
-                st.rerun()
-            else:
-                st.session_state.page = item
-                st.rerun()
-
-def crud_page(table, cols, labels, title, status_ops=None):
-    st.title(title)
-    c = conn.cursor()
-    c.execute(f"SELECT * FROM {table}")
-    rows = c.fetchall()
-    df = pd.DataFrame(rows, columns=["id"] + cols) if rows else pd.DataFrame()
-    st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-    st.subheader("Cadastrar")
-    with st.form(f"form_{table}"):
-        inputs = {}
-        for col, label in zip(cols, labels):
-            st.markdown(f"<<span class='field-label'>{label}</span>", unsafe_allow_html=True)
-            if col == "valor":
-                inputs[col] = st.number_input("", value=0.0, step=0.01, key=f"{table}_{col}", label_visibility="collapsed")
-            elif col in ["vencimento", "data", "data_abertura", "inicio", "fim"]:
-                inputs[col] = st.date_input("", value=date.today(), key=f"{table}_{col}", label_visibility="collapsed").isoformat()
-            elif col == "status" and status_ops:
-                inputs[col] = st.selectbox("", status_ops, key=f"{table}_{col}", label_visibility="collapsed")
-            else:
-                inputs[col] = st.text_input("", key=f"{table}_{col}", label_visibility="collapsed")
-        if st.form_submit_button("Salvar"):
-            placeholders = ", ".join(["?"] * len(cols))
-            c.execute(f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders})", list(inputs.values()))
-            conn.commit()
-            st.success("Salvo!")
-            st.rerun()
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    render_title_3d("MARMED")
     st.markdown("</div>", unsafe_allow_html=True)
-    if not df.empty:
-        st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-        st.subheader("Registros")
-        st.dataframe(df, use_container_width=True, hide_index=True)
+    st.markdown("<<br>", unsafe_allow_html=True)
+
+    total_pagar = sum_column("contas_pagar", "valor")
+    total_receber = sum_column("contas_receber", "valor")
+    total_empenhos = sum_column("empenhos", "valor")
+    total_licitacoes = sum_column("licitacoes", "valor_estimado")
+    total_contratos = sum_column("contratos", "valor")
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    metric_card("Contas a Pagar", format_currency(total_pagar), c1)
+    metric_card("Contas a Receber", format_currency(total_receber), c2)
+    metric_card("Empenhos", format_currency(total_empenhos), c3)
+    metric_card("Licitações", format_currency(total_licitacoes), c4)
+    metric_card("Contratos", format_currency(total_contratos), c5)
+
+    st.markdown("<<br>", unsafe_allow_html=True)
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.markdown("<<h3 style='color: #00d4ff;'>Resumo por Status</h3>", unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("<<h4 style='color: white;'>Contas a Pagar</h4>", unsafe_allow_html=True)
+        df_pagar = pd.read_sql_query(
+            "SELECT status, COUNT(*) as quantidade, SUM(valor) as total FROM contas_pagar GROUP BY status",
+            get_connection(),
+        )
+        df_pagar["total"] = df_pagar["total"].apply(format_currency)
+        st.dataframe(df_pagar, use_container_width=True, hide_index=True)
+    with col2:
+        st.markdown("<<h4 style='color: white;'>Contas a Receber</h4>", unsafe_allow_html=True)
+        df_receber = pd.read_sql_query(
+            "SELECT status, COUNT(*) as quantidade, SUM(valor) as total FROM contas_receber GROUP BY status",
+            get_connection(),
+        )
+        df_receber["total"] = df_receber["total"].apply(format_currency)
+        st.dataframe(df_receber, use_container_width=True, hide_index=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def crud_page(title, table, columns, form_fields, status_options):
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    render_title_3d(title)
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<<br>", unsafe_allow_html=True)
+
+    tab1, tab2, tab3 = st.tabs(["Cadastrar", "Consultar / Editar", "Excluir"])
+
+    with tab1:
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown(f"<<h3 style='color: #00d4ff;'>Novo {title}</h3>", unsafe_allow_html=True)
+        with st.form(f"form_{table}"):
+            values = []
+            for field in form_fields:
+                key = f"new_{table}_{field['name']}"
+                if field["type"] == "text":
+                    v = st.text_input(field["label"], key=key)
+                elif field["type"] == "number":
+                    v = st.number_input(field["label"], min_value=0.0, step=0.01, key=key)
+                elif field["type"] == "date":
+                    v = st.date_input(field["label"], key=key).strftime("%Y-%m-%d")
+                elif field["type"] == "select":
+                    v = st.selectbox(field["label"], field["options"], key=key)
+                elif field["type"] == "textarea":
+                    v = st.text_area(field["label"], key=key)
+                values.append(v)
+            submitted = st.form_submit_button("Salvar")
+            if submitted:
+                try:
+                    insert_row(table, columns, values)
+                    st.success("Registro salvo com sucesso!")
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
         st.markdown("</div>", unsafe_allow_html=True)
 
-def trocar_senha_page():
-    st.title("Trocar Senha")
-    st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-    st.markdown("<<span class='field-label'>Senha Atual</span>", unsafe_allow_html=True)
-    atual = st.text_input("", type="password", key="senha_atual", label_visibility="collapsed")
-    st.markdown("<<span class='field-label'>Nova Senha</span>", unsafe_allow_html=True)
-    nova = st.text_input("", type="password", key="senha_nova", label_visibility="collapsed")
-    st.markdown("<<span class='field-label'>Confirmar Nova Senha</span>", unsafe_allow_html=True)
-    confirma = st.text_input("", type="password", key="senha_confirma", label_visibility="collapsed")
-    if st.button("Alterar Senha"):
-        if nova != confirma:
-            st.error("As senhas não conferem.")
+    with tab2:
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown(f"<<h3 style='color: #00d4ff;'>Listagem de {title}</h3>", unsafe_allow_html=True)
+        df = load_table(table)
+        if df.empty:
+            st.info("Nenhum registro encontrado.")
         else:
-            c = conn.cursor()
-            h_atual = hashlib.sha256(atual.encode()).hexdigest()
-            c.execute("SELECT * FROM usuarios WHERE usuario=? AND senha_hash=?", (DEFAULT_USER, h_atual))
-            if not c.fetchone():
+            if "valor" in df.columns:
+                df["valor"] = df["valor"].apply(format_currency)
+            if "valor_estimado" in df.columns:
+                df["valor_estimado"] = df["valor_estimado"].apply(format_currency)
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
+            st.markdown("<<h4 style='color: #00d4ff;'>Editar Registro</h4>", unsafe_allow_html=True)
+            ids = df["id"].tolist()
+            selected_id = st.selectbox("Selecione o ID", ids, key=f"edit_id_{table}")
+            if selected_id:
+                conn = get_connection()
+                row = pd.read_sql_query(f"SELECT * FROM {table} WHERE id = ?", conn, params=(selected_id,)).iloc[0]
+                conn.close()
+                with st.form(f"edit_form_{table}"):
+                    updates = {}
+                    for field in form_fields:
+                        key = f"edit_{table}_{field['name']}_{selected_id}"
+                        val = row[field["name"]]
+                        if field["type"] == "text":
+                            new_v = st.text_input(field["label"], value=str(val) if val else "", key=key)
+                        elif field["type"] == "number":
+                            new_v = st.number_input(field["label"], value=float(val) if val else 0.0, step=0.01, key=key)
+                        elif field["type"] == "date":
+                            new_v = st.date_input(field["label"], value=datetime.datetime.strptime(val, "%Y-%m-%d").date() if val else datetime.date.today(), key=key).strftime("%Y-%m-%d")
+                        elif field["type"] == "select":
+                            idx = field["options"].index(val) if val in field["options"] else 0
+                            new_v = st.selectbox(field["label"], field["options"], index=idx, key=key)
+                        elif field["type"] == "textarea":
+                            new_v = st.text_area(field["label"], value=str(val) if val else "", key=key)
+                        updates[field["name"]] = new_v
+                    save = st.form_submit_button("Atualizar")
+                    if save:
+                        try:
+                            update_row(table, selected_id, updates)
+                            st.success("Registro atualizado com sucesso!")
+                            time.sleep(0.5)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro ao atualizar: {e}")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with tab3:
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown(f"<<h3 style='color: #ff006e;'>Excluir {title}</h3>", unsafe_allow_html=True)
+        df = load_table(table)
+        if df.empty:
+            st.info("Nenhum registro para excluir.")
+        else:
+            ids = df["id"].tolist()
+            del_id = st.selectbox("Selecione o ID para excluir", ids, key=f"del_id_{table}")
+            if del_id:
+                st.warning(f"Tem certeza que deseja excluir o registro ID {del_id}?")
+                if st.button("Confirmar Exclusão", key=f"btn_del_{table}"):
+                    delete_row(table, del_id)
+                    st.success("Registro excluído com sucesso!")
+                    time.sleep(0.5)
+                    st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+def trocar_senha_page():
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    render_title_3d("Trocar Senha")
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<<br>", unsafe_allow_html=True)
+
+    st.markdown('<div class="glass-card" style="max-width: 500px; margin: auto;">', unsafe_allow_html=True)
+    with st.form("trocar_senha_form"):
+        senha_atual = st.text_input("Senha Atual", type="password")
+        nova_senha = st.text_input("Nova Senha", type="password")
+        confirmar_senha = st.text_input("Confirmar Nova Senha", type="password")
+        submit = st.form_submit_button("Alterar Senha")
+        if submit:
+            if not authenticate(st.session_state.username, senha_atual):
                 st.error("Senha atual incorreta.")
+            elif nova_senha != confirmar_senha:
+                st.error("A nova senha e a confirmação não conferem.")
+            elif len(nova_senha) < 6:
+                st.warning("A nova senha deve ter pelo menos 6 caracteres.")
             else:
-                h_nova = hashlib.sha256(nova.encode()).hexdigest()
-                c.execute("UPDATE usuarios SET senha_hash=? WHERE usuario=?", (h_nova, DEFAULT_USER))
-                conn.commit()
-                st.success("Senha alterada!")
+                update_password(st.session_state.username, nova_senha)
+                st.success("Senha alterada com sucesso!")
     st.markdown("</div>", unsafe_allow_html=True)
 
+
+# ================= MENU =================
+def sidebar_menu():
+    st.sidebar.markdown('<h1 style="text-align:center; color:#00d4ff;">MARMED</h1>', unsafe_allow_html=True)
+    st.sidebar.markdown(
+        f'<p style="text-align:center; color:rgba(255,255,255,0.7);">{st.session_state.nome}<br><small>{st.session_state.perfil}</small></p>',
+        unsafe_allow_html=True,
+    )
+    st.sidebar.markdown("<<hr>", unsafe_allow_html=True)
+    menu = st.sidebar.radio(
+        "Menu",
+        [
+            "Dashboard",
+            "Contas a Pagar",
+            "Contas a Receber",
+            "Empenhos",
+            "Licitações",
+            "Contratos",
+            "Trocar Senha",
+        ],
+        label_visibility="collapsed",
+    )
+    if st.sidebar.button("Sair do Sistema"):
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.rerun()
+    return menu
+
+
+# ================= MAIN =================
 def main():
+    init_db()
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    st.components.v1.html(PARTICLES_JS, height=0)
+
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+
     if not st.session_state.logged_in:
         login_page()
     else:
-        st.markdown(APP_CSS, unsafe_allow_html=True)
-        sidebar()
-        p = st.session_state.page
-        if p == "Dashboard":
+        menu = sidebar_menu()
+        if menu == "Dashboard":
             dashboard_page()
-        elif p == "Contas a Pagar":
-            crud_page("contas_pagar", ["descricao","credor","valor","vencimento","status","categoria"], ["Descrição","Credor","Valor","Vencimento","Status","Categoria"], "Contas a Pagar", ["Pendente","Pago","Vencido"])
-        elif p == "Contas a Receber":
-            crud_page("contas_receber", ["descricao","devedor","valor","vencimento","status","categoria"], ["Descrição","Devedor","Valor","Vencimento","Status","Categoria"], "Contas a Receber", ["Pendente","Recebido","Vencido"])
-        elif p == "Empenhos":
-            crud_page("empenhos", ["numero","descricao","valor","data","fonte","status"], ["Número","Descrição","Valor","Data","Fonte","Status"], "Empenhos", ["Ativo","Liquidado","Anulado"])
-        elif p == "Licitações":
-            crud_page("licitacoes", ["numero","objeto","modalidade","valor","data_abertura","status"], ["Número","Objeto","Modalidade","Valor","Data Abertura","Status"], "Licitações", ["Em Andamento","Concluída","Cancelada"])
-        elif p == "Contratos":
-            crud_page("contratos", ["numero","contratado","objeto","valor","inicio","fim","status"], ["Número","Contratado","Objeto","Valor","Início","Fim","Status"], "Contratos", ["Vigente","Encerrado","Cancelado"])
-        elif p == "Relatórios":
-            st.title("Relatórios")
-            st.info("Selecione um módulo para ver os dados.")
-        elif p == "Trocar Senha":
+        elif menu == "Contas a Pagar":
+            crud_page(
+                "Contas a Pagar",
+                "contas_pagar",
+                "fornecedor, descricao, valor, vencimento, status, categoria",
+                [
+                    {"name": "fornecedor", "label": "Fornecedor", "type": "text"},
+                    {"name": "descricao", "label": "Descrição", "type": "textarea"},
+                    {"name": "valor", "label": "Valor (R$)", "type": "number"},
+                    {"name": "vencimento", "label": "Vencimento", "type": "date"},
+                    {"name": "status", "label": "Status", "type": "select", "options": ["Pendente", "Pago", "Atrasado", "Cancelado"]},
+                    {"name": "categoria", "label": "Categoria", "type": "text"},
+                ],
+                ["Pendente", "Pago", "Atrasado", "Cancelado"],
+            )
+        elif menu == "Contas a Receber":
+            crud_page(
+                "Contas a Receber",
+                "contas_receber",
+                "cliente, descricao, valor, vencimento, status, categoria",
+                [
+                    {"name": "cliente", "label": "Cliente", "type": "text"},
+                    {"name": "descricao", "label": "Descrição", "type": "textarea"},
+                    {"name": "valor", "label": "Valor (R$)", "type": "number"},
+                    {"name": "vencimento", "label": "Vencimento", "type": "date"},
+                    {"name": "status", "label": "Status", "type": "select", "options": ["Pendente", "Recebido", "Atrasado", "Cancelado"]},
+                    {"name": "categoria", "label": "Categoria", "type": "text"},
+                ],
+                ["Pendente", "Recebido", "Atrasado", "Cancelado"],
+            )
+        elif menu == "Empenhos":
+            crud_page(
+                "Empenhos",
+                "empenhos",
+                "numero, fornecedor, objeto, valor, data_empenho, status",
+                [
+                    {"name": "numero", "label": "Número do Empenho", "type": "text"},
+                    {"name": "fornecedor", "label": "Fornecedor", "type": "text"},
+                    {"name": "objeto", "label": "Objeto", "type": "textarea"},
+                    {"name": "valor", "label": "Valor (R$)", "type": "number"},
+                    {"name": "data_empenho", "label": "Data do Empenho", "type": "date"},
+                    {"name": "status", "label": "Status", "type": "select", "options": ["Ativo", "Anulado", "Liquidado", "Pago"]},
+                ],
+                ["Ativo", "Anulado", "Liquidado", "Pago"],
+            )
+        elif menu == "Licitações":
+            crud_page(
+                "Licitações",
+                "licitacoes",
+                "numero, modalidade, objeto, valor_estimado, data_abertura, status",
+                [
+                    {"name": "numero", "label": "Número da Licitação", "type": "text"},
+                    {"name": "modalidade", "label": "Modalidade", "type": "text"},
+                    {"name": "objeto", "label": "Objeto", "type": "textarea"},
+                    {"name": "valor_estimado", "label": "Valor Estimado (R$)", "type": "number"},
+                    {"name": "data_abertura", "label": "Data de Abertura", "type": "date"},
+                    {"name": "status", "label": "Status", "type": "select", "options": ["Em Andamento", "Concluída", "Cancelada", "Suspensa"]},
+                ],
+                ["Em Andamento", "Concluída", "Cancelada", "Suspensa"],
+            )
+        elif menu == "Contratos":
+            crud_page(
+                "Contratos",
+                "contratos",
+                "numero, fornecedor, objeto, valor, inicio, fim, status",
+                [
+                    {"name": "numero", "label": "Número do Contrato", "type": "text"},
+                    {"name": "fornecedor", "label": "Fornecedor", "type": "text"},
+                    {"name": "objeto", "label": "Objeto", "type": "textarea"},
+                    {"name": "valor", "label": "Valor (R$)", "type": "number"},
+                    {"name": "inicio", "label": "Data de Início", "type": "date"},
+                    {"name": "fim", "label": "Data de Término", "type": "date"},
+                    {"name": "status", "label": "Status", "type": "select", "options": ["Vigente", "Encerrado", "Rescindido", "Renovado"]},
+                ],
+                ["Vigente", "Encerrado", "Rescindido", "Renovado"],
+            )
+        elif menu == "Trocar Senha":
             trocar_senha_page()
+
 
 if __name__ == "__main__":
     main()
