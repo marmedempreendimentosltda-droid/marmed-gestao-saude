@@ -54,10 +54,10 @@ def parse_br_currency(val):
     except:
         return 0.0
 
-def menor_ou_igual(a, b):
+def eh_menor_ou_igual(a, b):
     return a &lt;= b
 
-def maior_que(a, b):
+def eh_maior_que(a, b):
     return a > b
 
 def inject_masks():
@@ -146,13 +146,4 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, esfera TEXT, fonte_original TEXT, fonte_superavit TEXT,
         saldo_total REAL DEFAULT 0, saldo_restante REAL DEFAULT 0, created_at TEXT
     )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS ordens_compra (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, conta_receber_id INTEGER, esfera TEXT, numero_conta TEXT, fonte TEXT,
-        ficha TEXT, tipo_despesa TEXT, data_compra TEXT, valor_compra REAL DEFAULT 0, produto_servico TEXT, created_at TEXT
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS arquivos_saude (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, bloco TEXT, nome_arquivo TEXT, conteudo_texto TEXT,
-        dados_arquivo BLOB, data_upload TEXT
-    )""")
-    default_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
-    
+    c.execute("""CREATE 
