@@ -170,14 +170,18 @@ st.markdown(
     .stApp { background: linear-gradient(135deg, #0a0e27 0%, #16213e 50%, #0f3460 100%); }
     section[data-testid="stSidebar"] { background: linear-gradient(180deg, #0a0e27 0%, #16213e 100%); border-right: 1px solid rgba(56,189,248,0.15); }
     section[data-testid="stSidebar"] p, section[data-testid="stSidebar"] label { color: #cbd5e1; }
+    section[data-testid="stSidebar"] button { color: #f8fafc !important; }
     .stButton>button { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #ffffff; border: none; border-radius: 10px; font-weight: 700; padding: 0.6rem 1rem; transition: all 0.2s ease; }
     .stButton>button:hover { filter: brightness(1.15); transform: translateY(-1px); }
-    .stTextInput input, .stNumberInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] { background: rgba(255,255,255,0.06) !important; color: #e2e8f0 !important; border-radius: 10px !important; border: 1px solid rgba(148,163,184,0.25) !important; }
+    .stTextInput input, .stNumberInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] { background: rgba(255,255,255,0.06) !important; color: #f1f5f9 !important; border-radius: 12px !important; border: 1px solid rgba(148,163,184,0.25) !important; }
+    .stTextInput label, .stSelectbox label, .stNumberInput label, .stTextArea label, .stDateInput label { color: #e2e8f0 !important; font-weight: 500; }
+    .stTextInput > div, .stNumberInput > div, .stTextArea > div, .stDateInput > div { border-radius: 12px; transition: box-shadow 0.2s ease, border-color 0.2s ease; }
+    .stTextInput > div:focus-within, .stNumberInput > div:focus-within, .stTextArea > div:focus-within, .stDateInput > div:focus-within { box-shadow: 0 0 0 2px rgba(56,189,248,0.45); border-color: rgba(56,189,248,0.6) !important; }
     .mm-title { font-size: 34px; font-weight: 800; color: #f1f5f9; margin-bottom: 4px; }
-    .mm-subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
+    .mm-subtitle { color: #cbd5e1; font-size: 14px; margin-bottom: 24px; }
     .mm-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; text-align: center; }
     .mm-card-value { font-size: 22px; font-weight: 800; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .mm-card-label { color: #94a3b8; font-size: 12px; margin-top: 6px; }
+    .mm-card-label { color: #cbd5e1; font-size: 12px; margin-top: 6px; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -187,21 +191,79 @@ def tela_login():
     st.markdown(
         """
         <style>
-        .login-card {
-            background: rgba(255,255,255,0.06);
-            backdrop-filter: blur(24px);
-            border: 1px solid rgba(255,255,255,0.14);
-            border-radius: 28px;
-            padding: 52px 44px;
-            max-width: 440px;
-            margin: 60px auto 0 auto;
-            box-shadow: 0 30px 60px rgba(0,0,0,0.45);
+        .stApp {
+            background:
+                radial-gradient(circle at 15% 20%, rgba(56,189,248,0.28) 0%, transparent 45%),
+                radial-gradient(circle at 85% 15%, rgba(129,140,248,0.30) 0%, transparent 45%),
+                radial-gradient(circle at 75% 85%, rgba(192,132,252,0.26) 0%, transparent 50%),
+                radial-gradient(circle at 25% 80%, rgba(56,189,248,0.18) 0%, transparent 45%),
+                linear-gradient(135deg, #0a0e27 0%, #16213e 50%, #0f3460 100%);
+            background-attachment: fixed;
         }
-        .login-logo { text-align: center; font-size: 54px; margin-bottom: 4px; }
-        .login-title { font-size: 44px; font-weight: 800; text-align: center; background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 3px; margin: 0; }
-        .login-subtitle { text-align: center; color: #94a3b8; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 36px; margin-top: 6px; }
-        .login-badge { display: flex; justify-content: center; gap: 8px; margin-top: 20px; }
-        .login-badge span { background: rgba(56,189,248,0.12); color: #7dd3fc; font-size: 11px; padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(56,189,248,0.25); }
+        .login-card {
+            background: rgba(255,255,255,0.07);
+            backdrop-filter: blur(32px);
+            -webkit-backdrop-filter: blur(32px);
+            border-radius: 32px;
+            padding: 52px 44px;
+            max-width: 460px;
+            margin: 60px auto 0 auto;
+            box-shadow:
+                0 30px 60px rgba(0,0,0,0.45),
+                inset 0 1px 0 rgba(255,255,255,0.18),
+                0 0 0 1px rgba(129,140,248,0.18);
+        }
+        .login-badge-icon {
+            width: 84px;
+            height: 84px;
+            margin: 0 auto 16px auto;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
+            box-shadow: 0 12px 30px rgba(99,102,241,0.55), 0 0 0 6px rgba(56,189,248,0.12);
+            color: #ffffff;
+        }
+        .login-title {
+            font-size: 46px;
+            font-weight: 800;
+            text-align: center;
+            background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 4px;
+            margin: 0;
+        }
+        .login-subtitle { text-align: center; color: #cbd5e1; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 36px; margin-top: 6px; }
+        .login-badge { display: flex; justify-content: center; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+        .login-badge span {
+            background: rgba(56,189,248,0.10);
+            color: #bae6fd;
+            font-size: 11px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(56,189,248,0.28);
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+        .login-footer { text-align: center; margin-top: 22px; color: #94a3b8; font-size: 11px; letter-spacing: 1px; }
+        div[data-testid="stForm"] .stButton>button {
+            background: linear-gradient(135deg, #38bdf8, #6366f1, #c084fc) !important;
+            color: #ffffff !important;
+            border: none !important;
+            border-radius: 14px !important;
+            font-weight: 700 !important;
+            padding: 0.75rem 1rem !important;
+            box-shadow: 0 10px 28px rgba(99,102,241,0.45) !important;
+            transition: all 0.2s ease !important;
+        }
+        div[data-testid="stForm"] .stButton>button:hover {
+            filter: brightness(1.12);
+            transform: scale(1.02);
+            box-shadow: 0 14px 34px rgba(99,102,241,0.6) !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -210,7 +272,7 @@ def tela_login():
     col1, col2, col3 = st.columns([1, 1.3, 1])
     with col2:
         st.markdown('<div class="login-card">', unsafe_allow_html=True)
-        st.markdown('<div class="login-logo">🏥</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-badge-icon">🏥</div>', unsafe_allow_html=True)
         st.markdown('<p class="login-title">MARMED</p>', unsafe_allow_html=True)
         st.markdown('<p class="login-subtitle">Gestao Inteligente de Saude Municipal</p>', unsafe_allow_html=True)
 
@@ -233,7 +295,8 @@ def tela_login():
                     else:
                         st.error("Usuario ou senha invalidos.")
 
-        st.markdown('<div class="login-badge"><span>SEGURO</span><span>MODERNO</span><span>SUS</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-badge"><span>🔒 SEGURO</span><span>✦ MODERNO</span><span>✚ SUS</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-footer">MARMED © 2026 - Gestao Inteligente de Saude</div>', unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 def pagina_dashboard():
@@ -440,7 +503,7 @@ def pagina_programas_saude():
             st.markdown(
                 f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
                 f"<strong>{nome}</strong><br>{descricao}<br>"
-                f'<span style="color:#64748b;font-size:11px;">{criado}</span>'
+                f'<span style="color:#94a3b8;font-size:11px;">{criado}</span>'
                 f"</div>",
                 unsafe_allow_html=True,
             )
@@ -478,7 +541,7 @@ def pagina_upload_arquivos():
             st.markdown(
                 f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
                 f"<strong>{nome_arquivo}</strong> - {bloco_item}<br>"
-                f'<span style="color:#64748b;font-size:11px;">{data_upload}</span>'
+                f'<span style="color:#94a3b8;font-size:11px;">{data_upload}</span>'
                 f"</div>",
                 unsafe_allow_html=True,
             )
@@ -554,7 +617,7 @@ def pagina_conselho():
             st.markdown(
                 f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
                 f"<strong>{nome}</strong> - {cargo}<br>"
-                f'<span style="color:#64748b;font-size:11px;">{segmento} - Posse em {data_posse}</span>'
+                f'<span style="color:#94a3b8;font-size:11px;">{segmento} - Posse em {data_posse}</span>'
                 f"</div>",
                 unsafe_allow_html=True,
             )
