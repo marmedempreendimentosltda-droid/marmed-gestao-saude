@@ -371,6 +371,16 @@ def pagina_cadastro_contas():
         col1, col2 = st.columns(2)
         with col1:
             esfera = st.selectbox("Esfera", ["Federal", "Estadual", "Municipal", "Transferencia", "Transposicao"])
+
+            fonte_vinculada = get_fonte(esfera)
+            st.markdown(
+                f'<div class="mm-card" style="text-align:left;margin-bottom:16px;padding:14px 18px;">'
+                f'<div class="mm-card-label">Fonte Vinculada</div>'
+                f'<div class="mm-card-value" style="font-size:20px;">{fonte_vinculada}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
             numero_conta = st.text_input("Numero da Conta")
             referencia_tipo = st.text_input("Tipo de Referencia")
             referencia_numero = st.text_input("Numero de Referencia")
