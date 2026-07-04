@@ -1,255 +1,98 @@
 import streamlit as st
 import sqlite3
 import hashlib
-from datetime import datetime
+import re
+from datetime import datetime, date
 
 st.set_page_config(page_title="MARMED", layout="wide")
 
 def format_currency(value):
-    if value is None:
-        value = 0.0
-    return f"R$ {float(value):,.2f}"
+    if value is None: value = 0.0
+    v = float(value)
+    inteiro, centavos = f"{v:.2f}".split(".")
+    if len(inteiro) > 3:
+        partes = []
+        while len(inteiro) > 3:
+            partes.insert(0, inteiro[-3:])
+            inteiro = inteiro[:-3]
+        if inteiro:
+            partes.insert(0, inteiro)
+        inteiro = ".".join(partes)
+    return f"R$ {inteiro},{centavos}"
 
-def init_db():
-    conn = sqlite3.connect("marmed.db")
-    c = conn.cursor()
-    c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT)")
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS contas_receber (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            numero_conta TEXT,
-            referencia_tipo TEXT,
-            referencia_numero TEXT,
-            tipo_recurso TEXT,
-            valor_pago_custeio REAL DEFAULT 0,
-            valor_pago_investimento REAL DEFAULT 0,
-            valor_total REAL DEFAULT 0,
-            data_recebimento TEXT,
-            programa_politica TEXT,
-            setor_gasto TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    c.execute("CREATE TABLE IF NOT EXISTS contas_pagar (id INTEGER PRIMARY KEY AUTOINCREMENT, fornecedor TEXT, descricao TEXT, valor REAL, vencimento TEXT, status TEXT)")
-    default_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
-    c.execute("INSERT OR IGNORE INTO users (username, password_hash) VALUES (?, ?)", ("admin", default_hash))
-    conn.commit()
-    conn.close()
+def get_fonte(esfera):
+    if esfera == "Federal": return "1.600"
+    elif esfera == "Estadual": return "1.621"
+    elif esfera == "Municipal": return "1.500"
+    return ""
 
-init_db()
+def get_fonte_superavit(esfera):
+    if esfera == "Federal": return "2.600"
+    elif esfera == "Estadual": return "2.621"
+    return None
 
-def login_page():
+def extract_text_from_bytes(file_bytes, filename):
+    text = ""
+    try:
+        if filename.lower().endswith(('.txt', '.csv')):
+            text = file_bytes.decode('utf-8', errors='replace')
+        else:
+            text = f"[Arquivo: {filename}]"
+    except:
+        text = f"[Nao foi possivel extrair texto]"
+    return text
+
+def parse_br_currency(val):
+    if val is None: return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    if not val or str(val).strip() == '':
+        return 0.0
+    v = str(val).replace('R$ ', '').replace('R$', '').replace('.', '').replace(',', '.')
+    try:
+        return float(v)
+    except:
+        return 0.0
+
+def menor_ou_igual(a, b):
+    return a &lt;= b
+
+def maior_que(a, b):
+    return a > b
+
+def inject_masks():
     st.markdown("""
-        <style>
-        .stApp { background: linear-gradient(135deg, #0f172a, #1e3a8a, #0f172a); overflow: hidden; }
-        div[data-testid="column"]:nth-child(2) {
-            background: rgba(15, 23, 42, 0.75) !important;
-            backdrop-filter: blur(16px) !important;
-            border: 1px solid rgba(14, 165, 233, 0.3) !important;
-            border-radius: 24px !important;
-            padding: 48px 40px !important;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5) !important;
-            margin-top: 80px !important;
-            max-width: 420px !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
-        }
-        .marmed-title { font-size: 52px; font-weight: 800; text-align: center; color: #e0f2fe; letter-spacing: 6px; margin-bottom: 8px; }
-        .subtitle { text-align: center; color: #7dd3fc; font-size: 14px; letter-spacing: 4px; margin-bottom: 36px; text-transform: uppercase; }
-        .stTextInput label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
-        .stSelectbox label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
-        .stNumberInput label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
-        .stTextInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
-        .stButton > button { background: linear-gradient(90deg, #06b6d4, #3b82f6) !important; color: #fff !important; font-weight: 700 !important; border-radius: 10px !important; border: none !important; width: 100%; padding: 12px !important; letter-spacing: 2px; }
-        .stSelectbox > div > div { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; border-radius: 10px !important; color: #e0f2fe !important; }
-        .stNumberInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
-        </style>
-    """, unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown('<div class="marmed-title">MARMED</div>', unsafe_allow_html=True)
-        st.markdown('<div class="subtitle">SISTEMA INTEGRADO DE GESTÃO</div>', unsafe_allow_html=True)
-        username = st.text_input("USUÁRIO", key="login_user")
-        password = st.text_input("SENHA", type="password", key="login_pass")
-        if st.button("Acessar", key="login_btn"):
-            pw_hash = hashlib.sha256(password.encode()).hexdigest()
-            conn = sqlite3.connect("marmed.db")
-            c = conn.cursor()
-            c.execute("SELECT * FROM users WHERE username=? AND password_hash=?", (username, pw_hash))
-            user = c.fetchone()
-            conn.close()
-            if user:
-                st.session_state["logged_in"] = True
-                st.session_state["username"] = username
-                st.session_state["page"] = "Dashboard"
-                st.rerun()
-            else:
-                st.error("Usuário ou senha inválidos")
-        st.markdown('<p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:28px;">Acesso restrito a usuários autorizados</p>', unsafe_allow_html=True)
-
-def dashboard():
-    st.markdown('<h1 style="color:#e0f2fe;text-align:center;font-size:48px;font-weight:800;letter-spacing:6px;">MARMED</h1>', unsafe_allow_html=True)
-    st.markdown('<h3 style="color:#7dd3fc;text-align:center;letter-spacing:4px;margin-bottom:4px;">SISTEMA INTEGRADO DE GESTÃO</h3>', unsafe_allow_html=True)
-    st.markdown('<h2 style="color:#1e40af;text-align:center;letter-spacing:3px;font-size:20px;font-weight:700;margin-bottom:16px;">PREFEITURA MUNICIPAL DE LUMINÁRIAS</h2>', unsafe_allow_html=True)
-    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
-    conn = sqlite3.connect("marmed.db")
-    c = conn.cursor()
-    c.execute("SELECT COALESCE(SUM(valor_total),0) FROM contas_receber")
-    total_cadastrado = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM contas_receber")
-    total_contas = c.fetchone()[0]
-    conn.close()
-    cols = st.columns(5)
-    dados = [
-        ("REPASSE FEDERAL", total_cadastrado * 0.3, "#3b82f6"),
-        ("REPASSE ESTADUAL", total_cadastrado * 0.2, "#22c55e"),
-        ("RECURSO MUNICIPAL", total_cadastrado * 0.15, "#eab308"),
-        ("TRANSFERÊNCIA", total_cadastrado * 0.25, "#a855f7"),
-        ("TRANSPOSIÇÃO", total_cadastrado * 0.1, "#ef4444")
-    ]
-    for i, (tit, val, cor) in enumerate(dados):
-        with cols[i]:
-            st.markdown(f'<div style="background:linear-gradient(135deg,#1a2a3a,#0f2027);border-radius:15px;padding:20px;text-align:center;border-left:4px solid {cor};border:1px solid rgba(34,211,238,0.3);min-height:130px;display:flex;flex-direction:column;justify-content:center;"><div style="color:#b0eaff;font-size:11px;letter-spacing:1px;font-weight:600;margin-bottom:8px;">{tit}</div><div style="color:#00d4ff;font-size:20px;font-weight:700;">{format_currency(val)}</div></div>', unsafe_allow_html=True)
-    st.markdown(f'<p style="text-align:center;color:#64748b;font-size:12px;margin-top:20px;">{total_contas} conta(s) cadastrada(s) - Painel gerencial MARMED - {datetime.now().strftime("%d/%m/%Y")}</p>', unsafe_allow_html=True)
-
-def cadastrar_contas():
-    st.markdown('<h1 style="color:#e0f2fe;">CADASTRAR CONTAS</h1>', unsafe_allow_html=True)
-    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
-    conn = sqlite3.connect("marmed.db")
-    df = conn.execute("SELECT id, numero_conta, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto FROM contas_receber ORDER BY id DESC").fetchall()
-    cols = ["ID", "Nº Conta", "Referência", "Nº/Ano", "Tipo Recurso", "Valor Custeio", "Valor Investimento", "Valor Total", "Data Receb.", "Programa/Política", "Setor Gasto"]
-    conn.close()
-    if df:
-        import pandas as pd
-        pdf = pd.DataFrame(df, columns=cols)
-        if "Valor Custeio" in pdf.columns:
-            pdf["Valor Custeio"] = pdf["Valor Custeio"].apply(lambda x: format_currency(x))
-        if "Valor Investimento" in pdf.columns:
-            pdf["Valor Investimento"] = pdf["Valor Investimento"].apply(lambda x: format_currency(x))
-        if "Valor Total" in pdf.columns:
-            pdf["Valor Total"] = pdf["Valor Total"].apply(lambda x: format_currency(x))
-        st.dataframe(pdf, use_container_width=True, hide_index=True)
-    st.markdown('<h3 style="color:#7dd3fc;">Novo Cadastro</h3>', unsafe_allow_html=True)
-    num_conta = st.text_input("Número da Conta")
-    ref_contrato = st.selectbox("Referência do Contrato", ["", "Resolução", "Deliberação", "Portaria"])
-    num_ano_ref = st.text_input("Número/Ano")
-    tipo_recurso = st.selectbox("Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], key="tipo_recurso_cad")
-    if tipo_recurso == "Custeio/Investimento":
-        val_custeio = st.number_input("Valor Pago Custeio", min_value=0.0, step=0.01, format="%.2f")
-        val_invest = st.number_input("Valor Pago Investimento", min_value=0.0, step=0.01, format="%.2f")
-        val_total = val_custeio + val_invest
-    elif tipo_recurso == "Custeio":
-        val_pago = st.number_input("Valor Pago", min_value=0.0, step=0.01, format="%.2f")
-        val_custeio = val_pago
-        val_invest = 0.0
-        val_total = val_pago
-    elif tipo_recurso == "Investimento":
-        val_pago = st.number_input("Valor Pago", min_value=0.0, step=0.01, format="%.2f")
-        val_custeio = 0.0
-        val_invest = val_pago
-        val_total = val_pago
-    else:
-        val_custeio = 0.0
-        val_invest = 0.0
-        val_total = 0.0
-    data_receb = st.text_input("Data de Recebimento", value=datetime.now().strftime("%d/%m/%Y"))
-    programa_politica = st.text_input("Programa/Política")
-    setor_gasto = st.text_input("Setor de Referência de Gasto")
-    if st.button("Salvar Conta", key="salvar_conta"):
-        if not num_conta or not ref_contrato or not tipo_recurso:
-            st.error("Preencha os campos obrigatórios: Número da Conta, Referência do Contrato e Tipo de Recurso")
-        else:
-            conn = sqlite3.connect("marmed.db")
-            c = conn.cursor()
-            c.execute("""
-                INSERT INTO contas_receber 
-                (numero_conta, referencia_tipo, referencia_numero, tipo_recurso, 
-                 valor_pago_custeio, valor_pago_investimento, valor_total, 
-                 data_recebimento, programa_politica, setor_gasto)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (num_conta, ref_contrato, num_ano_ref, tipo_recurso, 
-                  val_custeio, val_invest, val_total,
-                  data_receb, programa_politica, setor_gasto))
-            conn.commit()
-            conn.close()
-            st.success("Conta cadastrada com sucesso!")
-            st.rerun()
-
-def contas_cadastradas():
-    st.markdown('<h1 style="color:#e0f2fe;">CONTAS CADASTRADAS</h1>', unsafe_allow_html=True)
-    st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
-    conn = sqlite3.connect("marmed.db")
-    df = conn.execute("SELECT id, numero_conta, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto FROM contas_receber ORDER BY id DESC").fetchall()
-    cols = ["ID", "Nº Conta", "Referência", "Nº/Ano", "Tipo Recurso", "Valor Custeio", "Valor Investimento", "Valor Total", "Data Receb.", "Programa/Política", "Setor Gasto"]
-    conn.close()
-    if df:
-        import pandas as pd
-        pdf = pd.DataFrame(df, columns=cols)
-        if "Valor Custeio" in pdf.columns:
-            pdf["Valor Custeio"] = pdf["Valor Custeio"].apply(lambda x: format_currency(x))
-        if "Valor Investimento" in pdf.columns:
-            pdf["Valor Investimento"] = pdf["Valor Investimento"].apply(lambda x: format_currency(x))
-        if "Valor Total" in pdf.columns:
-            pdf["Valor Total"] = pdf["Valor Total"].apply(lambda x: format_currency(x))
-        st.dataframe(pdf, use_container_width=True, hide_index=True)
-        st.markdown(f'<p style="color:#64748b;font-size:12px;text-align:center;">Total de registros: {len(df)}</p>', unsafe_allow_html=True)
-    else:
-        st.info("Nenhuma conta cadastrada ainda.")
-
-def change_password():
-    st.markdown('<h1 style="color:#e0f2fe;">Trocar Senha</h1>', unsafe_allow_html=True)
-    st.markdown('<hr>', unsafe_allow_html=True)
-    current = st.text_input("Senha atual", type="password")
-    new_pass = st.text_input("Nova senha", type="password")
-    confirm = st.text_input("Confirmar nova senha", type="password")
-    if st.button("Salvar nova senha"):
-        if new_pass != confirm:
-            st.error("As senhas não conferem")
-        else:
-            ch = hashlib.sha256(current.encode()).hexdigest()
-            conn = sqlite3.connect("marmed.db")
-            c = conn.cursor()
-            c.execute("SELECT id FROM users WHERE username=? AND password_hash=?", (st.session_state["username"], ch))
-            row = c.fetchone()
-            if row:
-                nh = hashlib.sha256(new_pass.encode()).hexdigest()
-                c.execute("UPDATE users SET password_hash=? WHERE id=?", (nh, row[0]))
-                conn.commit()
-                conn.close()
-                st.success("Senha alterada com sucesso")
-            else:
-                conn.close()
-                st.error("Senha atual incorreta")
-
-def main():
-    if "logged_in" not in st.session_state:
-        st.session_state["logged_in"] = False
-    if "page" not in st.session_state:
-        st.session_state["page"] = "Dashboard"
-    if not st.session_state["logged_in"]:
-        login_page()
-    else:
-        st.sidebar.markdown('<h3 style="color:#22d3ee;text-align:center;letter-spacing:2px;">ABA DE NAVEGAÇÃO</h3>', unsafe_allow_html=True)
-        st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        if st.sidebar.button("CADASTRAR CONTAS", key="nav_cadastrar", use_container_width=True):
-            st.session_state["page"] = "CADASTRAR CONTAS"
-            st.rerun()
-        if st.sidebar.button("CONTAS CADASTRADAS", key="nav_cadastradas", use_container_width=True):
-            st.session_state["page"] = "CONTAS CADASTRADAS"
-            st.rerun()
-        st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        if st.sidebar.button("Sair", key="logout", use_container_width=True):
-            st.session_state["logged_in"] = False
-            st.rerun()
-        page = st.session_state["page"]
-        if page == "Dashboard":
-            dashboard()
-        elif page == "CADASTRAR CONTAS":
-            cadastrar_contas()
-        elif page == "CONTAS CADASTRADAS":
-            contas_cadastradas()
-        elif page == "Trocar Senha":
-            change_password()
-
-if __name__ == "__main__":
-    main()
+    <script>
+    (function() {
+        function aplicarMascaras() {
+            document.querySelectorAll('[data-testid="stTextInput"]').forEach(function(el) {
+                var label = el.querySelector('label');
+                var input = el.querySelector('input');
+                if (label && input && !input.dataset.maskMoney && /custeio|investimento|valor|compra/i.test(label.textContent)) {
+                    input.dataset.maskMoney = '1';
+                    input.inputMode = 'numeric';
+                    input.setAttribute('autocomplete', 'off');
+                    input.addEventListener('input', function() {
+                        var v = this.value.replace(/\D/g, '');
+                        if (v.length === 0) { this.value = ''; return; }
+                        while (v.length &lt; 3) v = '0' + v;
+                        var cents = v.substring(v.length - 2);
+                        var reais = v.substring(0, v.length - 2);
+                        reais = reais.replace(/^0+/, '');
+                        if (reais === '') reais = '0';
+                        var partes = [];
+                        while (reais.length > 3) {
+                            partes.unshift(reais.substring(reais.length - 3));
+                            reais = reais.substring(0, reais.length - 3);
+                        }
+                        if (reais.length > 0) partes.unshift(reais);
+                        this.value = partes.join('.') + ',' + cents;
+                    });
+                    if (input.value) { input.dispatchEvent(new Event('input')); }
+                }
+            });
+            document.querySelectorAll('input:not([type="hidden"])').forEach(function(input) {
+                if (input.dataset.maskMoney) return;
+                var parentText = (input.parentElement ? input.parentElement.textContent : '') + ' ' + (input.placeholder || '');
+                if (!input.dataset.maskMoney && /custeio|investimento|valor|compra/i.test(parentText)) {
+ 
