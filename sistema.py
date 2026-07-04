@@ -38,13 +38,14 @@ def login_page():
             border-radius: 24px !important;
             padding: 48px 40px !important;
             box-shadow: 0 20px 60px rgba(0,0,0,0.5) !important;
-            margin-top: 120px !important;
+            margin-top: 80px !important;
             max-width: 420px !important;
             margin-left: auto !important;
             margin-right: auto !important;
         }
         .marmed-title { font-size: 52px; font-weight: 800; text-align: center; color: #e0f2fe; letter-spacing: 6px; text-shadow: 0 0 20px rgba(14, 165, 233, 0.6); margin-bottom: 8px; }
-        .subtitle { text-align: center; color: #7dd3fc; font-size: 14px; letter-spacing: 4px; margin-bottom: 36px; text-transform: uppercase; }
+        .subtitle { text-align: center; color: #7dd3fc; font-size: 14px; letter-spacing: 4px; margin-bottom: 8px; text-transform: uppercase; }
+        .cidade { text-align: center; color: #94a3b8; font-size: 13px; letter-spacing: 2px; margin-bottom: 36px; }
         .stTextInput label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
         .stTextInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
         .stButton > button { background: linear-gradient(90deg, #06b6d4, #3b82f6) !important; color: #fff !important; font-weight: 700 !important; border-radius: 10px !important; border: none !important; width: 100%; padding: 12px !important; letter-spacing: 2px; }
@@ -54,6 +55,7 @@ def login_page():
     with col2:
         st.markdown('<div class="marmed-title">MARMED</div>', unsafe_allow_html=True)
         st.markdown('<div class="subtitle">SISTEMA INTEGRADO DE GESTAO</div>', unsafe_allow_html=True)
+        st.markdown('<div class="cidade">PREFEITURA MUNICIPAL DE LUMINARIAS</div>', unsafe_allow_html=True)
         username = st.text_input("USUARIO", key="login_user")
         password = st.text_input("SENHA", type="password", key="login_pass")
         if st.button("Acessar", key="login_btn"):
@@ -73,27 +75,28 @@ def login_page():
         st.markdown('<p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:28px;">Acesso restrito a usuarios autorizados</p>', unsafe_allow_html=True)
 
 def dashboard():
-    st.markdown('<h1 style="color:#e0f2fe;text-align:center;">MARMED</h1>', unsafe_allow_html=True)
-    st.markdown('<h3 style="color:#7dd3fc;text-align:center;letter-spacing:4px;">SISTEMA INTEGRADO DE GESTAO</h3>', unsafe_allow_html=True)
+    st.markdown('<h1 style="color:#e0f2fe;text-align:center;font-size:48px;font-weight:800;text-shadow:0 0 25px rgba(14,165,233,0.6);letter-spacing:6px;">MARMED</h1>', unsafe_allow_html=True)
+    st.markdown('<h3 style="color:#7dd3fc;text-align:center;letter-spacing:4px;margin-bottom:4px;">SISTEMA INTEGRADO DE GESTAO</h3>', unsafe_allow_html=True)
+    st.markdown('<h4 style="color:#94a3b8;text-align:center;letter-spacing:2px;font-size:14px;margin-bottom:16px;">PREFEITURA MUNICIPAL DE LUMINARIAS</h4>', unsafe_allow_html=True)
     st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
     c = conn.cursor()
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM contas_pagar")
-    tp = c.fetchone()[0]
     c.execute("SELECT COALESCE(SUM(valor),0) FROM contas_receber")
-    tr = c.fetchone()[0]
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM empenhos")
-    te = c.fetchone()[0]
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM licitacoes")
-    tl = c.fetchone()[0]
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM contratos")
-    tc = c.fetchone()[0]
+    total_receber = c.fetchone()[0]
+    c.execute("SELECT COALESCE(SUM(valor),0) FROM contas_pagar")
+    total_pagar = c.fetchone()[0]
     conn.close()
     cols = st.columns(5)
-    dados = [("REPASSE FEDERAL", tp, "#ef4444"), ("REPASSE ESTADUAL", tr, "#22c55e"), ("RECURSO MUNICIPAL", te, "#eab308"), ("TRANSFERENCIA", tl, "#a855f7"), ("TRANSPOSICAO", tc, "#3b82f6")]
+    dados = [
+        ("REPASSE FEDERAL", total_receber, "#3b82f6"),
+        ("REPASSE ESTADUAL", total_pagar, "#22c55e"),
+        ("RECURSO MUNICIPAL", 0, "#eab308"),
+        ("TRANSFERENCIA", 0, "#a855f7"),
+        ("TRANSPOSICAO", 0, "#ef4444")
+    ]
     for i, (tit, val, cor) in enumerate(dados):
         with cols[i]:
-            st.markdown(f'<div style="background:linear-gradient(135deg,#1a2a3a,#0f2027);border-radius:15px;padding:20px;text-align:center;border-left:4px solid {cor};border:1px solid rgba(34,211,238,0.3);"><div style="color:#b0eaff;font-size:12px;letter-spacing:1px;">{tit}</div><div style="color:#00d4ff;font-size:22px;font-weight:700;">{format_currency(val)}</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background:linear-gradient(135deg,#1a2a3a,#0f2027);border-radius:15px;padding:20px;text-align:center;border-left:4px solid {cor};border:1px solid rgba(34,211,238,0.3);min-height:130px;display:flex;flex-direction:column;justify-content:center;"><div style="color:#b0eaff;font-size:11px;letter-spacing:1px;font-weight:600;margin-bottom:8px;">{tit}</div><div style="color:#00d4ff;font-size:20px;font-weight:700;">{format_currency(val)}</div></div>', unsafe_allow_html=True)
     st.markdown(f'<p style="text-align:center;color:#64748b;font-size:12px;margin-top:20px;">Painel gerencial MARMED - {datetime.now().strftime("%d/%m/%Y")}</p>', unsafe_allow_html=True)
 
 def change_password():
@@ -163,11 +166,11 @@ def main():
         st.sidebar.markdown('<h2 style="color:#22d3ee;text-align:center;">MARMED</h2>', unsafe_allow_html=True)
         st.sidebar.markdown(f'<p style="color:#94a3b8;text-align:center;font-size:12px;">{st.session_state["username"]}</p>', unsafe_allow_html=True)
         st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        if st.sidebar.button("Registrar Conta", key="nav_registrar", use_container_width=True):
-            st.session_state["page"] = "Registrar Conta"
+        if st.sidebar.button("REPASSE FEDERAL", key="nav_federal", use_container_width=True):
+            st.session_state["page"] = "REPASSE FEDERAL"
             st.rerun()
-        if st.sidebar.button("Contas Ativas", key="nav_ativas", use_container_width=True):
-            st.session_state["page"] = "Contas Ativas"
+        if st.sidebar.button("REPASSE ESTADUAL", key="nav_estadual", use_container_width=True):
+            st.session_state["page"] = "REPASSE ESTADUAL"
             st.rerun()
         st.sidebar.markdown('<hr>', unsafe_allow_html=True)
         if st.sidebar.button("Sair", key="logout", use_container_width=True):
@@ -176,10 +179,10 @@ def main():
         page = st.session_state["page"]
         if page == "Dashboard":
             dashboard()
-        elif page == "Registrar Conta":
-            crud_page("contas_receber", ["cliente", "descricao", "valor", "vencimento", "status"], "Registrar Conta")
-        elif page == "Contas Ativas":
-            crud_page("contas_pagar", ["fornecedor", "descricao", "valor", "vencimento", "status"], "Contas Ativas")
+        elif page == "REPASSE FEDERAL":
+            crud_page("contas_receber", ["cliente", "descricao", "valor", "vencimento", "status"], "REPASSE FEDERAL")
+        elif page == "REPASSE ESTADUAL":
+            crud_page("contas_pagar", ["fornecedor", "descricao", "valor", "vencimento", "status"], "REPASSE ESTADUAL")
         elif page == "Trocar Senha":
             change_password()
 
