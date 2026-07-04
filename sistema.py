@@ -2,7 +2,18 @@ import streamlit as st
 import sqlite3
 import hashlib
 import re
+import base64
 from datetime import datetime
+
+def get_logo_base64():
+    try:
+        with open("logo.png", "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode("utf-8")
+    except Exception:
+        return None
+
+LOGO_BASE64 = get_logo_base64()
 
 st.set_page_config(page_title="MARMED - Gestao de Saude", page_icon="🏥", layout="wide", initial_sidebar_state="expanded")
 
@@ -182,9 +193,10 @@ st.markdown(
     .mm-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; text-align: center; }
     .mm-card-value { font-size: 22px; font-weight: 800; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .mm-card-label { color: #cbd5e1; font-size: 12px; margin-top: 6px; }
-    .mm-brand-title { font-size: 56px; font-weight: 800; color: #f8fafc; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
-    .mm-brand-subtitle { font-size: 20px; font-weight: 600; color: #7dd3fc; text-align: center; margin-bottom: 3px; }
-    .mm-brand-institution { font-size: 15px; font-weight: 500; color: #cbd5e1; text-align: center; margin-bottom: 20px; }
+    .mm-brand-logo { width: 96px; height: 96px; margin: 0 auto 12px auto; border-radius: 50%; background: linear-gradient(135deg, #38bdf8, #818cf8); display: flex; align-items: center; justify-content: center; box-shadow: 0 12px 30px rgba(99,102,241,0.45), 0 0 0 6px rgba(56,189,248,0.10); }
+    .mm-brand-title { font-size: 72px; font-weight: 800; color: #f8fafc; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
+    .mm-brand-subtitle { font-size: 28px; font-weight: 600; color: #7dd3fc; text-align: center; margin-bottom: 3px; }
+    .mm-brand-institution { font-size: 20px; font-weight: 500; color: #cbd5e1; text-align: center; margin-bottom: 20px; }
     header[data-testid="stHeader"] { background: transparent !important; box-shadow: none !important; }
     div[data-testid="stToolbar"] { background: transparent !important; }
     div[data-testid="stDecoration"] { background: transparent !important; display: none !important; }
@@ -279,7 +291,10 @@ def tela_login():
     col1, col2, col3 = st.columns([1, 1.3, 1])
     with col2:
         st.markdown('<div class="login-card">', unsafe_allow_html=True)
-        st.markdown('<div class="login-badge-icon">🏥</div>', unsafe_allow_html=True)
+        if LOGO_BASE64:
+            st.markdown(f'<div class="login-badge-icon"><img src="data:image/png;base64,{LOGO_BASE64}" style="width:70%;height:70%;object-fit:contain;"/></div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="login-badge-icon">🏥</div>', unsafe_allow_html=True)
         st.markdown('<p class="login-title">MARMED</p>', unsafe_allow_html=True)
         st.markdown('<p class="login-subtitle">Gestao Inteligente de Saude Municipal</p>', unsafe_allow_html=True)
 
@@ -307,6 +322,10 @@ def tela_login():
         st.markdown("</div>", unsafe_allow_html=True)
 
 def pagina_inicio():
+    if LOGO_BASE64:
+        st.markdown(f'<div class="mm-brand-logo"><img src="data:image/png;base64,{LOGO_BASE64}" style="width:70%;height:70%;object-fit:contain;"/></div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="mm-brand-logo" style="font-size:44px;">🏥</div>', unsafe_allow_html=True)
     st.markdown('<p class="mm-brand-title">MARMED</p>', unsafe_allow_html=True)
     st.markdown('<p class="mm-brand-subtitle">Sistema Integrado de Gestao Publica</p>', unsafe_allow_html=True)
     st.markdown('<p class="mm-brand-institution">Prefeitura Municipal de Luminarias - MG</p>', unsafe_allow_html=True)
@@ -691,8 +710,7 @@ def pagina_trocar_senha():
 
 def menu_lateral():
     with st.sidebar:
-        st.markdown(f'<p style="color:#f1f5f9;font-weight:700;">Bem-vindo, {st.session_state.get("usuario_nome", "")}</p>', unsafe_allow_html=True)
-        st.markdown('<p style="color:#7dd3fc;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:8px;margin-bottom:4px;">Aba de Navegacao</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#7dd3fc;font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-top:8px;margin-bottom:4px;">Aba de Navegacao</p>', unsafe_allow_html=True)
         st.markdown("---")
 
         paginas = [
