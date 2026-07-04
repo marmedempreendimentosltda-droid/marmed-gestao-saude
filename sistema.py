@@ -1,21 +1,20 @@
 import streamlit as st
 import sqlite3
 import hashlib
-import time
-import random
+import pandas as pd
 from datetime import datetime, date
 
-DB = "marmed.db"
+st.set_page_config(page_title="MARMED", layout="wide")
 
 
 def init_db():
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect("marmed.db")
     c = conn.cursor()
     c.execute('''
-        CREATE TABLE IF NOT EXISTS usuarios (
+        CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            usuario TEXT UNIQUE,
-            senha TEXT
+            username TEXT UNIQUE,
+            password_hash TEXT
         )
     ''')
     c.execute('''
@@ -42,7 +41,6 @@ def init_db():
         CREATE TABLE IF NOT EXISTS empenhos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             numero TEXT,
-            ano TEXT,
             objeto TEXT,
             valor REAL,
             data TEXT,
@@ -53,10 +51,10 @@ def init_db():
         CREATE TABLE IF NOT EXISTS licitacoes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             numero TEXT,
-            ano TEXT,
             objeto TEXT,
             modalidade TEXT,
             valor REAL,
+            data TEXT,
             status TEXT
         )
     ''')
@@ -64,7 +62,6 @@ def init_db():
         CREATE TABLE IF NOT EXISTS contratos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             numero TEXT,
-            ano TEXT,
             contratado TEXT,
             objeto TEXT,
             valor REAL,
@@ -73,660 +70,325 @@ def init_db():
             status TEXT
         )
     ''')
-    senha_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
-    c.execute("INSERT OR IGNORE INTO usuarios (usuario, senha) VALUES (?, ?)", ("admin", senha_hash))
+    default_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
+    c.execute("INSERT OR IGNORE INTO users (username, password_hash) VALUES (?, ?)", ("admin", default_hash))
     conn.commit()
     conn.close()
 
 
-def hash_senha(senha):
-    return hashlib.sha256(senha.encode()).hexdigest()
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
 
-def verificar_login(usuario, senha):
-    conn = sqlite3.connect(DB)
+def verify_user(username, password):
+    conn = sqlite3.connect("marmed.db")
     c = conn.cursor()
-    c.execute("SELECT senha FROM usuarios WHERE usuario = ?", (usuario,))
+    c.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
     row = c.fetchone()
     conn.close()
-    if row and row[0] == hash_senha(senha):
+    if row and row[0] == hash_password(password):
         return True
     return False
 
 
-def trocar_senha(usuario, senha_atual, nova_senha):
-    if not verificar_login(usuario, senha_atual):
+def change_password(username, current, new):
+    if not verify_user(username, current):
         return False
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect("marmed.db")
     c = conn.cursor()
-    c.execute("UPDATE usuarios SET senha = ? WHERE usuario = ?", (hash_senha(nova_senha), usuario))
+    c.execute("UPDATE users SET password_hash = ? WHERE username = ?", (hash_password(new), username))
     conn.commit()
     conn.close()
     return True
 
 
-def layout_animated():
-    st.markdown("""
+def format_currency(value):
+    if value is None:
+        value = 0
+    return "R$ {:,.2f}".format(value).replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def login_page():
+    st.markdown(
+        """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
-
-        .main {
-            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-            background-attachment: fixed;
-            color: #ffffff;
+        .login-bg {
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: -1;
         }
-
-        .block-container {
-            padding-top: 1rem;
-            padding-bottom: 2rem;
-            padding-left: 2rem;
-            padding-right: 2rem;
-        }
-
-        .marmed-title {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 4.5rem;
-            font-weight: 900;
-            text-align: center;
-            letter-spacing: 0.3em;
-            color: #ffffff;
-            text-shadow: 0 0 10px #00d2ff, 0 0 20px #00d2ff, 0 0 40px #00d2ff;
-            margin-top: 0.5rem;
-            margin-bottom: 0.2rem;
-            animation: marmedPulse 3s ease-in-out infinite;
-        }
-
-        @keyframes marmedPulse {
-            0% { text-shadow: 0 0 10px #00d2ff, 0 0 20px #00d2ff; transform: translateY(0px); }
-            50% { text-shadow: 0 0 20px #00d2ff, 0 0 40px #00d2ff, 0 0 60px #00d2ff; transform: translateY(-5px); }
-            100% { text-shadow: 0 0 10px #00d2ff, 0 0 20px #00d2ff; transform: translateY(0px); }
-        }
-
-        .marmed-letter {
-            display: inline-block;
-            animation: letter3D 2.5s ease-in-out infinite;
-        }
-
-        .marmed-letter:nth-child(1) { animation-delay: 0s; }
-        .marmed-letter:nth-child(2) { animation-delay: 0.2s; }
-        .marmed-letter:nth-child(3) { animation-delay: 0.4s; }
-        .marmed-letter:nth-child(4) { animation-delay: 0.6s; }
-        .marmed-letter:nth-child(5) { animation-delay: 0.8s; }
-        .marmed-letter:nth-child(6) { animation-delay: 1.0s; }
-
-        @keyframes letter3D {
-            0%, 100% { transform: rotateX(0deg) rotateY(0deg) scale(1); }
-            50% { transform: rotateX(15deg) rotateY(15deg) scale(1.1); }
-        }
-
-        .subtitle {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 1.2rem;
-            font-weight: 400;
-            text-align: center;
-            letter-spacing: 0.4em;
-            color: #a0d2ff;
-            margin-bottom: 2rem;
-            text-shadow: 0 0 5px rgba(0, 210, 255, 0.5);
-        }
-
         .glass-card {
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255,255,255,0.07);
             border-radius: 20px;
-            padding: 2.5rem;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            padding: 40px;
+            box-shadow: 0 8px 32px 0 rgba(0,0,0,0.37);
+            border: 1px solid rgba(255,255,255,0.18);
             max-width: 420px;
             margin: auto;
+            margin-top: 80px;
+            backdrop-filter: blur(10px);
         }
-
-        .login-label {
-            font-family: 'Orbitron', sans-serif;
-            color: #a0d2ff;
-            font-size: 0.85rem;
-            letter-spacing: 0.1em;
+        .marmed-letter {
+            display: inline-block;
+            font-size: 52px;
+            font-weight: 900;
+            color: #00d4ff;
+            text-shadow: 0 0 20px #00d4ff;
+            animation: flyIn 1.2s ease forwards;
+            opacity: 0;
         }
-
-        .metric-card {
-            background: rgba(255, 255, 255, 0.07);
-            border: 1px solid rgba(0, 210, 255, 0.3);
-            border-radius: 15px;
-            padding: 1.2rem;
+        @keyframes flyIn {
+            0% {transform: translateY(-80px) scale(0.5); opacity: 0;}
+            100% {transform: translateY(0) scale(1); opacity: 1;}
+        }
+        .subtitle {
+            color: #b0eaff;
+            letter-spacing: 4px;
+            font-size: 14px;
+            margin-top: 10px;
+            margin-bottom: 30px;
             text-align: center;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
-
-        .metric-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 30px rgba(0, 210, 255, 0.3);
-        }
-
-        .metric-title {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 0.85rem;
-            letter-spacing: 0.08em;
-            color: #a0d2ff;
-            margin-bottom: 0.5rem;
-        }
-
-        .metric-value {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #ffffff;
-        }
-
-        .stButton button {
-            background: linear-gradient(90deg, #00d2ff, #3a7bd5);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            padding: 0.6rem 1.5rem;
-            font-family: 'Orbitron', sans-serif;
-            font-weight: 700;
-            letter-spacing: 0.1em;
-            width: 100%;
-        }
-
-        .stButton button:hover {
-            background: linear-gradient(90deg, #3a7bd5, #00d2ff);
-            color: white;
-        }
-
-        .crud-container {
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 15px;
-            padding: 1.5rem;
-            margin-top: 1rem;
-        }
-
-        .css-1d391kg, .css-1v3fvcr {
-            background-color: rgba(15, 12, 41, 0.95) !important;
-        }
-
-        .stTextInput input, .stNumberInput input, .stDateInput input, .stSelectbox select {
-            background-color: rgba(255, 255, 255, 0.08);
-            color: #ffffff;
-            border: 1px solid rgba(0, 210, 255, 0.3);
-            border-radius: 8px;
-        }
-
-        .stTextInput input:focus, .stNumberInput input:focus, .stDateInput input:focus, .stSelectbox select:focus {
-            border: 1px solid #00d2ff;
-            box-shadow: 0 0 10px rgba(0, 210, 255, 0.4);
-        }
-
-        .sidebar-title {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 1.1rem;
-            color: #00d2ff;
+        .acesso-bottom {
             text-align: center;
-            margin-bottom: 1rem;
-            letter-spacing: 0.1em;
+            color: #00d4ff;
+            font-size: 12px;
+            margin-top: 20px;
+            letter-spacing: 2px;
+        }
+        .particle {
+            position: fixed;
+            width: 6px;
+            height: 6px;
+            background: rgba(0,212,255,0.4);
+            border-radius: 50%;
+            animation: float 8s infinite linear;
+        }
+        @keyframes float {
+            0% {transform: translateY(100vh) translateX(0); opacity: 0;}
+            50% {opacity: 1;}
+            100% {transform: translateY(-10vh) translateX(40px); opacity: 0;}
         }
         </style>
-    """, unsafe_allow_html=True)
-
-    particles = ""
-    for i in range(50):
-        x = random.randint(0, 100)
-        y = random.randint(0, 100)
-        size = random.randint(2, 6)
-        delay = random.random() * 5
-        duration = random.randint(5, 15)
-        particles += f"<<span style='position:fixed;left:{x}%;top:{y}%;width:{size}px;height:{size}px;background:rgba(0,210,255,0.6);border-radius:50%;animation:particle {duration}s linear {delay}s infinite;pointer-events:none;z-index:0;'></span>"
-    st.markdown(f"""
-        <style>
-        @keyframes particle {{
-            0% {{ transform: translateY(0) scale(1); opacity: 0.6; }}
-            50% {{ opacity: 1; }}
-            100% {{ transform: translateY(-100vh) scale(0.2); opacity: 0; }}
-        }}
-        </style>
-        {particles}
-    """, unsafe_allow_html=True)
-
-
-def show_header():
-    st.markdown("""
-        <div class="marmed-title">
-            <span class="marmed-letter">M</span>
-            <span class="marmed-letter">A</span>
-            <span class="marmed-letter">R</span>
-            <span class="marmed-letter">M</span>
-            <span class="marmed-letter">E</span>
-            <span class="marmed-letter">D</span>
+        <div class="login-bg"></div>
+        <div class="particle" style="left:10%; animation-duration:7s;"></div>
+        <div class="particle" style="left:25%; animation-duration:9s;"></div>
+        <div class="particle" style="left:40%; animation-duration:6s;"></div>
+        <div class="particle" style="left:55%; animation-duration:10s;"></div>
+        <div class="particle" style="left:70%; animation-duration:8s;"></div>
+        <div class="particle" style="left:85%; animation-duration:7s;"></div>
+        """,
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        """
+        <div class="glass-card">
+            <div style="text-align:center;">
+                <span class="marmed-letter" style="animation-delay:0s;">M</span>
+                <span class="marmed-letter" style="animation-delay:0.1s;">A</span>
+                <span class="marmed-letter" style="animation-delay:0.2s;">R</span>
+                <span class="marmed-letter" style="animation-delay:0.3s;">M</span>
+                <span class="marmed-letter" style="animation-delay:0.4s;">E</span>
+                <span class="marmed-letter" style="animation-delay:0.5s;">D</span>
+            </div>
+            <div class="subtitle">SISTEMA INTEGRADO DE GESTAO</div>
         </div>
-        <div class="subtitle">SISTEMA INTEGRADO DE GESTAO</div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True
+    )
+    with st.container():
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown(
+                """
+                <div style="max-width:340px; margin:auto; margin-top:20px;">
+                """,
+                unsafe_allow_html=True
+            )
+            st.markdown('<p style="color:#00d4ff;">Usuario</p>', unsafe_allow_html=True)
+            username = st.text_input("", key="login_user", label_visibility="collapsed")
+            st.markdown('<p style="color:#00d4ff;">Senha</p>', unsafe_allow_html=True)
+            password = st.text_input("", type="password", key="login_pass", label_visibility="collapsed")
+            if st.button("Entrar", use_container_width=True):
+                if verify_user(username, password):
+                    st.session_state.logged_in = True
+                    st.session_state.username = username
+                    st.session_state.page = "Dashboard"
+                    st.rerun()
+                else:
+                    st.error("Usuario ou senha invalidos")
+            st.markdown(
+                """
+                </div>
+                <div class="acesso-bottom">ACESSO</div>
+                """,
+                unsafe_allow_html=True
+            )
 
 
-def tela_login():
-    layout_animated()
-    show_header()
-    st.markdown("<<div class='glass-card'>", unsafe_allow_html=True)
-    st.markdown("<<div class='login-label'>USUARIO</div>", unsafe_allow_html=True)
-    usuario = st.text_input("", key="login_user", label_visibility="collapsed")
-    st.markdown("<<div class='login-label' style='margin-top:1rem;'>SENHA</div>", unsafe_allow_html=True)
-    senha = st.text_input("", type="password", key="login_pass", label_visibility="collapsed")
-    st.markdown("<<br>", unsafe_allow_html=True)
-    if st.button("ENTRAR", key="btn_entrar"):
-        if verificar_login(usuario, senha):
-            st.session_state.logado = True
-            st.session_state.usuario = usuario
-            st.rerun()
-        else:
-            st.error("Usuario ou senha invalidos")
-    st.markdown("</div>", unsafe_allow_html=True)
+def get_total(table):
+    conn = sqlite3.connect("marmed.db")
+    c = conn.cursor()
+    c.execute(f"SELECT COALESCE(SUM(valor),0) FROM {table}")
+    total = c.fetchone()[0]
+    conn.close()
+    return total
 
 
 def dashboard():
-    show_header()
-    st.markdown("<<h3 style='text-align:center; color:#a0d2ff; font-family:Orbitron; letter-spacing:0.2em;'>DASHBOARD FINANCEIRA</h3>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    c.execute("SELECT SUM(valor) FROM contas_receber WHERE status = 'A receber'")
-    repasse_federal = c.fetchone()[0] or 0
-    c.execute("SELECT SUM(valor) FROM contas_receber WHERE status = 'A receber'")
-    repasse_estadual = c.fetchone()[0] or 0
-    c.execute("SELECT SUM(valor) FROM contas_receber WHERE status = 'A receber'")
-    recurso_municipal = c.fetchone()[0] or 0
-    c.execute("SELECT SUM(valor) FROM contas_receber WHERE status = 'A receber'")
-    transferencia = c.fetchone()[0] or 0
-    c.execute("SELECT SUM(valor) FROM contas_receber WHERE status = 'A receber'")
-    transposicao = c.fetchone()[0] or 0
-    conn.close()
+    st.markdown('<h1 style="text-align:center; color:#00d4ff;">Dashboard</h1>', unsafe_allow_html=True)
+    st.markdown("<<hr>", unsafe_allow_html=True)
     cols = st.columns(5)
-    metricas = [
-        ("REPASSE FEDERAL", repasse_federal),
-        ("REPASSE ESTADUAL", repasse_estadual),
-        ("RECURSO MUNICIPAL", recurso_municipal),
-        ("TRANSFERENCIA", transferencia),
-        ("TRANSPOSICAO", transposicao)
-    ]
-    for i, (titulo, valor) in enumerate(metricas):
+    labels = ["REPASSE FEDERAL", "REPASSE ESTADUAL", "RECURSO MUNICIPAL", "TRANSFERENCIA", "TRANSPOSICAO"]
+    values = [get_total("contas_receber")] * 5
+    for i, (label, value) in enumerate(zip(labels, values)):
         with cols[i]:
-            st.markdown(f"""
-                <div class="metric-card">
-                    <div class="metric-title">{titulo}</div>
-                    <div class="metric-value">R$ {valor:,.2f}</div>
+            st.markdown(
+                f"""
+                <div style="background: linear-gradient(135deg, #1a2a3a, #0f2027);
+                border-radius: 15px; padding: 20px; text-align: center;
+                border: 1px solid #00d4ff; box-shadow: 0 0 15px rgba(0,212,255,0.2);">
+                <div style="color:#b0eaff; font-size:12px; letter-spacing:1px;">{label}</div>
+                <div style="color:#00d4ff; font-size:22px; font-weight:700;">{format_currency(value)}</div>
                 </div>
-            """, unsafe_allow_html=True)
+                """,
+                unsafe_allow_html=True
+            )
 
 
-def crud_contas_pagar():
-    show_header()
-    st.markdown("<<h3 style='text-align:center; color:#a0d2ff; font-family:Orbitron; letter-spacing:0.2em;'>CONTAS A PAGAR</h3>", unsafe_allow_html=True)
-    st.markdown("<<div class='crud-container'>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    with st.form("form_pagar", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            fornecedor = st.text_input("Fornecedor")
-            descricao = st.text_input("Descricao")
-        with col2:
-            valor = st.number_input("Valor", min_value=0.0, format="%.2f")
-            vencimento = st.date_input("Vencimento", value=date.today())
-            status = st.selectbox("Status", ["Pendente", "Pago", "Atrasado"])
-        submitted = st.form_submit_button("SALVAR")
-        if submitted:
-            c.execute("INSERT INTO contas_pagar (fornecedor, descricao, valor, vencimento, status) VALUES (?, ?, ?, ?, ?)",
-                      (fornecedor, descricao, valor, vencimento.strftime("%Y-%m-%d"), status))
-            conn.commit()
-            st.success("Registro salvo")
-    c.execute("SELECT * FROM contas_pagar ORDER BY id DESC")
-    rows = c.fetchall()
+def crud_page(title, table, fields):
+    st.markdown(f'<h1 style="text-align:center; color:#00d4ff;">{title}</h1>', unsafe_allow_html=True)
+    st.markdown("<<hr>", unsafe_allow_html=True)
+    conn = sqlite3.connect("marmed.db")
+    df = pd.read_sql_query(f"SELECT * FROM {table}", conn)
     conn.close()
-    for row in rows:
-        col1, col2, col3 = st.columns([4, 1, 1])
-        with col1:
-            st.write(f"ID {row[0]} - {row[1]} - {row[2]} - R$ {row[3]:,.2f} - Venc: {row[4]} - {row[5]}")
-        with col2:
-            if st.button("Editar", key=f"edit_pagar_{row[0]}"):
-                st.session_state.edit_pagar = row
-        with col3:
-            if st.button("Excluir", key=f"del_pagar_{row[0]}"):
-                conn = sqlite3.connect(DB)
-                c = conn.cursor()
-                c.execute("DELETE FROM contas_pagar WHERE id = ?", (row[0],))
-                conn.commit()
-                conn.close()
-                st.rerun()
-    if "edit_pagar" in st.session_state:
-        row = st.session_state.edit_pagar
-        with st.form("edit_pagar_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                e_fornecedor = st.text_input("Fornecedor", value=row[1])
-                e_descricao = st.text_input("Descricao", value=row[2])
-            with col2:
-                e_valor = st.number_input("Valor", value=row[3], format="%.2f")
-                e_vencimento = st.date_input("Vencimento", value=datetime.strptime(row[4], "%Y-%m-%d").date())
-                e_status = st.selectbox("Status", ["Pendente", "Pago", "Atrasado"], index=["Pendente", "Pago", "Atrasado"].index(row[5]))
-            if st.form_submit_button("ATUALIZAR"):
-                conn = sqlite3.connect(DB)
-                c = conn.cursor()
-                c.execute("UPDATE contas_pagar SET fornecedor=?, descricao=?, valor=?, vencimento=?, status=? WHERE id=?",
-                          (e_fornecedor, e_descricao, e_valor, e_vencimento.strftime("%Y-%m-%d"), e_status, row[0]))
-                conn.commit()
-                conn.close()
-                del st.session_state.edit_pagar
-                st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def crud_contas_receber():
-    show_header()
-    st.markdown("<<h3 style='text-align:center; color:#a0d2ff; font-family:Orbitron; letter-spacing:0.2em;'>CONTAS A RECEBER</h3>", unsafe_allow_html=True)
-    st.markdown("<<div class='crud-container'>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    with st.form("form_receber", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            devedor = st.text_input("Devedor")
-            descricao = st.text_input("Descricao")
-        with col2:
-            valor = st.number_input("Valor", min_value=0.0, format="%.2f")
-            vencimento = st.date_input("Vencimento", value=date.today())
-            status = st.selectbox("Status", ["A receber", "Recebido", "Atrasado"])
-        submitted = st.form_submit_button("SALVAR")
-        if submitted:
-            c.execute("INSERT INTO contas_receber (devedor, descricao, valor, vencimento, status) VALUES (?, ?, ?, ?, ?)",
-                      (devedor, descricao, valor, vencimento.strftime("%Y-%m-%d"), status))
-            conn.commit()
-            st.success("Registro salvo")
-    c.execute("SELECT * FROM contas_receber ORDER BY id DESC")
-    rows = c.fetchall()
-    conn.close()
-    for row in rows:
-        col1, col2, col3 = st.columns([4, 1, 1])
-        with col1:
-            st.write(f"ID {row[0]} - {row[1]} - {row[2]} - R$ {row[3]:,.2f} - Venc: {row[4]} - {row[5]}")
-        with col2:
-            if st.button("Editar", key=f"edit_receber_{row[0]}"):
-                st.session_state.edit_receber = row
-        with col3:
-            if st.button("Excluir", key=f"del_receber_{row[0]}"):
-                conn = sqlite3.connect(DB)
-                c = conn.cursor()
-                c.execute("DELETE FROM contas_receber WHERE id = ?", (row[0],))
-                conn.commit()
-                conn.close()
-                st.rerun()
-    if "edit_receber" in st.session_state:
-        row = st.session_state.edit_receber
-        with st.form("edit_receber_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                e_devedor = st.text_input("Devedor", value=row[1])
-                e_descricao = st.text_input("Descricao", value=row[2])
-            with col2:
-                e_valor = st.number_input("Valor", value=row[3], format="%.2f")
-                e_vencimento = st.date_input("Vencimento", value=datetime.strptime(row[4], "%Y-%m-%d").date())
-                e_status = st.selectbox("Status", ["A receber", "Recebido", "Atrasado"], index=["A receber", "Recebido", "Atrasado"].index(row[5]))
-            if st.form_submit_button("ATUALIZAR"):
-                conn = sqlite3.connect(DB)
-                c = conn.cursor()
-                c.execute("UPDATE contas_receber SET devedor=?, descricao=?, valor=?, vencimento=?, status=? WHERE id=?",
-                          (e_devedor, e_descricao, e_valor, e_vencimento.strftime("%Y-%m-%d"), e_status, row[0]))
-                conn.commit()
-                conn.close()
-                del st.session_state.edit_receber
-                st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def crud_empenhos():
-    show_header()
-    st.markdown("<<h3 style='text-align:center; color:#a0d2ff; font-family:Orbitron; letter-spacing:0.2em;'>EMPENHOS</h3>", unsafe_allow_html=True)
-    st.markdown("<<div class='crud-container'>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    with st.form("form_empenho", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            numero = st.text_input("Numero")
-            ano = st.text_input("Ano")
-            objeto = st.text_input("Objeto")
-        with col2:
-            valor = st.number_input("Valor", min_value=0.0, format="%.2f")
-            data = st.date_input("Data", value=date.today())
-            status = st.selectbox("Status", ["Ativo", "Anulado", "Liquidado"])
-        submitted = st.form_submit_button("SALVAR")
-        if submitted:
-            c.execute("INSERT INTO empenhos (numero, ano, objeto, valor, data, status) VALUES (?, ?, ?, ?, ?, ?)",
-                      (numero, ano, objeto, valor, data.strftime("%Y-%m-%d"), status))
-            conn.commit()
-            st.success("Registro salvo")
-    c.execute("SELECT * FROM empenhos ORDER BY id DESC")
-    rows = c.fetchall()
-    conn.close()
-    for row in rows:
-        col1, col2, col3 = st.columns([4, 1, 1])
-        with col1:
-            st.write(f"ID {row[0]} - {row[1]}/{row[2]} - {row[3]} - R$ {row[4]:,.2f} - {row[5]} - {row[6]}")
-        with col2:
-            if st.button("Editar", key=f"edit_emp_{row[0]}"):
-                st.session_state.edit_emp = row
-        with col3:
-            if st.button("Excluir", key=f"del_emp_{row[0]}"):
-                conn = sqlite3.connect(DB)
-                c = conn.cursor()
-                c.execute("DELETE FROM empenhos WHERE id = ?", (row[0],))
-                conn.commit()
-                conn.close()
-                st.rerun()
-    if "edit_emp" in st.session_state:
-        row = st.session_state.edit_emp
-        with st.form("edit_emp_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                e_numero = st.text_input("Numero", value=row[1])
-                e_ano = st.text_input("Ano", value=row[2])
-                e_objeto = st.text_input("Objeto", value=row[3])
-            with col2:
-                e_valor = st.number_input("Valor", value=row[4], format="%.2f")
-                e_data = st.date_input("Data", value=datetime.strptime(row[5], "%Y-%m-%d").date())
-                e_status = st.selectbox("Status", ["Ativo", "Anulado", "Liquidado"], index=["Ativo", "Anulado", "Liquidado"].index(row[6]))
-            if st.form_submit_button("ATUALIZAR"):
-                conn = sqlite3.connect(DB)
-                c = conn.cursor()
-                c.execute("UPDATE empenhos SET numero=?, ano=?, objeto=?, valor=?, data=?, status=? WHERE id=?",
-                          (e_numero, e_ano, e_objeto, e_valor, e_data.strftime("%Y-%m-%d"), e_status, row[0]))
-                conn.commit()
-                conn.close()
-                del st.session_state.edit_emp
-                st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def crud_licitacoes():
-    show_header()
-    st.markdown("<<h3 style='text-align:center; color:#a0d2ff; font-family:Orbitron; letter-spacing:0.2em;'>LICITACOES</h3>", unsafe_allow_html=True)
-    st.markdown("<<div class='crud-container'>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    with st.form("form_lic", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            numero = st.text_input("Numero")
-            ano = st.text_input("Ano")
-            objeto = st.text_input("Objeto")
-        with col2:
-            modalidade = st.selectbox("Modalidade", ["Pregao", "Concorrencia", "Convite", "Tomada de Precos", "Concurso", "Leilao"])
-            valor = st.number_input("Valor", min_value=0.0, format="%.2f")
-            status = st.selectbox("Status", ["Em andamento", "Concluida", "Cancelada", "Homologada"])
-        submitted = st.form_submit_button("SALVAR")
-        if submitted:
-            c.execute("INSERT INTO licitacoes (numero, ano, objeto, modalidade, valor, status) VALUES (?, ?, ?, ?, ?, ?)",
-                      (numero, ano, objeto, modalidade, valor, status))
-            conn.commit()
-            st.success("Registro salvo")
-    c.execute("SELECT * FROM licitacoes ORDER BY id DESC")
-    rows = c.fetchall()
-    conn.close()
-    for row in rows:
-        col1, col2, col3 = st.columns([4, 1, 1])
-        with col1:
-            st.write(f"ID {row[0]} - {row[1]}/{row[2]} - {row[3]} - {row[4]} - R$ {row[5]:,.2f} - {row[6]}")
-        with col2:
-            if st.button("Editar", key=f"edit_lic_{row[0]}"):
-                st.session_state.edit_lic = row
-        with col3:
-            if st.button("Excluir", key=f"del_lic_{row[0]}"):
-                conn = sqlite3.connect(DB)
-                c = conn.cursor()
-                c.execute("DELETE FROM licitacoes WHERE id = ?", (row[0],))
-                conn.commit()
-                conn.close()
-                st.rerun()
-    if "edit_lic" in st.session_state:
-        row = st.session_state.edit_lic
-        with st.form("edit_lic_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                e_numero = st.text_input("Numero", value=row[1])
-                e_ano = st.text_input("Ano", value=row[2])
-                e_objeto = st.text_input("Objeto", value=row[3])
-            with col2:
-                e_modalidade = st.selectbox("Modalidade", ["Pregao", "Concorrencia", "Convite", "Tomada de Precos", "Concurso", "Leilao"], index=["Pregao", "Concorrencia", "Convite", "Tomada de Precos", "Concurso", "Leilao"].index(row[4]))
-                e_valor = st.number_input("Valor", value=row[5], format="%.2f")
-                e_status = st.selectbox("Status", ["Em andamento", "Concluida", "Cancelada", "Homologada"], index=["Em andamento", "Concluida", "Cancelada", "Homologada"].index(row[6]))
-            if st.form_submit_button("ATUALIZAR"):
-                conn = sqlite3.connect(DB)
-                c = conn.cursor()
-                c.execute("UPDATE licitacoes SET numero=?, ano=?, objeto=?, modalidade=?, valor=?, status=? WHERE id=?",
-                          (e_numero, e_ano, e_objeto, e_modalidade, e_valor, e_status, row[0]))
-                conn.commit()
-                conn.close()
-                del st.session_state.edit_lic
-                st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def crud_contratos():
-    show_header()
-    st.markdown("<<h3 style='text-align:center; color:#a0d2ff; font-family:Orbitron; letter-spacing:0.2em;'>CONTRATOS</h3>", unsafe_allow_html=True)
-    st.markdown("<<div class='crud-container'>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    with st.form("form_contr", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            numero = st.text_input("Numero")
-            ano = st.text_input("Ano")
-            contratado = st.text_input("Contratado")
-            objeto = st.text_input("Objeto")
-        with col2:
-            valor = st.number_input("Valor", min_value=0.0, format="%.2f")
-            inicio = st.date_input("Inicio", value=date.today())
-            fim = st.date_input("Fim", value=date.today())
-            status = st.selectbox("Status", ["Vigente", "Encerrado", "Rescindido", "Aditivado"])
-        submitted = st.form_submit_button("SALVAR")
-        if submitted:
-            c.execute("INSERT INTO contratos (numero, ano, contratado, objeto, valor, inicio, fim, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                      (numero, ano, contratado, objeto, valor, inicio.strftime("%Y-%m-%d"), fim.strftime("%Y-%m-%d"), status))
-            conn.commit()
-            st.success("Registro salvo")
-    c.execute("SELECT * FROM contratos ORDER BY id DESC")
-    rows = c.fetchall()
-    conn.close()
-    for row in rows:
-        col1, col2, col3 = st.columns([4, 1, 1])
-        with col1:
-            st.write(f"ID {row[0]} - {row[1]}/{row[2]} - {row[3]} - {row[4]} - R$ {row[5]:,.2f} - {row[6]} a {row[7]} - {row[8]}")
-        with col2:
-            if st.button("Editar", key=f"edit_contr_{row[0]}"):
-                st.session_state.edit_contr = row
-        with col3:
-            if st.button("Excluir", key=f"del_contr_{row[0]}"):
-                conn = sqlite3.connect(DB)
-                c = conn.cursor()
-                c.execute("DELETE FROM contratos WHERE id = ?", (row[0],))
-                conn.commit()
-                conn.close()
-                st.rerun()
-    if "edit_contr" in st.session_state:
-        row = st.session_state.edit_contr
-        with st.form("edit_contr_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                e_numero = st.text_input("Numero", value=row[1])
-                e_ano = st.text_input("Ano", value=row[2])
-                e_contratado = st.text_input("Contratado", value=row[3])
-                e_objeto = st.text_input("Objeto", value=row[4])
-            with col2:
-                e_valor = st.number_input("Valor", value=row[5], format="%.2f")
-                e_inicio = st.date_input("Inicio", value=datetime.strptime(row[6], "%Y-%m-%d").date())
-                e_fim = st.date_input("Fim", value=datetime.strptime(row[7], "%Y-%m-%d").date())
-                e_status = st.selectbox("Status", ["Vigente", "Encerrado", "Rescindido", "Aditivado"], index=["Vigente", "Encerrado", "Rescindido", "Aditivado"].index(row[8]))
-            if st.form_submit_button("ATUALIZAR"):
-                conn = sqlite3.connect(DB)
-                c = conn.cursor()
-                c.execute("UPDATE contratos SET numero=?, ano=?, contratado=?, objeto=?, valor=?, inicio=?, fim=?, status=? WHERE id=?",
-                          (e_numero, e_ano, e_contratado, e_objeto, e_valor, e_inicio.strftime("%Y-%m-%d"), e_fim.strftime("%Y-%m-%d"), e_status, row[0]))
-                conn.commit()
-                conn.close()
-                del st.session_state.edit_contr
-                st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def trocar_senha_page():
-    show_header()
-    st.markdown("<<h3 style='text-align:center; color:#a0d2ff; font-family:Orbitron; letter-spacing:0.2em;'>TROCAR SENHA</h3>", unsafe_allow_html=True)
-    st.markdown("<<div class='crud-container'>", unsafe_allow_html=True)
-    with st.form("form_senha"):
-        senha_atual = st.text_input("Senha atual", type="password")
-        nova_senha = st.text_input("Nova senha", type="password")
-        confirma = st.text_input("Confirmar nova senha", type="password")
-        if st.form_submit_button("ALTERAR SENHA"):
-            if nova_senha != confirma:
-                st.error("Nova senha e confirmacao nao conferem")
-            elif trocar_senha(st.session_state.usuario, senha_atual, nova_senha):
-                st.success("Senha alterada com sucesso")
+    st.dataframe(df, use_container_width=True)
+    st.markdown("<<h3 style="color:#00d4ff;">Cadastrar / Editar</h3>", unsafe_allow_html=True)
+    cols = st.columns(len(fields))
+    inputs = {}
+    for col, field in zip(cols, fields):
+        with col:
+            if field in ["vencimento", "data", "inicio", "fim"]:
+                inputs[field] = st.date_input(field.capitalize(), key=f"{table}_{field}")
+            elif field == "valor":
+                inputs[field] = st.number_input("Valor", min_value=0.0, format="%.2f", key=f"{table}_{field}")
             else:
-                st.error("Senha atual incorreta")
-    st.markdown("</div>", unsafe_allow_html=True)
+                inputs[field] = st.text_input(field.capitalize(), key=f"{table}_{field}")
+    status = st.selectbox("Status", ["Pendente", "Pago", "Recebido", "Ativo", "Inativo", "Concluido", "Cancelado"], key=f"{table}_status")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        if st.button("Salvar", use_container_width=True, key=f"{table}_save"):
+            conn = sqlite3.connect("marmed.db")
+            c = conn.cursor()
+            field_names = ", ".join(fields + ["status"])
+            placeholders = ", ".join(["?"] * (len(fields) + 1))
+            values = []
+            for field in fields:
+                if field in ["vencimento", "data", "inicio", "fim"]:
+                    values.append(inputs[field].strftime("%Y-%m-%d"))
+                else:
+                    values.append(inputs[field])
+            values.append(status)
+            c.execute(f"INSERT INTO {table} ({field_names}) VALUES ({placeholders})", values)
+            conn.commit()
+            conn.close()
+            st.success("Registro salvo")
+            st.rerun()
+    with c2:
+        delete_id = st.number_input("ID para excluir", min_value=0, step=1, key=f"{table}_delete_id")
+        if st.button("Excluir", use_container_width=True, key=f"{table}_delete"):
+            conn = sqlite3.connect("marmed.db")
+            c = conn.cursor()
+            c.execute(f"DELETE FROM {table} WHERE id = ?", (delete_id,))
+            conn.commit()
+            conn.close()
+            st.success("Registro excluido")
+            st.rerun()
+
+
+def contas_pagar():
+    crud_page("Contas a Pagar", "contas_pagar", ["fornecedor", "descricao", "valor", "vencimento"])
+
+
+def contas_receber():
+    crud_page("Contas a Receber", "contas_receber", ["devedor", "descricao", "valor", "vencimento"])
+
+
+def empenhos():
+    crud_page("Empenhos", "empenhos", ["numero", "objeto", "valor", "data"])
+
+
+def licitacoes():
+    crud_page("Licitacoes", "licitacoes", ["numero", "objeto", "modalidade", "valor", "data"])
+
+
+def contratos():
+    crud_page("Contratos", "contratos", ["numero", "contratado", "objeto", "valor", "inicio", "fim"])
+
+
+def trocar_senha():
+    st.markdown('<h1 style="text-align:center; color:#00d4ff;">Trocar Senha</h1>', unsafe_allow_html=True)
+    st.markdown("<<hr>", unsafe_allow_html=True)
+    st.markdown('<p style="color:#00d4ff;">Senha Atual</p>', unsafe_allow_html=True)
+    senha_atual = st.text_input("", type="password", key="senha_atual", label_visibility="collapsed")
+    st.markdown('<p style="color:#00d4ff;">Nova Senha</p>', unsafe_allow_html=True)
+    nova_senha = st.text_input("", type="password", key="nova_senha", label_visibility="collapsed")
+    st.markdown('<p style="color:#00d4ff;">Confirmar Nova Senha</p>', unsafe_allow_html=True)
+    confirmar_senha = st.text_input("", type="password", key="confirmar_senha", label_visibility="collapsed")
+    if st.button("Alterar Senha"):
+        if nova_senha != confirmar_senha:
+            st.error("Nova senha e confirmacao nao conferem")
+        elif change_password(st.session_state.username, senha_atual, nova_senha):
+            st.success("Senha alterada com sucesso")
+        else:
+            st.error("Senha atual incorreta")
+
+
+def sidebar():
+    st.sidebar.markdown('<h1 style="text-align:center; color:#00d4ff;">MARMED</h1>', unsafe_allow_html=True)
+    st.sidebar.markdown("<<hr>", unsafe_allow_html=True)
+    menu = [
+        "Dashboard", "Contas a Pagar", "Contas a Receber", "Empenhos",
+        "Licitacoes", "Contratos", "Trocar Senha"
+    ]
+    for item in menu:
+        if st.sidebar.button(item, use_container_width=True):
+            st.session_state.page = item
+    st.sidebar.markdown("<<hr>", unsafe_allow_html=True)
+    if st.sidebar.button("Sair", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.page = "Login"
+        st.rerun()
 
 
 def main():
     init_db()
-    st.set_page_config(page_title="MARMED - Sistema Integrado de Gestao", layout="wide", initial_sidebar_state="expanded")
-    if "logado" not in st.session_state:
-        st.session_state.logado = False
-    if not st.session_state.logado:
-        tela_login()
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+    if "page" not in st.session_state:
+        st.session_state.page = "Login"
+    if not st.session_state.logged_in:
+        login_page()
     else:
-        layout_animated()
-        st.sidebar.markdown("<<div class='sidebar-title'>MARMED</div>", unsafe_allow_html=True)
-        st.sidebar.markdown("---")
-        menu = st.sidebar.radio("MENU", ["Dashboard", "Contas a Pagar", "Contas a Receber", "Empenhos", "Licitacoes", "Contratos", "Trocar Senha"])
-        st.sidebar.markdown("---")
-        if st.sidebar.button("SAIR"):
-            st.session_state.logado = False
-            st.session_state.usuario = None
-            st.rerun()
-        if menu == "Dashboard":
+        sidebar()
+        page = st.session_state.page
+        if page == "Dashboard":
             dashboard()
-        elif menu == "Contas a Pagar":
-            crud_contas_pagar()
-        elif menu == "Contas a Receber":
-            crud_contas_receber()
-        elif menu == "Empenhos":
-            crud_empenhos()
-        elif menu == "Licitacoes":
-            crud_licitacoes()
-        elif menu == "Contratos":
-            crud_contratos()
-        elif menu == "Trocar Senha":
-            trocar_senha_page()
+        elif page == "Contas a Pagar":
+            contas_pagar()
+        elif page == "Contas a Receber":
+            contas_receber()
+        elif page == "Empenhos":
+            empenhos()
+        elif page == "Licitacoes":
+            licitacoes()
+        elif page == "Contratos":
+            contratos()
+        elif page == "Trocar Senha":
+            trocar_senha()
+        else:
+            dashboard()
 
 
 if __name__ == "__main__":
