@@ -160,7 +160,7 @@ if "logged_in" not in st.session_state:
 if "usuario_nome" not in st.session_state:
     st.session_state["usuario_nome"] = ""
 if "pagina" not in st.session_state:
-    st.session_state["pagina"] = "Dashboard"
+    st.session_state["pagina"] = "Inicio"
 
 st.markdown(
     """
@@ -182,6 +182,13 @@ st.markdown(
     .mm-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; text-align: center; }
     .mm-card-value { font-size: 22px; font-weight: 800; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .mm-card-label { color: #cbd5e1; font-size: 12px; margin-top: 6px; }
+    .mm-brand-title { font-size: 56px; font-weight: 800; color: #f8fafc; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
+    .mm-brand-subtitle { font-size: 20px; font-weight: 600; color: #7dd3fc; text-align: center; margin-bottom: 3px; }
+    .mm-brand-institution { font-size: 15px; font-weight: 500; color: #cbd5e1; text-align: center; margin-bottom: 20px; }
+    header[data-testid="stHeader"] { background: transparent !important; box-shadow: none !important; }
+    div[data-testid="stToolbar"] { background: transparent !important; }
+    div[data-testid="stDecoration"] { background: transparent !important; display: none !important; }
+    .stApp > header { background: transparent !important; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -290,7 +297,7 @@ def tela_login():
                         st.session_state["logged_in"] = True
                         st.session_state["usuario_id"] = row[0]
                         st.session_state["usuario_nome"] = row[2] or row[1]
-                        st.session_state["pagina"] = "Dashboard"
+                        st.session_state["pagina"] = "Inicio"
                         st.rerun()
                     else:
                         st.error("Usuario ou senha invalidos.")
@@ -299,9 +306,10 @@ def tela_login():
         st.markdown('<div class="login-footer">MARMED © 2026 - Gestao Inteligente de Saude</div>', unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-def pagina_dashboard():
-    st.markdown('<p class="mm-title">MARMED - SISTEMA INTEGRADO DE GESTAO PUBLICA</p>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-subtitle">PREFEITURA MUNICIPAL DE LUMINÁRIAS - MG</p>', unsafe_allow_html=True)
+def pagina_inicio():
+    st.markdown('<p class="mm-brand-title">MARMED</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-brand-subtitle">Sistema Integrado de Gestao Publica</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-brand-institution">Prefeitura Municipal de Luminarias - MG</p>', unsafe_allow_html=True)
 
     conn = get_conn()
     esferas = ["Federal", "Estadual", "Municipal", "Transferencia", "Transposicao"]
@@ -354,8 +362,8 @@ def pagina_esfera_detalhe():
                 unsafe_allow_html=True,
             )
 
-    if st.button("Voltar ao Dashboard", key="btn_voltar_dashboard", use_container_width=True):
-        st.session_state["pagina"] = "Dashboard"
+    if st.button("Voltar ao Inicio", key="btn_voltar_inicio", use_container_width=True):
+        st.session_state["pagina"] = "Inicio"
         st.rerun()
 
 def pagina_cadastro_contas():
@@ -688,7 +696,7 @@ def menu_lateral():
         st.markdown("---")
 
         paginas = [
-            "Dashboard",
+            "Inicio",
             "Cadastro de Contas",
             "Contas Cadastradas",
             "Realizar Compras",
@@ -709,7 +717,7 @@ def menu_lateral():
         st.markdown("---")
         if st.button("Sair", key="nav_sair", use_container_width=True):
             st.session_state["logged_in"] = False
-            st.session_state["pagina"] = "Dashboard"
+            st.session_state["pagina"] = "Inicio"
             st.rerun()
 
 def main():
@@ -718,10 +726,10 @@ def main():
         return
 
     menu_lateral()
-    pagina = st.session_state.get("pagina", "Dashboard")
+    pagina = st.session_state.get("pagina", "Inicio")
 
-    if pagina == "Dashboard":
-        pagina_dashboard()
+    if pagina == "Inicio":
+        pagina_inicio()
     elif pagina == "Esfera Detalhe":
         pagina_esfera_detalhe()
     elif pagina == "Cadastro de Contas":
