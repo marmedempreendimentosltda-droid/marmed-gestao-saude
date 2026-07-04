@@ -44,8 +44,7 @@ def login_page():
             margin-right: auto !important;
         }
         .marmed-title { font-size: 52px; font-weight: 800; text-align: center; color: #e0f2fe; letter-spacing: 6px; text-shadow: 0 0 20px rgba(14, 165, 233, 0.6); margin-bottom: 8px; }
-        .subtitle { text-align: center; color: #7dd3fc; font-size: 14px; letter-spacing: 4px; margin-bottom: 8px; text-transform: uppercase; }
-        .cidade { text-align: center; color: #94a3b8; font-size: 13px; letter-spacing: 2px; margin-bottom: 36px; }
+        .subtitle { text-align: center; color: #7dd3fc; font-size: 14px; letter-spacing: 4px; margin-bottom: 36px; text-transform: uppercase; }
         .stTextInput label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
         .stTextInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
         .stButton > button { background: linear-gradient(90deg, #06b6d4, #3b82f6) !important; color: #fff !important; font-weight: 700 !important; border-radius: 10px !important; border: none !important; width: 100%; padding: 12px !important; letter-spacing: 2px; }
@@ -54,9 +53,8 @@ def login_page():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown('<div class="marmed-title">MARMED</div>', unsafe_allow_html=True)
-        st.markdown('<div class="subtitle">SISTEMA INTEGRADO DE GESTAO</div>', unsafe_allow_html=True)
-        st.markdown('<div class="cidade">PREFEITURA MUNICIPAL DE LUMINARIAS</div>', unsafe_allow_html=True)
-        username = st.text_input("USUARIO", key="login_user")
+        st.markdown('<div class="subtitle">SISTEMA INTEGRADO DE GESTÃO</div>', unsafe_allow_html=True)
+        username = st.text_input("USUÁRIO", key="login_user")
         password = st.text_input("SENHA", type="password", key="login_pass")
         if st.button("Acessar", key="login_btn"):
             pw_hash = hashlib.sha256(password.encode()).hexdigest()
@@ -71,13 +69,13 @@ def login_page():
                 st.session_state["page"] = "Dashboard"
                 st.rerun()
             else:
-                st.error("Usuario ou senha invalidos")
-        st.markdown('<p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:28px;">Acesso restrito a usuarios autorizados</p>', unsafe_allow_html=True)
+                st.error("Usuário ou senha inválidos")
+        st.markdown('<p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:28px;">Acesso restrito a usuários autorizados</p>', unsafe_allow_html=True)
 
 def dashboard():
     st.markdown('<h1 style="color:#e0f2fe;text-align:center;font-size:48px;font-weight:800;text-shadow:0 0 25px rgba(14,165,233,0.6);letter-spacing:6px;">MARMED</h1>', unsafe_allow_html=True)
-    st.markdown('<h3 style="color:#7dd3fc;text-align:center;letter-spacing:4px;margin-bottom:4px;">SISTEMA INTEGRADO DE GESTAO</h3>', unsafe_allow_html=True)
-    st.markdown('<h4 style="color:#94a3b8;text-align:center;letter-spacing:2px;font-size:14px;margin-bottom:16px;">PREFEITURA MUNICIPAL DE LUMINARIAS</h4>', unsafe_allow_html=True)
+    st.markdown('<h3 style="color:#7dd3fc;text-align:center;letter-spacing:4px;margin-bottom:4px;">SISTEMA INTEGRADO DE GESTÃO</h3>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1e40af;text-align:center;letter-spacing:3px;font-size:20px;font-weight:700;margin-bottom:16px;text-shadow:0 0 10px rgba(30,64,175,0.3);">PREFEITURA MUNICIPAL DE LUMINÁRIAS</h2>', unsafe_allow_html=True)
     st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
     c = conn.cursor()
@@ -91,8 +89,8 @@ def dashboard():
         ("REPASSE FEDERAL", total_receber, "#3b82f6"),
         ("REPASSE ESTADUAL", total_pagar, "#22c55e"),
         ("RECURSO MUNICIPAL", 0, "#eab308"),
-        ("TRANSFERENCIA", 0, "#a855f7"),
-        ("TRANSPOSICAO", 0, "#ef4444")
+        ("TRANSFERÊNCIA", 0, "#a855f7"),
+        ("TRANSPOSIÇÃO", 0, "#ef4444")
     ]
     for i, (tit, val, cor) in enumerate(dados):
         with cols[i]:
@@ -107,7 +105,7 @@ def change_password():
     confirm = st.text_input("Confirmar nova senha", type="password")
     if st.button("Salvar nova senha"):
         if new_pass != confirm:
-            st.error("As senhas nao conferem")
+            st.error("As senhas não conferem")
         else:
             ch = hashlib.sha256(current.encode()).hexdigest()
             conn = sqlite3.connect("marmed.db")
