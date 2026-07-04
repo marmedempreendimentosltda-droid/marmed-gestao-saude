@@ -171,7 +171,7 @@ st.markdown(
     section[data-testid="stSidebar"] { background: linear-gradient(180deg, #0a0e27 0%, #16213e 100%); border-right: 1px solid rgba(56,189,248,0.15); }
     section[data-testid="stSidebar"] p, section[data-testid="stSidebar"] label { color: #cbd5e1; }
     section[data-testid="stSidebar"] button { color: #f8fafc !important; }
-    .stButton>button { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #ffffff; border: none; border-radius: 10px; font-weight: 700; padding: 0.6rem 1rem; transition: all 0.2s ease; }
+    .stButton>button { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #ffffff; border: none; border-radius: 10px; font-weight: 700; padding: 28px 16px; font-size: 17px; transition: all 0.2s ease; }
     .stButton>button:hover { filter: brightness(1.15); transform: translateY(-1px); }
     .stTextInput input, .stNumberInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] { background: rgba(255,255,255,0.06) !important; color: #f1f5f9 !important; border-radius: 12px !important; border: 1px solid rgba(148,163,184,0.25) !important; }
     .stTextInput label, .stSelectbox label, .stNumberInput label, .stTextArea label, .stDateInput label { color: #e2e8f0 !important; font-weight: 500; }
@@ -300,8 +300,8 @@ def tela_login():
         st.markdown("</div>", unsafe_allow_html=True)
 
 def pagina_dashboard():
-    st.markdown('<p class="mm-title">Dashboard</p>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-subtitle">Visao geral do sistema MARMED</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-title">MARMED - SISTEMA INTEGRADO DE GESTAO PUBLICA</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">PREFEITURA MUNICIPAL DE LUMINÁRIAS - MG</p>', unsafe_allow_html=True)
 
     conn = get_conn()
     esferas = ["Federal", "Estadual", "Municipal", "Transferencia", "Transposicao"]
@@ -309,24 +309,54 @@ def pagina_dashboard():
     for i, esf in enumerate(esferas):
         total = conn.execute("SELECT COALESCE(SUM(valor_total),0) FROM contas_receber WHERE esfera=?", (esf,)).fetchone()[0]
         with cols[i]:
+            if st.button(f"{esf}  ·  {format_currency(total)}", key=f"btn_esfera_{esf}", use_container_width=True):
+                st.session_state["esfera_selecionada"] = esf
+                st.session_state["pagina"] = "Esfera Detalhe"
+                st.rerun()
+    conn.close()
+
+def pagina_esfera_detalhe():
+    esfera = st.session_state.get("esfera_selecionada", "Federal")
+    if esfera in ("Federal", "Estadual", "Municipal"):
+        titulo = f"Esfera {esfera}"
+    else:
+        titulo = esfera
+
+    st.markdown(f'<p class="mm-title">{titulo}</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">Detalhamento das contas cadastradas para esta esfera</p>', unsafe_allow_html=True)
+
+    conn = get_conn()
+    total = conn.execute("SELECT COALESCE(SUM(valor_total),0) FROM contas_receber WHERE esfera=?", (esfera,)).fetchone()[0]
+    linhas = conn.execute(
+        "SELECT id, numero_conta, fonte, tipo_recurso, valor_total, data_recebimento FROM contas_receber WHERE esfera=? ORDER BY id DESC",
+        (esfera,),
+    ).fetchall()
+    conn.close()
+
+    st.markdown(
+        f'<div class="mm-card" style="margin-bottom:20px;">'
+        f'<div class="mm-card-label">Total da Esfera</div>'
+        f'<div class="mm-card-value">{format_currency(total)}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    if not linhas:
+        st.info("Nenhuma conta cadastrada para esta esfera ainda.")
+    else:
+        for linha in linhas:
+            cid, numero_conta, fonte, tipo_recurso, valor_total, data_recebimento = linha
             st.markdown(
-                f'<div class="mm-card"><div class="mm-card-value">{format_currency(total)}</div><div class="mm-card-label">{esf}</div></div>',
+                f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
+                f'<strong>Conta {numero_conta}</strong> - Fonte {fonte}<br>'
+                f'{tipo_recurso} - {format_currency(valor_total)} - {data_recebimento}'
+                f'</div>',
                 unsafe_allow_html=True,
             )
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    total_contas = conn.execute("SELECT COALESCE(SUM(valor_total),0) FROM contas_receber").fetchone()[0]
-    total_compras = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra").fetchone()[0]
-    total_superavit = conn.execute("SELECT COALESCE(SUM(saldo_restante),0) FROM superavit").fetchone()[0]
-    conn.close()
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown(f'<div class="mm-card"><div class="mm-card-value">{format_currency(total_contas)}</div><div class="mm-card-label">Total em Contas</div></div>', unsafe_allow_html=True)
-    with c2:
-        st.markdown(f'<div class="mm-card"><div class="mm-card-value">{format_currency(total_compras)}</div><div class="mm-card-label">Total em Compras</div></div>', unsafe_allow_html=True)
-    with c3:
-        st.markdown(f'<div class="mm-card"><div class="mm-card-value">{format_currency(total_superavit)}</div><div class="mm-card-label">Superavit Financeiro</div></div>', unsafe_allow_html=True)
+    if st.button("Voltar ao Dashboard", key="btn_voltar_dashboard", use_container_width=True):
+        st.session_state["pagina"] = "Dashboard"
+        st.rerun()
 
 def pagina_cadastro_contas():
     st.markdown('<p class="mm-title">Cadastro de Contas</p>', unsafe_allow_html=True)
@@ -654,6 +684,7 @@ def pagina_trocar_senha():
 def menu_lateral():
     with st.sidebar:
         st.markdown(f'<p style="color:#f1f5f9;font-weight:700;">Bem-vindo, {st.session_state.get("usuario_nome", "")}</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#7dd3fc;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:8px;margin-bottom:4px;">Aba de Navegacao</p>', unsafe_allow_html=True)
         st.markdown("---")
 
         paginas = [
@@ -691,6 +722,8 @@ def main():
 
     if pagina == "Dashboard":
         pagina_dashboard()
+    elif pagina == "Esfera Detalhe":
+        pagina_esfera_detalhe()
     elif pagina == "Cadastro de Contas":
         pagina_cadastro_contas()
     elif pagina == "Contas Cadastradas":
