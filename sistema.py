@@ -1,1056 +1,908 @@
-import os
+import streamlit as st
+import pandas as pd
 import datetime
-import sqlite3
-import json
 import hashlib
-from typing import List, Optional, Dict, Any
+import plotly.express as px
+from database import *
 
-# ---------------------- DATABASE ----------------------
-
-DB_FILE = "marmed_orcamento.db"
-
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS exercicios_orcamentarios (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ano INTEGER NOT NULL UNIQUE,
-    status TEXT NOT NULL CHECK(status IN ('elaboracao','aprovado','execucao','encerrado')),
-    data_inicio DATE,
-    data_fim DATE
-);
-
-CREATE TABLE IF NOT EXISTS orgaos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    codigo TEXT NOT NULL,
-    nome TEXT NOT NULL,
-    sigla TEXT NOT NULL,
-    ativo INTEGER DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS programas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    codigo TEXT NOT NULL,
-    nome TEXT NOT NULL,
-    objetivo TEXT,
-    orgao_responsavel_id INTEGER,
-    FOREIGN KEY (orgao_responsavel_id) REFERENCES orgaos(id)
-);
-
-CREATE TABLE IF NOT EXISTS acoes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    codigo TEXT NOT NULL,
-    tipo TEXT NOT NULL CHECK(tipo IN ('projeto','atividade','operacao_especial')),
-    nome TEXT NOT NULL,
-    produto TEXT,
-    unidade_medida TEXT,
-    programa_id INTEGER,
-    orgao_id INTEGER,
-    FOREIGN KEY (programa_id) REFERENCES programas(id),
-    FOREIGN KEY (orgao_id) REFERENCES orgaos(id)
-);
-
-CREATE TABLE IF NOT EXISTS naturezas_despesa (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    codigo TEXT NOT NULL,
-    categoria TEXT NOT NULL,
-    grupo TEXT NOT NULL,
-    modalidade TEXT,
-    elemento TEXT,
-    descricao TEXT
-);
-
-CREATE TABLE IF NOT EXISTS fontes_recurso (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    codigo TEXT NOT NULL,
-    descricao TEXT NOT NULL,
-    tipo TEXT NOT NULL CHECK(tipo IN ('tesouro','vinculado','convenio'))
-);
-
-CREATE TABLE IF NOT EXISTS dotacoes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    exercicio_id INTEGER,
-    orgao_id INTEGER,
-    programa_id INTEGER,
-    acao_id INTEGER,
-    natureza_id INTEGER,
-    fonte_recurso_id INTEGER,
-    valor_original DECIMAL(15,2) DEFAULT 0,
-    valor_atual DECIMAL(15,2) DEFAULT 0,
-    valor_empenhado DECIMAL(15,2) DEFAULT 0,
-    valor_liquidado DECIMAL(15,2) DEFAULT 0,
-    valor_pago DECIMAL(15,2) DEFAULT 0,
-    FOREIGN KEY (exercicio_id) REFERENCES exercicios_orcamentarios(id),
-    FOREIGN KEY (orgao_id) REFERENCES orgaos(id),
-    FOREIGN KEY (programa_id) REFERENCES programas(id),
-    FOREIGN KEY (acao_id) REFERENCES acoes(id),
-    FOREIGN KEY (natureza_id) REFERENCES naturezas_despesa(id),
-    FOREIGN KEY (fonte_recurso_id) REFERENCES fontes_recurso(id)
-);
-
-CREATE TABLE IF NOT EXISTS previsao_receitas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    exercicio_id INTEGER,
-    fonte_recurso_id INTEGER,
-    descricao TEXT,
-    valor_previsto DECIMAL(15,2) DEFAULT 0,
-    valor_realizado DECIMAL(15,2) DEFAULT 0,
-    mes_competencia INTEGER,
-    FOREIGN KEY (exercicio_id) REFERENCES exercicios_orcamentarios(id),
-    FOREIGN KEY (fonte_recurso_id) REFERENCES fontes_recurso(id)
-);
-
-CREATE TABLE IF NOT EXISTS credores (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT NOT NULL CHECK(tipo IN ('pf','pj')),
-    cpf_cnpj TEXT NOT NULL,
-    nome TEXT NOT NULL,
-    endereco TEXT,
-    dados_bancarios TEXT,
-    ativo INTEGER DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS licitacoes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    numero TEXT NOT NULL,
-    modalidade TEXT NOT NULL CHECK(modalidade IN ('pregao','concorrencia','tomada_precos','convite','dispensa','inexigibilidade')),
-    objeto TEXT,
-    data_abertura DATE,
-    valor_estimado DECIMAL(15,2) DEFAULT 0,
-    situacao TEXT NOT NULL CHECK(situacao IN ('em_andamento','homologada','fracassada','cancelada')),
-    orgao_id INTEGER,
-    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    percentual_alerta_retirada DECIMAL(5,2) DEFAULT 20.00,
-    FOREIGN KEY (orgao_id) REFERENCES orgaos(id)
-);
-
-CREATE TABLE IF NOT EXISTS itens_licitacao (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    licitacao_id INTEGER,
-    produto_nome TEXT,
-    descricao TEXT,
-    quantidade_total DECIMAL(15,2) DEFAULT 0,
-    unidade_medida TEXT,
-    valor_unitario DECIMAL(15,2) DEFAULT 0,
-    quantidade_retirada DECIMAL(15,2) DEFAULT 0,
-    saldo DECIMAL(15,2) DEFAULT 0,
-    FOREIGN KEY (licitacao_id) REFERENCES licitacoes(id)
-);
-
-CREATE TABLE IF NOT EXISTS ordens_compra (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    licitacao_id INTEGER,
-    item_licitacao_id INTEGER,
-    numero TEXT,
-    data DATE,
-    quantidade DECIMAL(15,2) DEFAULT 0,
-    valor_unitario DECIMAL(15,2) DEFAULT 0,
-    valor_total DECIMAL(15,2) DEFAULT 0,
-    situacao TEXT NOT NULL CHECK(situacao IN ('pendente','entregue','cancelada')),
-    observacao TEXT,
-    FOREIGN KEY (licitacao_id) REFERENCES licitacoes(id),
-    FOREIGN KEY (item_licitacao_id) REFERENCES itens_licitacao(id)
-);
-
-CREATE TABLE IF NOT EXISTS contratos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    numero TEXT,
-    licitacao_id INTEGER,
-    credor_id INTEGER,
-    objeto TEXT,
-    valor_global DECIMAL(15,2) DEFAULT 0,
-    vigencia_inicio DATE,
-    vigencia_fim DATE,
-    dotacao_id INTEGER,
-    situacao TEXT NOT NULL CHECK(situacao IN ('ativo','suspenso','encerrado','rescindido')),
-    FOREIGN KEY (licitacao_id) REFERENCES licitacoes(id),
-    FOREIGN KEY (credor_id) REFERENCES credores(id),
-    FOREIGN KEY (dotacao_id) REFERENCES dotacoes(id)
-);
-
-CREATE TABLE IF NOT EXISTS aditivos_contrato (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    contrato_id INTEGER,
-    numero TEXT,
-    tipo TEXT NOT NULL CHECK(tipo IN ('prazo','valor','objeto')),
-    valor DECIMAL(15,2) DEFAULT 0,
-    novo_vencimento DATE,
-    data DATE,
-    descricao TEXT,
-    FOREIGN KEY (contrato_id) REFERENCES contratos(id)
-);
-
-CREATE TABLE IF NOT EXISTS empenhos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    numero TEXT,
-    data DATE,
-    tipo TEXT NOT NULL CHECK(tipo IN ('ordinario','estimativo','global')),
-    dotacao_id INTEGER,
-    credor_id INTEGER,
-    valor DECIMAL(15,2) DEFAULT 0,
-    saldo DECIMAL(15,2) DEFAULT 0,
-    status TEXT NOT NULL CHECK(status IN ('ativo','cancelado','liquidado_total')),
-    historico TEXT,
-    FOREIGN KEY (dotacao_id) REFERENCES dotacoes(id),
-    FOREIGN KEY (credor_id) REFERENCES credores(id)
-);
-
-CREATE TABLE IF NOT EXISTS liquidacoes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    empenho_id INTEGER,
-    numero TEXT,
-    data DATE,
-    valor DECIMAL(15,2) DEFAULT 0,
-    documento_fiscal TEXT,
-    historico TEXT,
-    FOREIGN KEY (empenho_id) REFERENCES empenhos(id)
-);
-
-CREATE TABLE IF NOT EXISTS pagamentos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    liquidacao_id INTEGER,
-    data DATE,
-    valor DECIMAL(15,2) DEFAULT 0,
-    forma_pagamento TEXT,
-    ordem_bancaria TEXT,
-    FOREIGN KEY (liquidacao_id) REFERENCES liquidacoes(id)
-);
-
-CREATE TABLE IF NOT EXISTS alteracoes_orcamentarias (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT NOT NULL CHECK(tipo IN ('suplementacao','reducao','remanejamento','credito_especial','credito_extraordinario')),
-    numero_decreto TEXT,
-    data DATE,
-    justificativa TEXT,
-    valor_total DECIMAL(15,2) DEFAULT 0,
-    percentual_alerta_suplementacao DECIMAL(5,2) DEFAULT 20.00
-);
-
-CREATE TABLE IF NOT EXISTS itens_alteracao (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    alteracao_id INTEGER,
-    dotacao_origem_id INTEGER,
-    dotacao_destino_id INTEGER,
-    tipo_movimento TEXT NOT NULL CHECK(tipo_movimento IN ('credito','reducao')),
-    valor DECIMAL(15,2) DEFAULT 0,
-    FOREIGN KEY (alteracao_id) REFERENCES alteracoes_orcamentarias(id),
-    FOREIGN KEY (dotacao_origem_id) REFERENCES dotacoes(id),
-    FOREIGN KEY (dotacao_destino_id) REFERENCES dotacoes(id)
-);
-
-CREATE TABLE IF NOT EXISTS prestadores_saude (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    credor_id INTEGER,
-    especialidade TEXT,
-    registro_conselho TEXT,
-    data_credenciamento DATE,
-    data_validade DATE,
-    situacao TEXT NOT NULL CHECK(situacao IN ('ativo','suspenso','cancelado')),
-    FOREIGN KEY (credor_id) REFERENCES credores(id)
-);
-
-CREATE TABLE IF NOT EXISTS pacientes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT NOT NULL,
-    cpf TEXT,
-    data_nascimento DATE,
-    sexo TEXT,
-    endereco TEXT,
-    telefone TEXT,
-    email TEXT,
-    convenio TEXT,
-    observacoes TEXT,
-    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS atendimentos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    paciente_id INTEGER,
-    prestador_id INTEGER,
-    data_atendimento DATE,
-    tipo TEXT NOT NULL CHECK(tipo IN ('consulta','exame','procedimento','internacao')),
-    descricao TEXT,
-    valor DECIMAL(15,2) DEFAULT 0,
-    status TEXT NOT NULL CHECK(status IN ('agendado','realizado','cancelado')),
-    FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
-    FOREIGN KEY (prestador_id) REFERENCES prestadores_saude(id)
-);
-
-CREATE TABLE IF NOT EXISTS parametros_alerta (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo_alerta TEXT NOT NULL UNIQUE,
-    valor_padrao DECIMAL(5,2) DEFAULT 0,
-    descricao TEXT,
-    ativo INTEGER DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS usuarios (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE,
-    senha_hash TEXT NOT NULL,
-    perfil TEXT NOT NULL CHECK(perfil IN ('admin','orcamentario','financeiro','gestor','consulta')),
-    orgao_id INTEGER,
-    ativo INTEGER DEFAULT 1,
-    FOREIGN KEY (orgao_id) REFERENCES orgaos(id)
-);
-
-CREATE TABLE IF NOT EXISTS logs_auditoria (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    usuario_id INTEGER,
-    tabela TEXT,
-    registro_id INTEGER,
-    operacao TEXT NOT NULL CHECK(operacao IN ('insert','update','delete')),
-    dados_anteriores TEXT,
-    dados_novos TEXT,
-    data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
-);
-"""
+st.set_page_config(page_title="MARMED Gestão em Saúde", layout="wide")
 
 
-def get_connection():
-    return sqlite3.connect(DB_FILE)
+def hash_senha(senha):
+    return hashlib.sha256(senha.encode("utf-8")).hexdigest()
 
 
-def init_db():
-    conn = get_connection()
-    c = conn.cursor()
-    c.executescript(SCHEMA)
-    conn.commit()
+def pagina_dashboard():
+    st.title("🏠 Dashboard - MARMED Gestão em Saúde")
 
-    # Dados iniciais
-    c.execute("SELECT COUNT(*) FROM exercicios_orcamentarios")
-    if c.fetchone()[0] == 0:
-        c.execute(
-            "INSERT INTO exercicios_orcamentarios (ano, status, data_inicio, data_fim) VALUES (?, ?, ?, ?)",
-            (2026, "execucao", "2026-01-01", "2026-12-31"),
-        )
-        exercicio_id = c.lastrowid
+    exercicios = get_all_exercicios()
+    if not exercicios:
+        st.warning("Nenhum exercício orçamentário cadastrado.")
+        return
+    ex = exercicios[0]
 
-        c.execute(
-            "INSERT INTO orgaos (codigo, nome, sigla, ativo) VALUES (?, ?, ?, ?)",
-            ("02.01", "Secretaria Municipal de Saúde", "SMS", 1),
-        )
-        orgao_id = c.lastrowid
+    col1, col2, col3, col4 = st.columns(4)
 
-        c.execute(
-            "INSERT INTO usuarios (nome, email, senha_hash, perfil, orgao_id, ativo) VALUES (?, ?, ?, ?, ?, ?)",
-            ("Administrador", "admin", hashlib.sha256("admin123".encode()).hexdigest(), "admin", orgao_id, 1),
-        )
+    dotacoes = get_all_dotacoes()
+    total_orcamento = sum(d["valor_atual"] or 0 for d in dotacoes)
+    total_empenhado = sum(d["valor_empenhado"] or 0 for d in dotacoes)
+    total_pago = sum(d["valor_pago"] or 0 for d in dotacoes)
+    saldo = total_orcamento - total_empenhado
+    pct_exec = (total_empenhado / total_orcamento * 100) if total_orcamento else 0
 
-        fontes = [
-            ("FUNDEB", "FUNDEB", "vinculado"),
-            ("SUS-CUST", "SUS - Custeio", "vinculado"),
-            ("SUS-INVEST", "SUS - Investimento", "vinculado"),
-            ("RO", "Recursos Ordinários", "tesouro"),
-            ("EMENDAS", "Emendas Parlamentares", "vinculado"),
-        ]
-        fonte_ids = {}
-        for cod, desc, tipo in fontes:
-            c.execute(
-                "INSERT INTO fontes_recurso (codigo, descricao, tipo) VALUES (?, ?, ?)",
-                (cod, desc, tipo),
+    col1.metric("💵 Orçamento Total", f"R$ {total_orcamento:,.2f}")
+    col2.metric("📌 Valor Empenhado", f"R$ {total_empenhado:,.2f}")
+    col3.metric("📊 % Executado", f"{pct_exec:.1f}%")
+    col4.metric("💰 Saldo Disponível", f"R$ {saldo:,.2f}")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("📊 Execução por Natureza")
+        ranking = get_ranking_despesas(ex["id"], 7)
+        if ranking:
+            fig = px.bar(
+                ranking, x="descricao", y="total_pago",
+                title="Despesas por Natureza",
+                labels={"descricao": "Natureza", "total_pago": "Valor Pago (R$)"},
+                color_discrete_sequence=["#1f77b4"]
             )
-            fonte_ids[desc] = c.lastrowid
+            fig.update_layout(xaxis_tickangle=-45)
+            st.plotly_chart(fig, use_container_width=True)
 
-        # Receitas reais de Luminárias (federal / estadual)
-        receitas_luminarias = [
-            ("00277 - PM LUMI INCREMENTO AT PRIM EMENDA COMISSAO - CUSTEIO", fonte_ids["SUS - Custeio"], 2094575.37),
-            ("00272 - PM LUMI INCREMENTO TEMP CUSTEIO AT.PRIM. - CUSTEIO", fonte_ids["SUS - Custeio"], 4189150.74),
-            ("00270 - PM LUMI INCREMENTO TEMP CUSTEIO AT PRIMARIA - CUSTEIO", fonte_ids["SUS - Custeio"], 6283726.11),
-            ("00273 - PM LUMI INCREMENTO TEMPORARIO CUSTEIO MAC - CUSTEIO", fonte_ids["SUS - Custeio"], 8378301.48),
-            ("00271 - PM LUMI INCREMENTO TEMP CUSTEIO AT.PRIM. - CUSTEIO", fonte_ids["SUS - Custeio"], 10472875.85),
-            ("00247 - PM LUMI BLOCO SUS-CUSTEIO - FMS CT - CUSTEIO", fonte_ids["SUS - Custeio"], 12567450.82),
-            ("00220 - PM LUMINARIAS-FOLHA PAGTO - CUSTEIO", fonte_ids["Recursos Ordinários"], 8378301.48),
-            ("00065 - ICMS SAÚDE ESTADUAL - LUMINÁRIAS", fonte_ids["Recursos Ordinários"], 5000000.00),
-            ("00287 - FUNDO A FUNDEB SAÚDE - LUMINÁRIAS", fonte_ids["FUNDEB"], 2094575.37),
-        ]
-        for desc, fonte_id, valor in receitas_luminarias:
-            c.execute(
-                "INSERT INTO previsao_receitas (exercicio_id, fonte_recurso_id, descricao, valor_previsto, valor_realizado, mes_competencia) VALUES (?, ?, ?, ?, ?, ?)",
-                (exercicio_id, fonte_id, desc, valor, 0.0, 1),
+    with col2:
+        st.subheader("📊 Execução por Órgão")
+        exec_orgao = get_execucao_por_orgao(ex["id"])
+        if exec_orgao:
+            fig = px.pie(
+                exec_orgao, values="total_dotacao", names="sigla",
+                title="Distribuição por Órgão",
+                hole=0.4
             )
-
-        # Naturezas de despesa padrão
-        naturezas = [
-            ("3.1.90.11.00", "3 - Corrente", "1 - Pessoal", "90", "11", "Vencimentos e Vantagens Fixas - Pessoal Civil"),
-            ("3.1.90.91.00", "3 - Corrente", "3 - Outras Correntes", "90", "91", "Sentenças Judiciais"),
-            ("3.3.90.30.00", "3 - Corrente", "3 - Outras Correntes", "90", "30", "Material de Consumo"),
-            ("3.3.90.36.00", "3 - Corrente", "3 - Outras Correntes", "90", "36", "Outras Despesas Gerais"),
-            ("3.3.90.39.00", "3 - Corrente", "3 - Outras Correntes", "90", "39", "Outros Serviços de Terceiros - Pessoa Jurídica"),
-            ("4.4.90.51.00", "4 - Capital", "4 - Investimentos", "90", "51", "Obras e Instalações"),
-            ("4.4.90.52.00", "4 - Capital", "4 - Investimentos", "90", "52", "Equipamentos e Material Permanente"),
-        ]
-        natureza_ids = {}
-        for i, (cod, cat, grupo, mod, elem, desc) in enumerate(naturezas):
-            c.execute(
-                "INSERT INTO naturezas_despesa (codigo, categoria, grupo, modalidade, elemento, descricao) VALUES (?, ?, ?, ?, ?, ?)",
-                (cod, cat, grupo, mod, elem, desc),
-            )
-            natureza_ids[i] = c.lastrowid
-
-        # Programa e ação para SMS
-        c.execute(
-            "INSERT INTO programas (codigo, nome, objetivo, orgao_responsavel_id) VALUES (?, ?, ?, ?)",
-            ("0001", "Saúde para Todos", "Garantir atenção integral à saúde da população", orgao_id),
-        )
-        programa_id = c.lastrowid
-
-        c.execute(
-            "INSERT INTO acoes (codigo, tipo, nome, produto, unidade_medida, programa_id, orgao_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            ("0001", "atividade", "Atendimento Ambulatorial", "Consultas médicas", "Atendimento", programa_id, orgao_id),
-        )
-        acao_id = c.lastrowid
-
-        # Dotações iniciais para totalizar R$ 76.935.000,00
-        dotacoes_valores = [
-            (natureza_ids[0], fonte_ids["Recursos Ordinários"], 12500000.00),
-            (natureza_ids[1], fonte_ids["Recursos Ordinários"], 2000000.00),
-            (natureza_ids[2], fonte_ids["SUS - Custeio"], 18000000.00),
-            (natureza_ids[3], fonte_ids["SUS - Custeio"], 12000000.00),
-            (natureza_ids[4], fonte_ids["FUNDEB"], 15000000.00),
-            (natureza_ids[5], fonte_ids["SUS - Investimento"], 10000000.00),
-            (natureza_ids[6], fonte_ids["Emendas Parlamentares"], 7435000.00),
-        ]
-        for nat_id, fonte_id, valor in dotacoes_valores:
-            c.execute(
-                "INSERT INTO dotacoes (exercicio_id, orgao_id, programa_id, acao_id, natureza_id, fonte_recurso_id, valor_original, valor_atual) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (exercicio_id, orgao_id, programa_id, acao_id, nat_id, fonte_id, valor, valor),
-            )
-
-        # Parametros de alerta
-        parametros = [
-            ("licitacao_retirada", 20, "Alerta de retirada de licitação (%)", 1),
-            ("dotacao_suplementacao", 20, "Alerta de suplementação de dotação (%)", 1),
-            ("vencimento_contrato", 60, "Alerta de vencimento de contrato (dias)", 1),
-            ("estoque_minimo", 10, "Alerta de estoque mínimo (%)", 1),
-        ]
-        for tipo, val, desc, ativo in parametros:
-            c.execute(
-                "INSERT INTO parametros_alerta (tipo_alerta, valor_padrao, descricao, ativo) VALUES (?, ?, ?, ?)",
-                (tipo, val, desc, ativo),
-            )
-
-        conn.commit()
-    conn.close()
-
-
-# Generic helpers
-
-
-def list_tables():
-    return [
-        "exercicios_orcamentarios",
-        "orgaos",
-        "programas",
-        "acoes",
-        "naturezas_despesa",
-        "fontes_recurso",
-        "dotacoes",
-        "previsao_receitas",
-        "credores",
-        "licitacoes",
-        "itens_licitacao",
-        "ordens_compra",
-        "contratos",
-        "aditivos_contrato",
-        "empenhos",
-        "liquidacoes",
-        "pagamentos",
-        "alteracoes_orcamentarias",
-        "itens_alteracao",
-        "prestadores_saude",
-        "pacientes",
-        "atendimentos",
-        "parametros_alerta",
-        "usuarios",
-        "logs_auditoria",
-    ]
-
-
-def dict_from_row(cursor, row):
-    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
-
-
-def _insert(table: str, data: Dict[str, Any]) -> int:
-    conn = get_connection()
-    c = conn.cursor()
-    cols = ", ".join(data.keys())
-    placeholders = ", ".join(["?"] * len(data))
-    sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
-    c.execute(sql, tuple(data.values()))
-    conn.commit()
-    rowid = c.lastrowid
-    conn.close()
-    return rowid
-
-
-def _get_all(table: str, order_by: str = "id") -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(f"SELECT * FROM {table} ORDER BY {order_by}")
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def _get_by_id(table: str, id: int) -> Optional[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(f"SELECT * FROM {table} WHERE id = ?", (id,))
-    row = c.fetchone()
-    conn.close()
-    if row is None:
-        return None
-    return dict_from_row(c, row)
-
-
-def _update(table: str, id: int, data: Dict[str, Any]) -> bool:
-    conn = get_connection()
-    c = conn.cursor()
-    sets = ", ".join([f"{k} = ?" for k in data.keys()])
-    sql = f"UPDATE {table} SET {sets} WHERE id = ?"
-    c.execute(sql, tuple(data.values()) + (id,))
-    conn.commit()
-    changed = c.rowcount
-    conn.close()
-    return changed > 0
-
-
-def _delete(table: str, id: int) -> bool:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(f"DELETE FROM {table} WHERE id = ?", (id,))
-    conn.commit()
-    changed = c.rowcount
-    conn.close()
-    return changed > 0
-
-
-# Exercicios
-insert_exercicio = lambda d: _insert("exercicios_orcamentarios", d)
-get_all_exercicios = lambda: _get_all("exercicios_orcamentarios", "ano")
-get_exercicio_by_id = lambda id: _get_by_id("exercicios_orcamentarios", id)
-update_exercicio = lambda id, d: _update("exercicios_orcamentarios", id, d)
-delete_exercicio = lambda id: _delete("exercicios_orcamentarios", id)
-
-# Orgaos
-insert_orgao = lambda d: _insert("orgaos", d)
-get_all_orgaos = lambda: _get_all("orgaos", "nome")
-get_orgao_by_id = lambda id: _get_by_id("orgaos", id)
-update_orgao = lambda id, d: _update("orgaos", id, d)
-delete_orgao = lambda id: _delete("orgaos", id)
-
-# Programas
-insert_programa = lambda d: _insert("programas", d)
-get_all_programas = lambda: _get_all("programas", "nome")
-get_programa_by_id = lambda id: _get_by_id("programas", id)
-update_programa = lambda id, d: _update("programas", id, d)
-delete_programa = lambda id: _delete("programas", id)
-
-# Acoes
-insert_acao = lambda d: _insert("acoes", d)
-get_all_acoes = lambda: _get_all("acoes", "nome")
-get_acao_by_id = lambda id: _get_by_id("acoes", id)
-update_acao = lambda id, d: _update("acoes", id, d)
-delete_acao = lambda id: _delete("acoes", id)
-
-# Naturezas
-insert_natureza = lambda d: _insert("naturezas_despesa", d)
-get_all_naturezas = lambda: _get_all("naturezas_despesa", "codigo")
-get_natureza_by_id = lambda id: _get_by_id("naturezas_despesa", id)
-update_natureza = lambda id, d: _update("naturezas_despesa", id, d)
-delete_natureza = lambda id: _delete("naturezas_despesa", id)
-
-# Fontes
-insert_fonte = lambda d: _insert("fontes_recurso", d)
-get_all_fontes = lambda: _get_all("fontes_recurso", "descricao")
-get_fonte_by_id = lambda id: _get_by_id("fontes_recurso", id)
-update_fonte = lambda id, d: _update("fontes_recurso", id, d)
-delete_fonte = lambda id: _delete("fontes_recurso", id)
-
-# Dotacoes
-insert_dotacao = lambda d: _insert("dotacoes", d)
-get_all_dotacoes = lambda: _get_all("dotacoes", "id")
-get_dotacao_by_id = lambda id: _get_by_id("dotacoes", id)
-update_dotacao = lambda id, d: _update("dotacoes", id, d)
-delete_dotacao = lambda id: _delete("dotacoes", id)
-
-# Previsao Receitas
-insert_receita = lambda d: _insert("previsao_receitas", d)
-get_all_receitas = lambda: _get_all("previsao_receitas", "id")
-get_receita_by_id = lambda id: _get_by_id("previsao_receitas", id)
-update_receita = lambda id, d: _update("previsao_receitas", id, d)
-delete_receita = lambda id: _delete("previsao_receitas", id)
-
-# Credores
-insert_credor = lambda d: _insert("credores", d)
-get_all_credores = lambda: _get_all("credores", "nome")
-get_credor_by_id = lambda id: _get_by_id("credores", id)
-update_credor = lambda id, d: _update("credores", id, d)
-delete_credor = lambda id: _delete("credores", id)
-
-# Licitacoes
-insert_licitacao = lambda d: _insert("licitacoes", d)
-get_all_licitacoes = lambda: _get_all("licitacoes", "data_criacao DESC")
-get_licitacao_by_id = lambda id: _get_by_id("licitacoes", id)
-update_licitacao = lambda id, d: _update("licitacoes", id, d)
-delete_licitacao = lambda id: _delete("licitacoes", id)
-
-# Itens Licitacao
-insert_item_licitacao = lambda d: _insert("itens_licitacao", d)
-get_all_itens_licitacao = lambda: _get_all("itens_licitacao", "id")
-get_item_licitacao_by_id = lambda id: _get_by_id("itens_licitacao", id)
-update_item_licitacao = lambda id, d: _update("itens_licitacao", id, d)
-delete_item_licitacao = lambda id: _delete("itens_licitacao", id)
-
-# Ordens Compra
-insert_ordem_compra = lambda d: _insert("ordens_compra", d)
-get_all_ordens_compra = lambda: _get_all("ordens_compra", "data DESC")
-get_ordem_compra_by_id = lambda id: _get_by_id("ordens_compra", id)
-update_ordem_compra = lambda id, d: _update("ordens_compra", id, d)
-delete_ordem_compra = lambda id: _delete("ordens_compra", id)
-
-# Contratos
-insert_contrato = lambda d: _insert("contratos", d)
-get_all_contratos = lambda: _get_all("contratos", "vigencia_fim")
-get_contrato_by_id = lambda id: _get_by_id("contratos", id)
-update_contrato = lambda id, d: _update("contratos", id, d)
-delete_contrato = lambda id: _delete("contratos", id)
-
-# Aditivos
-insert_aditivo = lambda d: _insert("aditivos_contrato", d)
-get_all_aditivos = lambda: _get_all("aditivos_contrato", "id")
-get_aditivo_by_id = lambda id: _get_by_id("aditivos_contrato", id)
-update_aditivo = lambda id, d: _update("aditivos_contrato", id, d)
-delete_aditivo = lambda id: _delete("aditivos_contrato", id)
-
-# Empenhos
-insert_empenho = lambda d: _insert("empenhos", d)
-get_all_empenhos = lambda: _get_all("empenhos", "data DESC")
-get_empenho_by_id = lambda id: _get_by_id("empenhos", id)
-update_empenho = lambda id, d: _update("empenhos", id, d)
-delete_empenho = lambda id: _delete("empenhos", id)
-
-# Liquidacoes
-insert_liquidacao = lambda d: _insert("liquidacoes", d)
-get_all_liquidacoes = lambda: _get_all("liquidacoes", "data DESC")
-get_liquidacao_by_id = lambda id: _get_by_id("liquidacoes", id)
-update_liquidacao = lambda id, d: _update("liquidacoes", id, d)
-delete_liquidacao = lambda id: _delete("liquidacoes", id)
-
-# Pagamentos
-insert_pagamento = lambda d: _insert("pagamentos", d)
-get_all_pagamentos = lambda: _get_all("pagamentos", "data DESC")
-get_pagamento_by_id = lambda id: _get_by_id("pagamentos", id)
-update_pagamento = lambda id, d: _update("pagamentos", id, d)
-delete_pagamento = lambda id: _delete("pagamentos", id)
-
-# Alteracoes
-insert_alteracao = lambda d: _insert("alteracoes_orcamentarias", d)
-get_all_alteracoes = lambda: _get_all("alteracoes_orcamentarias", "data DESC")
-get_alteracao_by_id = lambda id: _get_by_id("alteracoes_orcamentarias", id)
-update_alteracao = lambda id, d: _update("alteracoes_orcamentarias", id, d)
-delete_alteracao = lambda id: _delete("alteracoes_orcamentarias", id)
-
-# Itens Alteracao
-insert_item_alteracao = lambda d: _insert("itens_alteracao", d)
-get_all_itens_alteracao = lambda: _get_all("itens_alteracao", "id")
-get_item_alteracao_by_id = lambda id: _get_by_id("itens_alteracao", id)
-update_item_alteracao = lambda id, d: _update("itens_alteracao", id, d)
-delete_item_alteracao = lambda id: _delete("itens_alteracao", id)
-
-# Prestadores
-insert_prestador = lambda d: _insert("prestadores_saude", d)
-get_all_prestadores = lambda: _get_all("prestadores_saude", "especialidade")
-get_prestador_by_id = lambda id: _get_by_id("prestadores_saude", id)
-update_prestador = lambda id, d: _update("prestadores_saude", id, d)
-delete_prestador = lambda id: _delete("prestadores_saude", id)
-
-# Pacientes
-insert_paciente = lambda d: _insert("pacientes", d)
-get_all_pacientes = lambda: _get_all("pacientes", "nome")
-get_paciente_by_id = lambda id: _get_by_id("pacientes", id)
-update_paciente = lambda id, d: _update("pacientes", id, d)
-delete_paciente = lambda id: _delete("pacientes", id)
-
-# Atendimentos
-insert_atendimento = lambda d: _insert("atendimentos", d)
-get_all_atendimentos = lambda: _get_all("atendimentos", "data_atendimento DESC")
-get_atendimento_by_id = lambda id: _get_by_id("atendimentos", id)
-update_atendimento = lambda id, d: _update("atendimentos", id, d)
-delete_atendimento = lambda id: _delete("atendimentos", id)
-
-# Parametros
-insert_parametro = lambda d: _insert("parametros_alerta", d)
-get_all_parametros = lambda: _get_all("parametros_alerta", "tipo_alerta")
-get_parametro_by_id = lambda id: _get_by_id("parametros_alerta", id)
-update_parametro = lambda id, d: _update("parametros_alerta", id, d)
-delete_parametro = lambda id: _delete("parametros_alerta", id)
-
-# Usuarios
-insert_usuario = lambda d: _insert("usuarios", d)
-get_all_usuarios = lambda: _get_all("usuarios", "nome")
-get_usuario_by_id = lambda id: _get_by_id("usuarios", id)
-update_usuario = lambda id, d: _update("usuarios", id, d)
-delete_usuario = lambda id: _delete("usuarios", id)
-
-
-def login_usuario(email: str, senha: str) -> Optional[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "SELECT * FROM usuarios WHERE email = ? AND senha_hash = ? AND ativo = 1",
-        (email, hashlib.sha256(senha.encode()).hexdigest()),
-    )
-    row = c.fetchone()
-    conn.close()
-    if row is None:
-        return None
-    return dict_from_row(c, row)
-
-
-# Relatorios
-
-
-def get_saldo_dotacao(exercicio_id: int) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        """
-        SELECT d.id, d.valor_original, d.valor_atual, d.valor_empenhado, d.valor_liquidado, d.valor_pago,
-               (d.valor_atual - d.valor_empenhado) as saldo_empenho,
-               (d.valor_atual - d.valor_pago) as saldo_pagar,
-               o.nome as orgao, o.sigla, f.descricao as fonte, n.codigo as natureza
-        FROM dotacoes d
-        JOIN orgaos o ON d.orgao_id = o.id
-        JOIN fontes_recurso f ON d.fonte_recurso_id = f.id
-        JOIN naturezas_despesa n ON d.natureza_id = n.id
-        WHERE d.exercicio_id = ?
-        """,
-        (exercicio_id,),
-    )
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def get_execucao_por_orgao(exercicio_id: int) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        """
-        SELECT o.nome as orgao, o.sigla,
-               SUM(d.valor_atual) as total_dotacao,
-               SUM(d.valor_empenhado) as total_empenhado,
-               SUM(d.valor_liquidado) as total_liquidado,
-               SUM(d.valor_pago) as total_pago
-        FROM dotacoes d
-        JOIN orgaos o ON d.orgao_id = o.id
-        WHERE d.exercicio_id = ?
-        GROUP BY o.id, o.nome, o.sigla
-        """,
-        (exercicio_id,),
-    )
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def get_ranking_despesas(exercicio_id: int, top: int = 10) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        """
-        SELECT n.codigo as natureza, n.descricao,
-               SUM(d.valor_pago) as total_pago,
-               SUM(d.valor_empenhado) as total_empenhado
-        FROM dotacoes d
-        JOIN naturezas_despesa n ON d.natureza_id = n.id
-        WHERE d.exercicio_id = ?
-        GROUP BY n.id, n.codigo, n.descricao
-        ORDER BY total_pago DESC
-        LIMIT ?
-        """,
-        (exercicio_id, top),
-    )
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def get_alerta_licitacao() -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        """
-        SELECT l.id, l.numero, l.modalidade, l.situacao, l.percentual_alerta_retirada,
-               i.id as item_id, i.produto_nome, i.quantidade_total, i.quantidade_retirada, i.saldo,
-               (i.quantidade_retirada / NULLIF(i.quantidade_total, 0) * 100) as percentual_retirado,
-               o.nome as orgao
-        FROM licitacoes l
-        JOIN itens_licitacao i ON l.id = i.licitacao_id
-        LEFT JOIN orgaos o ON l.orgao_id = o.id
-        WHERE l.situacao IN ('em_andamento', 'homologada')
-        """
-    )
-    rows = c.fetchall()
-    conn.close()
-    itens = [dict_from_row(c, row) for row in rows]
-    alertas = []
-    for item in itens:
-        perc = item.get("percentual_retirado") or 0
-        if perc >= item.get("percentual_alerta_retirada", 20):
-            alertas.append(item)
-    return alertas
-
-
-def get_alerta_dotacao() -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT valor_padrao FROM parametros_alerta WHERE tipo_alerta = 'dotacao_suplementacao'")
-    row = c.fetchone()
-    perc_alerta = row[0] if row else 20
-
-    c.execute(
-        """
-        SELECT d.*, o.nome as orgao, o.sigla, n.codigo as natureza
-        FROM dotacoes d
-        JOIN orgaos o ON d.orgao_id = o.id
-        JOIN naturezas_despesa n ON d.natureza_id = n.id
-        """
-    )
-    rows = c.fetchall()
-    conn.close()
-    dotacoes = [dict_from_row(c, row) for row in rows]
-    alertas = []
-    for d in dotacoes:
-        if d.get("valor_atual", 0) > 0:
-            percentual_utilizado = (d.get("valor_empenhado", 0) / d.get("valor_atual", 1)) * 100
-            if percentual_utilizado >= (100 - perc_alerta):
-                d["percentual_utilizado"] = percentual_utilizado
-                alertas.append(d)
-    return alertas
-
-
-def get_visao_geral_loa(exercicio_id: int) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        """
-        SELECT d.id, e.ano, o.nome as orgao, o.sigla, p.nome as programa, a.nome as acao,
-               n.codigo as natureza, n.descricao as natureza_descricao, f.descricao as fonte,
-               d.valor_original, d.valor_atual, d.valor_empenhado, d.valor_liquidado, d.valor_pago,
-               (d.valor_atual - d.valor_empenhado) as saldo
-        FROM dotacoes d
-        JOIN exercicios_orcamentarios e ON d.exercicio_id = e.id
-        JOIN orgaos o ON d.orgao_id = o.id
-        JOIN programas p ON d.programa_id = p.id
-        JOIN acoes a ON d.acao_id = a.id
-        JOIN naturezas_despesa n ON d.natureza_id = n.id
-        JOIN fontes_recurso f ON d.fonte_recurso_id = f.id
-        WHERE d.exercicio_id = ?
-        ORDER BY d.id
-        """,
-        (exercicio_id,),
-    )
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def get_execucao_mensal(exercicio_id: int) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        """
-        SELECT strftime('%m', data) as mes, SUM(valor) as total_pago
-        FROM pagamentos p
-        JOIN liquidacoes l ON p.liquidacao_id = l.id
-        JOIN empenhos e ON l.empenho_id = e.id
-        JOIN dotacoes d ON e.dotacao_id = d.id
-        WHERE d.exercicio_id = ?
-        GROUP BY mes
-        ORDER BY mes
-        """,
-        (exercicio_id,),
-    )
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def get_itens_por_licitacao(licitacao_id: int) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM itens_licitacao WHERE licitacao_id = ?", (licitacao_id,))
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def get_ordens_por_licitacao(licitacao_id: int) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM ordens_compra WHERE licitacao_id = ?", (licitacao_id,))
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def get_contratos_por_credor(credor_id: int) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM contratos WHERE credor_id = ?", (credor_id,))
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def get_empenhos_por_credor(credor_id: int) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM empenhos WHERE credor_id = ?", (credor_id,))
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def get_atendimentos_por_paciente(paciente_id: int) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM atendimentos WHERE paciente_id = ?", (paciente_id,))
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def get_extrato_dotacao(dotacao_id: int) -> Optional[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        """
-        SELECT d.*, o.nome as orgao, p.nome as programa, a.nome as acao,
-               n.codigo as natureza, f.descricao as fonte
-        FROM dotacoes d
-        JOIN orgaos o ON d.orgao_id = o.id
-        JOIN programas p ON d.programa_id = p.id
-        JOIN acoes a ON d.acao_id = a.id
-        JOIN naturezas_despesa n ON d.natureza_id = n.id
-        JOIN fontes_recurso f ON d.fonte_recurso_id = f.id
-        WHERE d.id = ?
-        """,
-        (dotacao_id,),
-    )
-    row = c.fetchone()
-    conn.close()
-    if row is None:
-        return None
-    return dict_from_row(c, row)
-
-
-def get_liquidacoes_por_empenho(empenho_id: int) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM liquidacoes WHERE empenho_id = ?", (empenho_id,))
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def get_pagamentos_por_liquidacao(liquidacao_id: int) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM pagamentos WHERE liquidacao_id = ?", (liquidacao_id,))
-    rows = c.fetchall()
-    conn.close()
-    return [dict_from_row(c, row) for row in rows]
-
-
-def get_parametro_valor(tipo_alerta: str) -> float:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT valor_padrao FROM parametros_alerta WHERE tipo_alerta = ?", (tipo_alerta,))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row else 0
-
-
-def recalcular_saldo_item_licitacao(item_id: int):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "SELECT COALESCE(SUM(quantidade), 0) FROM ordens_compra WHERE item_licitacao_id = ? AND situacao != 'cancelada'",
-        (item_id,),
-    )
-    total = c.fetchone()[0] or 0
-    c.execute("SELECT quantidade_total FROM itens_licitacao WHERE id = ?", (item_id,))
-    row = c.fetchone()
-    if row:
-        qtd_total = row[0]
-        c.execute(
-            "UPDATE itens_licitacao SET quantidade_retirada = ?, saldo = ? WHERE id = ?",
-            (total, qtd_total - total, item_id),
-        )
-        conn.commit()
-    conn.close()
-
-
-def recalcular_dotacao_por_empenho(dotacao_id: int):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "SELECT COALESCE(SUM(valor), 0) FROM empenhos WHERE dotacao_id = ? AND status != 'cancelado'",
-        (dotacao_id,),
-    )
-    empenhado = c.fetchone()[0] or 0
-    c.execute(
-        """
-        SELECT COALESCE(SUM(li.valor), 0)
-        FROM liquidacoes li
-        JOIN empenhos e ON li.empenho_id = e.id
-        WHERE e.dotacao_id = ? AND e.status != 'cancelado'
-        """,
-        (dotacao_id,),
-    )
-    liquidado = c.fetchone()[0] or 0
-    c.execute(
-        """
-        SELECT COALESCE(SUM(p.valor), 0)
-        FROM pagamentos p
-        JOIN liquidacoes li ON p.liquidacao_id = li.id
-        JOIN empenhos e ON li.empenho_id = e.id
-        WHERE e.dotacao_id = ? AND e.status != 'cancelado'
-        """,
-        (dotacao_id,),
-    )
-    pago = c.fetchone()[0] or 0
-    c.execute(
-        "UPDATE dotacoes SET valor_empenhado = ?, valor_liquidado = ?, valor_pago = ? WHERE id = ?",
-        (empenhado, liquidado, pago, dotacao_id),
-    )
-    conn.commit()
-    conn.close()
-
-
-def inserir_log(usuario_id, tabela, registro_id, operacao, dados_anteriores=None, dados_novos=None):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "INSERT INTO logs_auditoria (usuario_id, tabela, registro_id, operacao, dados_anteriores, dados_novos) VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            usuario_id,
-            tabela,
-            registro_id,
-            operacao,
-            json.dumps(dados_anteriores, default=str) if dados_anteriores else None,
-            json.dumps(dados_novos, default=str) if dados_novos else None,
-        ),
-    )
-    conn.commit()
-    conn.close()
+            st.plotly_chart(fig, use_container_width=True)
+
+    st.subheader("🚨 Alertas Ativos")
+    alertas_lic = get_alerta_licitacao()
+    alertas_dot = get_alerta_dotacao()
+
+    if alertas_lic:
+        st.warning(f"⚠️ {len(alertas_lic)} item(ns) de licitação atingiram o limite de retirada!")
+    if alertas_dot:
+        st.warning(f"⚠️ {len(alertas_dot)} dotação(ões) necessitam suplementação!")
+    if not alertas_lic and not alertas_dot:
+        st.success("✅ Nenhum alerta ativo no momento.")
+
+    st.subheader("📋 Últimas Movimentações")
+    empenhos = get_all_empenhos()
+    if empenhos:
+        df = pd.DataFrame(empenhos[:10])
+        st.dataframe(df[["numero", "data", "valor", "status"]], use_container_width=True)
+
+
+def pagina_loa():
+    st.title("📊 LOA - Lei Orçamentária Anual")
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+        "📅 Exercício", "🏛️ Órgãos", "📋 Programas/Ações",
+        "🏷️ Naturezas", "💰 Fontes", "💵 Dotações",
+        "📈 Receitas", "👁️ Visão Geral"
+    ])
+
+    with tab1:
+        st.subheader("Exercícios Orçamentários")
+        with st.form("form_exercicio"):
+            col1, col2 = st.columns(2)
+            with col1:
+                ano = st.number_input("Ano", min_value=2020, max_value=2035, value=2026)
+                data_inicio = st.date_input("Data Início", value=datetime.date(2026, 1, 1))
+            with col2:
+                status = st.selectbox("Status", ["elaboracao", "aprovado", "execucao", "encerrado"])
+                data_fim = st.date_input("Data Fim", value=datetime.date(2026, 12, 31))
+            if st.form_submit_button("Salvar"):
+                try:
+                    insert_exercicio({"ano": ano, "status": status, "data_inicio": data_inicio, "data_fim": data_fim})
+                    st.success("Exercício salvo!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        exercicios = get_all_exercicios()
+        if exercicios:
+            st.dataframe(pd.DataFrame(exercicios), use_container_width=True)
+
+    with tab2:
+        st.subheader("Órgãos")
+        with st.form("form_orgao"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                codigo = st.text_input("Código", "02.01")
+            with col2:
+                nome = st.text_input("Nome", "Secretaria Municipal de Saúde")
+            with col3:
+                sigla = st.text_input("Sigla", "SMS")
+            if st.form_submit_button("Salvar"):
+                try:
+                    insert_orgao({"codigo": codigo, "nome": nome, "sigla": sigla, "ativo": 1})
+                    st.success("Órgão salvo!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+        orgaos = get_all_orgaos()
+        if orgaos:
+            st.dataframe(pd.DataFrame(orgaos), use_container_width=True)
+
+    with tab3:
+        st.subheader("Programas")
+        with st.form("form_programa"):
+            orgaos_list = get_all_orgaos()
+            orgao_opts = {f"{o['nome']} ({o['sigla']})": o["id"] for o in orgaos_list}
+            col1, col2 = st.columns(2)
+            with col1:
+                p_codigo = st.text_input("Código do Programa")
+                p_nome = st.text_input("Nome do Programa")
+            with col2:
+                p_objetivo = st.text_area("Objetivo")
+                p_orgao = st.selectbox("Órgão Responsável", options=list(orgao_opts.keys()))
+            if st.form_submit_button("Salvar Programa"):
+                try:
+                    insert_programa({"codigo": p_codigo, "nome": p_nome, "objetivo": p_objetivo, "orgao_responsavel_id": orgao_opts[p_orgao]})
+                    st.success("Programa salvo!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        st.subheader("Ações")
+        with st.form("form_acao"):
+            programas = get_all_programas()
+            prog_opts = {p["nome"]: p["id"] for p in programas}
+            col1, col2 = st.columns(2)
+            with col1:
+                a_codigo = st.text_input("Código da Ação")
+                a_nome = st.text_input("Nome da Ação")
+                a_programa = st.selectbox("Programa", options=list(prog_opts.keys()))
+            with col2:
+                a_tipo = st.selectbox("Tipo", ["projeto", "atividade", "operacao_especial"])
+                a_produto = st.text_input("Produto", "Consultas médicas")
+                a_unidade = st.text_input("Unidade Medida", "Atendimento")
+            if st.form_submit_button("Salvar Ação"):
+                try:
+                    insert_acao({"codigo": a_codigo, "tipo": a_tipo, "nome": a_nome, "produto": a_produto, "unidade_medida": a_unidade, "programa_id": prog_opts[a_programa], "orgao_id": 1})
+                    st.success("Ação salva!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+    with tab4:
+        st.subheader("Naturezas de Despesa")
+        with st.form("form_natureza"):
+            col1, col2 = st.columns(2)
+            with col1:
+                n_codigo = st.text_input("Código", "3.1.90.11.00")
+                n_grupo = st.selectbox("Grupo", ["1 - Pessoal", "2 - Juros", "3 - Outras Correntes", "4 - Investimentos"])
+                n_elemento = st.text_input("Elemento", "11")
+            with col2:
+                n_categoria = st.selectbox("Categoria", ["3 - Corrente", "4 - Capital"])
+                n_modalidade = st.text_input("Modalidade", "90")
+                n_descricao = st.text_input("Descrição", "Vencimentos e Vantagens Fixas")
+            if st.form_submit_button("Salvar"):
+                try:
+                    insert_natureza({"codigo": n_codigo, "categoria": n_categoria, "grupo": n_grupo, "modalidade": n_modalidade, "elemento": n_elemento, "descricao": n_descricao})
+                    st.success("Natureza salva!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+        naturezas = get_all_naturezas()
+        if naturezas:
+            st.dataframe(pd.DataFrame(naturezas), use_container_width=True)
+
+    with tab5:
+        st.subheader("Fontes de Recurso")
+        with st.form("form_fonte"):
+            col1, col2 = st.columns(2)
+            with col1:
+                f_codigo = st.text_input("Código", "RO")
+                f_descricao = st.text_input("Descrição", "Recursos Ordinários")
+            with col2:
+                f_tipo = st.selectbox("Tipo", ["tesouro", "vinculado", "convenio"])
+            if st.form_submit_button("Salvar"):
+                try:
+                    insert_fonte({"codigo": f_codigo, "descricao": f_descricao, "tipo": f_tipo})
+                    st.success("Fonte salva!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+        fontes = get_all_fontes()
+        if fontes:
+            st.dataframe(pd.DataFrame(fontes), use_container_width=True)
+
+    with tab6:
+        st.subheader("Dotações Orçamentárias")
+        with st.form("form_dotacao"):
+            exercicios_list = get_all_exercicios()
+            ex_opts = {str(e["ano"]): e["id"] for e in exercicios_list}
+            orgaos_list = get_all_orgaos()
+            og_opts = {f"{o['nome']} ({o['sigla']})": o["id"] for o in orgaos_list}
+            programas = get_all_programas()
+            pr_opts = {p["nome"]: p["id"] for p in programas}
+            acoes = get_all_acoes()
+            ac_opts = {a["nome"]: a["id"] for a in acoes}
+            naturezas = get_all_naturezas()
+            nt_opts = {n["descricao"]: n["id"] for n in naturezas}
+            fontes_list = get_all_fontes()
+            ft_opts = {f["descricao"]: f["id"] for f in fontes_list}
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                d_exercicio = st.selectbox("Exercício", options=list(ex_opts.keys()))
+                d_orgao = st.selectbox("Órgão", options=list(og_opts.keys()))
+                d_programa = st.selectbox("Programa", options=list(pr_opts.keys()))
+            with col2:
+                d_acao = st.selectbox("Ação", options=list(ac_opts.keys()))
+                d_natureza = st.selectbox("Natureza", options=list(nt_opts.keys()))
+                d_fonte = st.selectbox("Fonte", options=list(ft_opts.keys()))
+            with col3:
+                d_valor_original = st.number_input("Valor Original (R$)", min_value=0.0, step=1000.0, format="%.2f")
+                d_valor_atual = st.number_input("Valor Atual (R$)", min_value=0.0, step=1000.0, format="%.2f")
+
+            if st.form_submit_button("Salvar Dotação"):
+                try:
+                    insert_dotacao({
+                        "exercicio_id": ex_opts[d_exercicio], "orgao_id": og_opts[d_orgao],
+                        "programa_id": pr_opts[d_programa], "acao_id": ac_opts[d_acao],
+                        "natureza_id": nt_opts[d_natureza], "fonte_recurso_id": ft_opts[d_fonte],
+                        "valor_original": d_valor_original, "valor_atual": d_valor_atual
+                    })
+                    st.success("Dotação salva!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        dotacoes = get_all_dotacoes()
+        if dotacoes:
+            st.dataframe(pd.DataFrame(dotacoes), use_container_width=True)
+
+    with tab7:
+        st.subheader("Previsão de Receitas")
+        with st.form("form_receita"):
+            receitas_fontes = get_all_fontes()
+            rf_opts = {f["descricao"]: f["id"] for f in receitas_fontes}
+            col1, col2 = st.columns(2)
+            with col1:
+                r_descricao = st.text_input("Descrição")
+                r_valor_previsto = st.number_input("Valor Previsto (R$)", min_value=0.0, format="%.2f")
+            with col2:
+                r_fonte = st.selectbox("Fonte de Recurso", options=list(rf_opts.keys()))
+                r_mes = st.number_input("Mês", min_value=1, max_value=12, value=1)
+            if st.form_submit_button("Salvar"):
+                try:
+                    ex_id = ex_opts[list(ex_opts.keys())[0]] if ex_opts else 1
+                    insert_receita({"exercicio_id": ex_id, "fonte_recurso_id": rf_opts[r_fonte], "descricao": r_descricao, "valor_previsto": r_valor_previsto, "valor_realizado": 0, "mes_competencia": r_mes})
+                    st.success("Receita salva!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        receitas = get_all_receitas()
+        if receitas:
+            df = pd.DataFrame(receitas)
+            st.dataframe(df, use_container_width=True)
+            total_prev = df["valor_previsto"].sum()
+            st.metric("Total Previsto", f"R$ {total_prev:,.2f}")
+
+    with tab8:
+        st.subheader("Visão Geral da LOA")
+        exercicios_list = get_all_exercicios()
+        if exercicios_list:
+            ex_id = exercicios_list[0]["id"]
+            dados = get_visao_geral_loa(ex_id)
+            if dados:
+                df = pd.DataFrame(dados)
+                st.dataframe(df, use_container_width=True, height=400)
+                csv = df.to_csv(index=False).encode("utf-8")
+                st.download_button("📥 Download CSV", csv, "loa_completa.csv", "text/csv")
+
+                col1, col2, col3 = st.columns(3)
+                col1.metric("💰 Orçamento Original", f"R$ {df['valor_original'].sum():,.2f}")
+                col2.metric("💵 Orçamento Atual", f"R$ {df['valor_atual'].sum():,.2f}")
+                col3.metric("📌 Saldo Disponível", f"R$ {df['saldo'].sum():,.2f}")
+
+
+def pagina_licitacoes():
+    st.title("📑 Licitações")
+
+    tab_lic, tab_itens = st.tabs(["Cadastro de Licitações", "Itens da Licitação"])
+
+    with tab_lic:
+        orgaos_list = get_all_orgaos()
+        og_opts = {f"{o['nome']} ({o['sigla']})": o["id"] for o in orgaos_list}
+        with st.form("form_licitacao"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                numero = st.text_input("Número da Licitação")
+                modalidade = st.selectbox("Modalidade", ["pregao_eletronico", "tomada_preco", "convite", "concorrencia", "dispensa", "inexigibilidade"])
+            with col2:
+                objeto = st.text_area("Objeto")
+                valor_estimado = st.number_input("Valor Estimado (R$)", min_value=0.0, format="%.2f")
+            with col3:
+                orgao = st.selectbox("Órgão", options=list(og_opts.keys()))
+                alerta = st.slider("Percentual de alerta (%)", 0, 100, 20, 1)
+            if st.form_submit_button("Salvar Licitação"):
+                try:
+                    insert_licitacao({"numero": numero, "modalidade": modalidade, "objeto": objeto, "valor_estimado": valor_estimado, "orgao_id": og_opts[orgao], "alerta_percentual": alerta})
+                    st.success("Licitação salva!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        licitacoes = get_all_licitacoes()
+        if licitacoes:
+            df = pd.DataFrame(licitacoes)
+            st.dataframe(df, use_container_width=True)
+            st.subheader("Detalhes da Licitação")
+            lic_opt = {f"{l['numero']} - {l.get('objeto', '')}": l["id"] for l in licitacoes}
+            sel = st.selectbox("Selecionar licitação", options=list(lic_opt.keys()))
+            itens = get_itens_licitacao(lic_opt[sel])
+            if itens:
+                st.dataframe(pd.DataFrame(itens), use_container_width=True)
+
+    with tab_itens:
+        licitacoes = get_all_licitacoes()
+        lic_opts = {f"{l['numero']} - {l.get('objeto', '')}": l["id"] for l in licitacoes}
+        if not licitacoes:
+            st.warning("Cadastre uma licitação primeiro.")
+            return
+        with st.form("form_item_licitacao"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                lic_sel = st.selectbox("Licitação", options=list(lic_opts.keys()))
+                produto = st.text_input("Produto")
+            with col2:
+                quantidade = st.number_input("Quantidade", min_value=1, value=1)
+                valor_unitario = st.number_input("Valor Unitário (R$)", min_value=0.0, format="%.2f")
+            with col3:
+                unidade = st.text_input("Unidade de Medida", "un")
+            if st.form_submit_button("Salvar Item"):
+                try:
+                    insert_item_licitacao({"licitacao_id": lic_opts[lic_sel], "produto": produto, "quantidade": quantidade, "valor_unitario": valor_unitario, "unidade_medida": unidade, "quantidade_retirada": 0})
+                    st.success("Item salvo!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        if licitacoes:
+            lic_det = st.selectbox("Ver itens de", options=list(lic_opts.keys()), key="det_itens")
+            itens = get_itens_licitacao(lic_opts[lic_det])
+            if itens:
+                for item in itens:
+                    total = item.get("quantidade", 0)
+                    retirada = item.get("quantidade_retirada", 0)
+                    pct = (retirada / total * 100) if total else 0
+                    col_a, col_b = st.columns([1, 3])
+                    col_a.write(f"{item.get('produto', '')}")
+                    col_b.progress(min(pct / 100, 1.0), text=f"{retirada}/{total} ({pct:.1f}%)")
+                st.dataframe(pd.DataFrame(itens), use_container_width=True)
+
+
+def pagina_compras():
+    st.title("🛒 Compras - Ordens de Compra")
+
+    licitacoes = get_all_licitacoes()
+    lic_opts = {f"{l['numero']} - {l.get('objeto', '')}": l["id"] for l in licitacoes}
+    if not licitacoes:
+        st.warning("Nenhuma licitação cadastrada.")
+        return
+
+    lic_sel = st.selectbox("Licitação", options=list(lic_opts.keys()))
+    itens = get_itens_licitacao(lic_opts[lic_sel])
+    item_opts = {f"{i['produto']} (disp: {i.get('quantidade', 0) - i.get('quantidade_retirada', 0)})": i["id"] for i in itens}
+
+    with st.form("form_compra"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            item_sel = st.selectbox("Item", options=list(item_opts.keys()))
+            quantidade = st.number_input("Quantidade", min_value=1, value=1)
+        with col2:
+            valor_unitario = st.number_input("Valor Unitário (R$)", min_value=0.0, format="%.2f")
+            situacao = st.selectbox("Situação", ["pendente", "autorizada", "entregue", "cancelada"])
+        with col3:
+            data_oc = st.date_input("Data", value=datetime.date.today())
+            numero = st.text_input("Número OC")
+        if st.form_submit_button("Salvar Ordem de Compra"):
+            try:
+                insert_ordem_compra({"licitacao_id": lic_opts[lic_sel], "item_licitacao_id": item_opts[item_sel], "numero": numero, "data": data_oc, "quantidade": quantidade, "valor_unitario": valor_unitario, "situacao": situacao})
+                recalcular_saldo_item_licitacao(item_opts[item_sel])
+                st.success("Ordem de compra salva!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao salvar: {e}")
+
+    st.subheader("Histórico de Ordens de Compra")
+    ordens = get_all_ordens_compra()
+    if ordens:
+        st.dataframe(pd.DataFrame(ordens), use_container_width=True)
+
+
+def pagina_contratos():
+    st.title("📜 Contratos")
+
+    tab_con, tab_adit = st.tabs(["Contratos", "Aditivos"])
+
+    with tab_con:
+        licitacoes = get_all_licitacoes()
+        lic_opts = {f"{l['numero']} - {l.get('objeto', '')}": l["id"] for l in licitacoes}
+        fornecedores = get_all_fornecedores()
+        forn_opts = {f"{f['nome']} ({f.get('cpf_cnpj', '')})": f["id"] for f in fornecedores}
+        with st.form("form_contrato"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                numero = st.text_input("Número do Contrato")
+                licitacao = st.selectbox("Licitação", options=list(lic_opts.keys()))
+            with col2:
+                credor = st.selectbox("Credor", options=list(forn_opts.keys()))
+                valor_global = st.number_input("Valor Global (R$)", min_value=0.0, format="%.2f")
+            with col3:
+                vigencia = st.date_input("Vigência", value=datetime.date.today())
+                situacao = st.selectbox("Situação", ["ativo", "suspenso", "rescindido", "encerrado"])
+            if st.form_submit_button("Salvar Contrato"):
+                try:
+                    insert_contrato({"numero": numero, "licitacao_id": lic_opts[licitacao], "fornecedor_id": forn_opts[credor], "valor_global": valor_global, "vigencia": vigencia, "situacao": situacao})
+                    st.success("Contrato salvo!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        contratos = get_all_contratos()
+        if contratos:
+            df = pd.DataFrame(contratos)
+            hoje = datetime.date.today()
+            def colorir_vencimento(row):
+                vig = row.get("vigencia")
+                if not vig:
+                    return [""] * len(row)
+                try:
+                    vig_dt = pd.to_datetime(vig).date()
+                except Exception:
+                    return [""] * len(row)
+                dias = (vig_dt - hoje).days
+                if dias > 60:
+                    cor = "background-color: #d4edda"
+                elif dias > 30:
+                    cor = "background-color: #fff3cd"
+                else:
+                    cor = "background-color: #f8d7da"
+                return [cor] * len(row)
+
+            st.dataframe(df.style.apply(colorir_vencimento, axis=1), use_container_width=True)
+
+    with tab_adit:
+        contratos = get_all_contratos()
+        cont_opts = {f"{c['numero']}": c["id"] for c in contratos}
+        if not contratos:
+            st.warning("Cadastre um contrato primeiro.")
+            return
+        with st.form("form_aditivo"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                contrato = st.selectbox("Contrato", options=list(cont_opts.keys()))
+                tipo = st.selectbox("Tipo", ["prazo", "valor", "prazo_e_valor", "outros"])
+            with col2:
+                valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
+                novo_vencimento = st.date_input("Novo Vencimento", value=datetime.date.today())
+            with col3:
+                justificativa = st.text_area("Justificativa")
+            if st.form_submit_button("Salvar Aditivo"):
+                try:
+                    insert_aditivo({"contrato_id": cont_opts[contrato], "tipo": tipo, "valor": valor, "novo_vencimento": novo_vencimento, "justificativa": justificativa})
+                    st.success("Aditivo salvo!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        aditivos = get_all_aditivos()
+        if aditivos:
+            st.dataframe(pd.DataFrame(aditivos), use_container_width=True)
+
+
+def pagina_fornecedores():
+    st.title("🏢 Fornecedores")
+
+    with st.form("form_fornecedor"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            tipo = st.selectbox("Tipo", ["pf", "pj"])
+            cpf_cnpj = st.text_input("CPF/CNPJ")
+        with col2:
+            nome = st.text_input("Nome / Razão Social")
+            endereco = st.text_input("Endereço")
+        with col3:
+            dados_bancarios = st.text_input("Dados Bancários")
+            ativo = st.selectbox("Ativo", [1, 0])
+        if st.form_submit_button("Salvar Fornecedor"):
+            try:
+                insert_fornecedor({"tipo": tipo, "cpf_cnpj": cpf_cnpj, "nome": nome, "endereco": endereco, "dados_bancarios": dados_bancarios, "ativo": ativo})
+                st.success("Fornecedor salvo!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao salvar: {e}")
+
+    fornecedores = get_all_fornecedores()
+    if fornecedores:
+        df = pd.DataFrame(fornecedores)
+        st.dataframe(df, use_container_width=True)
+
+        st.subheader("Histórico do Fornecedor")
+        forn_opts = {f"{f['nome']} ({f.get('cpf_cnpj', '')})": f["id"] for f in fornecedores}
+        forn_sel = st.selectbox("Selecionar fornecedor", options=list(forn_opts.keys()))
+        contratos = get_contratos_por_fornecedor(forn_opts[forn_sel])
+        empenhos = get_empenhos_por_fornecedor(forn_opts[forn_sel])
+        if contratos:
+            st.markdown("**Contratos**")
+            st.dataframe(pd.DataFrame(contratos), use_container_width=True)
+        if empenhos:
+            st.markdown("**Empenhos**")
+            st.dataframe(pd.DataFrame(empenhos), use_container_width=True)
+
+
+def pagina_prestadores():
+    st.title("🏥 Prestadores de Saúde")
+
+    fornecedores = get_all_fornecedores()
+    forn_opts = {f"{f['nome']} ({f.get('cpf_cnpj', '')})": f["id"] for f in fornecedores}
+    with st.form("form_prestador"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            credor = st.selectbox("Credor", options=list(forn_opts.keys()))
+            especialidade = st.text_input("Especialidade")
+        with col2:
+            registro_conselho = st.text_input("Registro no Conselho")
+            data_credenciamento = st.date_input("Data Credenciamento", value=datetime.date.today())
+        with col3:
+            data_validade = st.date_input("Data Validade", value=datetime.date.today())
+            situacao = st.selectbox("Situação", ["ativo", "suspenso", "cancelado"])
+        if st.form_submit_button("Salvar Prestador"):
+            try:
+                insert_prestador({"fornecedor_id": forn_opts[credor], "especialidade": especialidade, "registro_conselho": registro_conselho, "data_credenciamento": data_credenciamento, "data_validade": data_validade, "situacao": situacao})
+                st.success("Prestador salvo!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao salvar: {e}")
+
+    prestadores = get_all_prestadores()
+    if prestadores:
+        st.dataframe(pd.DataFrame(prestadores), use_container_width=True)
+
+
+def pagina_pacientes():
+    st.title("👤 Pacientes")
+
+    tab_cad, tab_atend = st.tabs(["Cadastro", "Atendimentos"])
+
+    with tab_cad:
+        with st.form("form_paciente"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                nome = st.text_input("Nome")
+                cpf = st.text_input("CPF")
+                data_nascimento = st.date_input("Data Nascimento", value=datetime.date.today())
+            with col2:
+                sexo = st.selectbox("Sexo", ["M", "F", "Outro"])
+                endereco = st.text_input("Endereço")
+            with col3:
+                telefone = st.text_input("Telefone")
+                email = st.text_input("Email")
+                convenio = st.text_input("Convênio")
+            if st.form_submit_button("Salvar Paciente"):
+                try:
+                    insert_paciente({"nome": nome, "cpf": cpf, "data_nascimento": data_nascimento, "sexo": sexo, "endereco": endereco, "telefone": telefone, "email": email, "convenio": convenio})
+                    st.success("Paciente salvo!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        pacientes = get_all_pacientes()
+        if pacientes:
+            st.dataframe(pd.DataFrame(pacientes), use_container_width=True)
+
+    with tab_atend:
+        pacientes = get_all_pacientes()
+        if not pacientes:
+            st.warning("Cadastre um paciente primeiro.")
+            return
+        pac_opts = {f"{p['nome']} ({p.get('cpf', '')})": p["id"] for p in pacientes}
+        pac_sel = st.selectbox("Paciente", options=list(pac_opts.keys()), key="pac_atend")
+
+        with st.form("form_atendimento"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                data_atend = st.date_input("Data Atendimento", value=datetime.date.today())
+                tipo = st.selectbox("Tipo", ["consulta", "exame", "procedimento", "internacao"])
+            with col2:
+                prestadores = get_all_prestadores()
+                prest_opts = {f"{p.get('especialidade', '')} - {p.get('registro_conselho', '')}": p["id"] for p in prestadores}
+                prestador = st.selectbox("Prestador", options=list(prest_opts.keys()))
+                valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
+            with col3:
+                procedimento = st.text_input("Procedimento")
+                situacao = st.selectbox("Situação", ["agendado", "realizado", "cancelado"])
+            if st.form_submit_button("Salvar Atendimento"):
+                try:
+                    insert_atendimento({"paciente_id": pac_opts[pac_sel], "prestador_id": prest_opts[prestador], "data": data_atend, "tipo": tipo, "procedimento": procedimento, "valor": valor, "situacao": situacao})
+                    st.success("Atendimento salvo!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        atendimentos = get_atendimentos_por_paciente(pac_opts[pac_sel])
+        if atendimentos:
+            st.dataframe(pd.DataFrame(atendimentos), use_container_width=True)
+
+
+def pagina_financeiro():
+    st.title("💰 Financeiro")
+
+    tab_emp, tab_liq, tab_pag, tab_sup, tab_ext = st.tabs([
+        "Empenhos", "Liquidações", "Pagamentos", "Suplementações", "Extrato"
+    ])
+
+    with tab_emp:
+        dotacoes = get_all_dotacoes()
+        dot_opts = {f"Dotação #{d['id']}": d["id"] for d in dotacoes}
+        fornecedores = get_all_fornecedores()
+        forn_opts = {f"{f['nome']} ({f.get('cpf_cnpj', '')})": f["id"] for f in fornecedores}
+        with st.form("form_empenho"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                numero = st.text_input("Número Empenho")
+                data = st.date_input("Data", value=datetime.date.today())
+                tipo = st.selectbox("Tipo", ["ordinario", "estimativo", "global"])
+            with col2:
+                dotacao = st.selectbox("Dotação", options=list(dot_opts.keys()))
+                credor = st.selectbox("Credor", options=list(forn_opts.keys()))
+            with col3:
+                valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
+                historico = st.text_area("Histórico")
+            if st.form_submit_button("Salvar Empenho"):
+                try:
+                    insert_empenho({"numero": numero, "data": data, "tipo": tipo, "dotacao_id": dot_opts[dotacao], "fornecedor_id": forn_opts[credor], "valor": valor, "historico": historico, "status": "ativo"})
+                    recalcular_dotacao_por_empenho(dot_opts[dotacao])
+                    st.success("Empenho salvo!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        empenhos = get_all_empenhos()
+        if empenhos:
+            st.dataframe(pd.DataFrame(empenhos), use_container_width=True)
+
+    with tab_liq:
+        empenhos = get_all_empenhos()
+        emp_opts = {f"{e['numero']} - R$ {e.get('valor', 0):,.2f}": e["id"] for e in empenhos}
+        if not empenhos:
+            st.warning("Cadastre um empenho primeiro.")
+        else:
+            with st.form("form_liquidacao"):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    empenho = st.selectbox("Empenho", options=list(emp_opts.keys()))
+                    numero = st.text_input("Número Liquidação")
+                with col2:
+                    data = st.date_input("Data", value=datetime.date.today())
+                    valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
+                with col3:
+                    documento_fiscal = st.text_input("Documento Fiscal")
+                if st.form_submit_button("Salvar Liquidação"):
+                    try:
+                        insert_liquidacao({"empenho_id": emp_opts[empenho], "numero": numero, "data": data, "valor": valor, "documento_fiscal": documento_fiscal})
+                        dot_id = next((e["dotacao_id"] for e in empenhos if e["id"] == emp_opts[empenho]), None)
+                        if dot_id:
+                            recalcular_dotacao_por_empenho(dot_id)
+                        st.success("Liquidação salva!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
+
+        liquidacoes = get_all_liquidacoes()
+        if liquidacoes:
+            st.dataframe(pd.DataFrame(liquidacoes), use_container_width=True)
+
+    with tab_pag:
+        liquidacoes = get_all_liquidacoes()
+        liq_opts = {f"{l['numero']} - R$ {l.get('valor', 0):,.2f}": l["id"] for l in liquidacoes}
+        if not liquidacoes:
+            st.warning("Cadastre uma liquidação primeiro.")
+        else:
+            with st.form("form_pagamento"):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    liquidacao = st.selectbox("Liquidação", options=list(liq_opts.keys()))
+                    data = st.date_input("Data", value=datetime.date.today())
+                with col2:
+                    valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
+                    forma_pagamento = st.selectbox("Forma Pagamento", ["transferencia", "cheque", "dinheiro", "pix"])
+                with col3:
+                    st.text_input("Observação", "", key="obs_pag")
+                if st.form_submit_button("Salvar Pagamento"):
+                    try:
+                        insert_pagamento({"liquidacao_id": liq_opts[liquidacao], "data": data, "valor": valor, "forma_pagamento": forma_pagamento})
+                        st.success("Pagamento salvo!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
+
+        pagamentos = get_all_pagamentos()
+        if pagamentos:
+            st.dataframe(pd.DataFrame(pagamentos), use_container_width=True)
+
+    with tab_sup:
+        st.subheader("Suplementações / Alterações Orçamentárias")
+        alerta_sup = st.slider("Percentual de alerta (%)", 0, 100, 20, 1, key="alerta_sup")
+        with st.form("form_suplementacao"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                tipo = st.selectbox("Tipo", ["suplementacao", "anulacao", "remanejamento"])
+                numero_decreto = st.text_input("Número Decreto/Portaria")
+            with col2:
+                data = st.date_input("Data", value=datetime.date.today())
+                dotacao = st.selectbox("Dotação", options=[f"Dotação #{d['id']}" for d in get_all_dotacoes()])
+            with col3:
+                valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
+                justificativa = st.text_area("Justificativa")
+            if st.form_submit_button("Salvar Alteração"):
+                try:
+                    dot_id = int(dotacao.replace("Dotação #", ""))
+                    insert_alteracao_orcamentaria({"tipo": tipo, "numero_decreto": numero_decreto, "data": data, "dotacao_id": dot_id, "valor": valor, "justificativa": justificativa})
+                    st.success("Alteração salva!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        alteracoes = get_all_alteracoes_orcamentarias()
+        if alteracoes:
+            df = pd.DataFrame(alteracoes)
+            st.dataframe(df, use_container_width=True)
+            total_sup = df[df["tipo"] == "suplementacao"]["valor"].sum() if "tipo" in df.columns else 0
+            st.metric("Total de Suplementações", f"R$ {total_sup:,.2f}")
+
+    with tab_ext:
+        st.subheader("Extrato da Dotação")
+        dotacoes = get_all_dotacoes()
+        dot_opts = {f"Dotação #{d['id']}": d["id"] for d in dotacoes}
+        if not dotacoes:
+            st.warning("Nenhuma dotação cadastrada.")
+        else:
+            dot_sel = st.selectbox("Dotação", options=list(dot_opts.keys()), key="ext_dot")
+            extrato = get_extrato_dotacao(dot_opts[dot_sel])
+            if extrato:
+                st.dataframe(pd.DataFrame(extrato), use_container_width=True, height=500)
+
+
+def pagina_alertas():
+    st.title("⚠️ Alertas e Parâmetros")
+
+    parametros = get_all_parametros()
+    if parametros:
+        for p in parametros:
+            novo_valor = st.slider(f"{p.get('nome', p['id'])} (atual: {p.get('valor', 0)})", 0, 100, int(p.get("valor", 0) or 0), 1)
+            if st.button(f"Salvar {p.get('nome', p['id'])}", key=f"btn_p_{p['id']}"):
+                try:
+                    update_parametro({"id": p["id"], "valor": novo_valor})
+                    st.success("Parâmetro atualizado!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+    else:
+        st.info("Nenhum parâmetro cadastrado.")
+
+    st.subheader("Preview dos Alertas Ativos")
+    alertas_lic = get_alerta_licitacao()
+    alertas_dot = get_alerta_dotacao()
+
+    if alertas_lic:
+        st.warning("Alertas de licitação")
+        st.dataframe(pd.DataFrame(alertas_lic), use_container_width=True)
+    if alertas_dot:
+        st.warning("Alertas de dotação")
+        st.dataframe(pd.DataFrame(alertas_dot), use_container_width=True)
+    if not alertas_lic and not alertas_dot:
+        st.success("✅ Nenhum alerta ativo no momento.")
+
+
+def pagina_relatorios():
+    st.title("📈 Relatórios")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        data_inicio = st.date_input("Data Início", value=datetime.date(datetime.date.today().year, 1, 1))
+    with col2:
+        data_fim = st.date_input("Data Fim", value=datetime.date.today())
+
+    tipo_rel = st.selectbox("Tipo de Relatório", [
+        "Execução Orçamentária", "Licitações", "Fornecedores"
+    ])
+
+    if st.button("Gerar Relatório"):
+        try:
+            if tipo_rel == "Execução Orçamentária":
+                dados = get_relatorio_execucao_orcamentaria(data_inicio, data_fim)
+            elif tipo_rel == "Licitações":
+                dados = get_relatorio_licitacoes(data_inicio, data_fim)
+            elif tipo_rel == "Fornecedores":
+                dados = get_relatorio_fornecedores(data_inicio, data_fim)
+            else:
+                dados = []
+
+            if dados:
+                df = pd.DataFrame(dados)
+                st.dataframe(df, use_container_width=True, height=500)
+                csv = df.to_csv(index=False).encode("utf-8")
+                st.download_button("📥 Download CSV", csv, f"relatorio_{tipo_rel.lower().replace(' ', '_')}.csv", "text/csv")
+            else:
+                st.info("Nenhum dado encontrado para o período/tipo selecionado.")
+        except Exception as e:
+            st.error(f"Erro ao gerar relatório: {e}")
+
+
+def main():
+    if "usuario" not in st.session_state:
+        st.session_state.usuario = None
+
+    init_db()
+
+    if st.session_state.usuario is None:
+        st.title("🔐 MARMED Gestão em Saúde")
+        st.image("https://via.placeholder.com/200x80?text=MARMED", width=200)
+        email = st.text_input("Email", value="admin")
+        senha = st.text_input("Senha", type="password")
+        if st.button("Entrar"):
+            try:
+                user = login_usuario(email, hash_senha(senha))
+                if user:
+                    st.session_state.usuario = user
+                    st.rerun()
+                else:
+                    st.error("Email ou senha inválidos.")
+            except Exception as e:
+                st.error(f"Erro no login: {e}")
+        return
+
+    with st.sidebar:
+        st.title("🏥 MARMED")
+        st.caption(f"👤 {st.session_state.usuario['nome']}")
+        st.divider()
+
+        pagina = st.radio("Navegação", [
+            "🏠 Dashboard", "📊 LOA", "📑 Licitações", "🛒 Compras",
+            "📜 Contratos", "🏢 Fornecedores", "🏥 Prestadores Saúde",
+            "👤 Pacientes", "💰 Financeiro", "⚠️ Alertas", "📈 Relatórios"
+        ])
+
+        st.divider()
+        if st.button("🚪 Sair"):
+            st.session_state.usuario = None
+            st.rerun()
+
+    if pagina == "🏠 Dashboard":
+        pagina_dashboard()
+    elif pagina == "📊 LOA":
+        pagina_loa()
+    elif pagina == "📑 Licitações":
+        pagina_licitacoes()
+    elif pagina == "🛒 Compras":
+        pagina_compras()
+    elif pagina == "📜 Contratos":
+        pagina_contratos()
+    elif pagina == "🏢 Fornecedores":
+        pagina_fornecedores()
+    elif pagina == "🏥 Prestadores Saúde":
+        pagina_prestadores()
+    elif pagina == "👤 Pacientes":
+        pagina_pacientes()
+    elif pagina == "💰 Financeiro":
+        pagina_financeiro()
+    elif pagina == "⚠️ Alertas":
+        pagina_alertas()
+    elif pagina == "📈 Relatórios":
+        pagina_relatorios()
 
 
 if __name__ == "__main__":
-    init_db()
-    print("Banco de dados inicializado com sucesso.")
+    main()
