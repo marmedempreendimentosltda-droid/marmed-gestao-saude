@@ -1,453 +1,924 @@
 import streamlit as st
-import pandas as pd
 import sqlite3
+import datetime
+import pandas as pd
 import hashlib
-import os
-from datetime import datetime
 
-st.set_page_config(page_title="MARMED - Gestão em Saúde Pública de Luminárias-MG", layout="wide")
+st.set_page_config(page_title="MARMED - Gestão em Saúde Pública", layout="wide")
 
-DB_PATH = "marmed.db"
+DB_NAME = "marmed.db"
+
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
+    conn = sqlite3.connect(DB_NAME, check_same_thread=False)
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS contas_pagar (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT
+            fornecedor TEXT NOT NULL,
+            descricao TEXT NOT NULL,
+            valor REAL NOT NULL,
+            vencimento DATE NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Pendente',
+            data_pagamento DATE,
+            observacao TEXT
         )
     ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS dotacoes (
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS contas_receber (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT,
-            categoria TEXT,
-            valor_total REAL,
-            valor_usado REAL DEFAULT 0,
-            fonte TEXT,
-            status TEXT,
-            historico TEXT
+            cliente TEXT NOT NULL,
+            descricao TEXT NOT NULL,
+            valor REAL NOT NULL,
+            vencimento DATE NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Pendente',
+            data_recebimento DATE,
+            observacao TEXT
         )
     ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS movimentacoes (
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS empenhos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            dotacao_id INTEGER,
-            valor REAL,
-            data TEXT,
-            descricao TEXT,
-            FOREIGN KEY (dotacao_id) REFERENCES dotacoes(id)
+            numero_empenho TEXT NOT NULL UNIQUE,
+            fornecedor TEXT NOT NULL,
+            descricao TEXT NOT NULL,
+            valor REAL NOT NULL,
+            data_empenho DATE NOT NULL,
+            data_cancelamento DATE,
+            status TEXT NOT NULL DEFAULT 'Ativo'
         )
     ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS tabelas_auxiliares (
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS licitacoes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo TEXT,
-            dados TEXT
+            modalidade TEXT NOT NULL,
+            objeto TEXT NOT NULL,
+            valor_estimado REAL NOT NULL,
+            data_abertura DATE NOT NULL,
+            data_homologacao DATE,
+            situacao TEXT NOT NULL DEFAULT 'Em andamento'
         )
     ''')
-    c.execute("INSERT OR IGNORE INTO users (username, password) VALUES (?, ?)",
-              ("admin", hashlib.sha256("admin".encode()).hexdigest()))
-    conn.commit()
-    conn.close()
 
-init_db()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS contratos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            numero_contrato TEXT NOT NULL UNIQUE,
+            fornecedor TEXT NOT NULL,
+            objeto TEXT NOT NULL,
+            valor REAL NOT NULL,
+            data_inicio DATE NOT NULL,
+            data_fim DATE NOT NULL,
+            situacao TEXT NOT NULL DEFAULT 'Vigente'
+        )
+    ''')
 
-CATEGORIAS = {
-    "REPASSE_FEDERAL": {"nome": "REPASSE FEDERAL", "cor": "#0066cc", "icone": "💰"},
-    "REPASSE_ESTADUAL": {"nome": "REPASSE ESTADUAL", "cor": "#009900", "icone": "🟢"},
-    "RECURSO_MUNICIPAL": {"nome": "RECURSO MUNICIPAL", "cor": "#cc6600", "icone": "🟠"},
-    "TRANSFERENCIA": {"nome": "TRANSFERÊNCIA", "cor": "#6600cc", "icone": "🟣"},
-    "TRANSPOSICAO": {"nome": "TRANSPOSIÇÃO", "cor": "#cc0000", "icone": "🔴"}
-}
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL
+        )
+    ''')
 
-TABELAS_CORE = [
-    "PPA", "LDO", "LOA", "PAS", "Plano Saúde", "Licitações", "Ordens Compra", "Contratos",
-    "Fornecedores", "Prestadores", "Pacientes", "RENEN", "RENASES", "RENAME", "REMUME"
-]
+    admin_hash = hashlib.sha256("admin".encode()).hexdigest()
+    cursor.execute('''
+        INSERT OR IGNORE INTO usuarios (username, password_hash) VALUES (?, ?)
+    ''', ("admin", admin_hash))
 
-TABELAS_SUS = ["RENEN", "RENASES", "RENAME", "REMUME"]
-
-CORE_SAUDE = ["Atendimento Médico", "Atendimento de Enfermagem", "Vacinação", "Saúde Bucal", "Atenção Básica"]
-
-LINKS_UTEIS = {
-    "SIA/SUS": "https://sia.saude.gov.br",
-    "SIAB": "https://siab.saude.gov.br",
-    "SIGTAP": "https://sigtap.saude.gov.br",
-    "CNES": "http://cnes.datasus.gov.br",
-    "IBGE": "https://www.ibge.gov.br"
-}
-
-ORGANOGRAMA = [
-    "Secretaria Municipal de Saúde",
-    "  └── Diretoria de Atenção Básica",
-    "  └── Diretoria de Saúde Ambulatorial e Hospitalar",
-    "  └── Diretoria de Vigilância em Saúde",
-    "  └── Diretoria de Assistência Farmacêutica",
-    "  └── Diretoria de Planejamento e Gestão"
-]
-
-FLUXOS = ["Entrada do Paciente", "Marcacao de Consulta", "Dispensação de Medicamentos", "Regulação", "Alta Hospitalar"]
-
-SISTEMAS_EXTERNOS = ["e-Gestão AB", "SIA/SUS", "SIAB", "SIGTAP", "CNES", "SISVAN", "NOTIVISA"]
-
-
-def hash_pw(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
-
-
-def check_login(username, password):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, hash_pw(password)))
-    user = c.fetchone()
-    conn.close()
-    return user is not None
-
-
-def listar_dotacoes(filtro_categoria=None):
-    conn = sqlite3.connect(DB_PATH)
-    query = "SELECT * FROM dotacoes"
-    params = []
-    if filtro_categoria:
-        query += " WHERE categoria=?"
-        params.append(filtro_categoria)
-    df = pd.read_sql_query(query, conn, params=params)
-    conn.close()
-    return df
-
-
-def criar_dotacao(nome, categoria, valor_total, fonte, status):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO dotacoes (nome, categoria, valor_total, valor_usado, fonte, status, historico) VALUES (?, ?, ?, ?, ?, ?, ?)",
-              (nome, categoria, valor_total, 0, fonte, status, ""))
     conn.commit()
     conn.close()
 
 
-def incluir_valor_dotacao(dotacao_id, valor, descricao):
-    if valor <= 0:
-        return False
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT valor_total, valor_usado, historico FROM dotacoes WHERE id=?", (dotacao_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        return False
-    valor_total, valor_usado, historico = row
-    novo_usado = valor_usado + valor
-    if novo_usado > valor_total:
-        conn.close()
-        return False
-    data_hora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    nova_linha = f"{data_hora} - R$ {valor:,.2f} - {descricao}\n"
-    c.execute("UPDATE dotacoes SET valor_usado=?, historico=? WHERE id=?",
-              (novo_usado, historico + nova_linha, dotacao_id))
-    c.execute("INSERT INTO movimentacoes (dotacao_id, valor, data, descricao) VALUES (?, ?, ?, ?)",
-              (dotacao_id, valor, data_hora, descricao))
-    conn.commit()
-    conn.close()
-    return True
+@st.cache_resource
+def get_db_connection():
+    return sqlite3.connect(DB_NAME, check_same_thread=False)
 
 
-def get_resumo_categoria(categoria):
-    df = listar_dotacoes(categoria)
-    total = df["valor_total"].sum() if not df.empty else 0
-    usado = df["valor_usado"].sum() if not df.empty else 0
-    qtd = len(df)
-    perc = (usado / total * 100) if total > 0 else 0
-    return total, usado, perc, qtd
+conn = get_db_connection()
 
 
-# Login
-if "logado" not in st.session_state:
-    st.session_state.logado = False
-if "filtro_categoria" not in st.session_state:
-    st.session_state.filtro_categoria = None
-
-if not st.session_state.logado:
-    st.title("MARMED - Gestão em Saúde Pública de Luminárias-MG")
-    st.subheader("Login")
-    username = st.text_input("Usuário")
-    password = st.text_input("Senha", type="password")
-    if st.button("Entrar"):
-        if check_login(username, password):
-            st.session_state.logado = True
-            st.success("Login realizado com sucesso!")
-            st.rerun()
-        else:
-            st.error("Usuário ou senha inválidos.")
-    st.stop()
-
-# Sidebar
-st.sidebar.title("MARMED - Luminárias-MG")
-st.sidebar.write(f"Usuário: admin")
-if st.sidebar.button("Sair"):
-    st.session_state.logado = False
-    st.rerun()
-
-menu = st.sidebar.radio("Menu", [
-    "INÍCIO", "PLANEJAMENTO", "LICITAÇÕES", "CADASTROS", "TABELAS SUS", "CORE SAÚDE",
-    "SISTEMAS EXTERNOS", "ORGANOGRAMA", "FINANCEIRO", "RELATÓRIOS"
-])
-
-# Menu expanders
-with st.sidebar.expander("INÍCIO"):
-    st.write("Dashboard, resumo financeiro e contas.")
-with st.sidebar.expander("PLANEJAMENTO"):
-    st.write("PPA, LDO, LOA, PAS, Plano Saúde.")
-with st.sidebar.expander("LICITAÇÕES"):
-    st.write("Licitações, Ordens de Compra, Contratos.")
-with st.sidebar.expander("CADASTROS"):
-    st.write("Fornecedores, Prestadores, Pacientes.")
-with st.sidebar.expander("TABELAS SUS"):
-    st.write("RENEN, RENASES, RENAME, REMUME.")
-with st.sidebar.expander("CORE SAÚDE"):
-    st.write("Atendimentos, Atenção Básica, Vigilância.")
-with st.sidebar.expander("SISTEMAS EXTERNOS"):
-    for nome, url in LINKS_UTEIS.items():
-        st.markdown(f"- [{nome}]({url})")
-with st.sidebar.expander("ORGANOGRAMA"):
-    for linha in ORGANOGRAMA:
-        st.write(linha)
-with st.sidebar.expander("FINANCEIRO"):
-    st.write("Execução Financeira, Suplementações, Cadastrar Nova Conta.")
-with st.sidebar.expander("RELATÓRIOS"):
-    st.write("Exportações e relatórios consolidados.")
+def verificar_login(username, password):
+    cursor = conn.cursor()
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    cursor.execute(
+        "SELECT id FROM usuarios WHERE username=? AND password_hash=?",
+        (username, password_hash)
+    )
+    result = cursor.fetchone()
+    return result is not None
 
 
-if menu == "INÍCIO":
-    st.title("Dashboard - MARMED Luminárias-MG")
-    st.markdown("### Blocos de Fontes de Recursos")
+def formatar_moeda(valor):
+    try:
+        if valor is None:
+            return "R$ 0,00"
+        return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        return "R$ 0,00"
 
-    cols = st.columns(5)
-    for idx, (cat_key, cat_info) in enumerate(CATEGORIAS.items()):
-        total, usado, perc, qtd = get_resumo_categoria(cat_key)
-        with cols[idx]:
-            st.markdown(f"""
-                <div style="background-color:{cat_info['cor']};padding:15px;border-radius:12px;color:white;text-align:center;margin-bottom:10px;">
-                    <div style="font-size:40px;">{cat_info['icone']}</div>
-                    <h4 style="margin:5px 0;">{cat_info['nome']}</h4>
-                    <h3 style="margin:5px 0;">R$ {total:,.2f}</h3>
-                    <p style="margin:2px 0;">Usado: R$ {usado:,.2f} ({perc:.1f}%)</p>
-                    <progress value="{perc}" max="100" style="width:100%;"></progress>
-                    <p style="margin:2px 0;">{qtd} conta(s)/dotação(ões)</p>
-                </div>
-            """, unsafe_allow_html=True)
-            if st.button("Ver Contas", key=f"btn_{cat_key}"):
-                st.session_state.filtro_categoria = cat_key
+
+def parse_valor(valor_str):
+    try:
+        if isinstance(valor_str, (int, float)):
+            return float(valor_str)
+        valor_str = str(valor_str).replace("R$", "").replace(".", "").replace(",", ".").strip()
+        return float(valor_str) if valor_str else 0.0
+    except Exception:
+        return 0.0
+
+
+def login_page():
+    st.markdown("<<br><br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown(
+            """
+            <div style='text-align: center; padding: 20px; border-radius: 10px; background-color: #f0f2f6;'>
+                <h1 style='color: #1f4e79;'>MARMED</h1>
+                <h3 style='color: #333;'>Gestão em Saúde Pública de Luminárias-MG</h3>
+                <p style='color: #555;'>Sistema de Gestão Financeira e Administrativa</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        st.markdown("<<br>", unsafe_allow_html=True)
+        with st.form("login_form"):
+            st.subheader("Login")
+            username = st.text_input("Usuário")
+            password = st.text_input("Senha", type="password")
+            submitted = st.form_submit_button("Entrar", use_container_width=True)
+            if submitted:
+                if not username or not password:
+                    st.error("Preencha usuário e senha.")
+                else:
+                    if verificar_login(username, password):
+                        st.session_state.authenticated = True
+                        st.session_state.username = username
+                        st.session_state.page = "Dashboard"
+                        st.rerun()
+                    else:
+                        st.error("Credenciais inválidas.")
+
+
+def sidebar_navigation():
+    with st.sidebar:
+        st.markdown(f"### Bem-vindo, {st.session_state.get('username', 'admin')}")
+        st.divider()
+
+        paginas = [
+            "Dashboard",
+            "Contas a Pagar",
+            "Contas a Receber",
+            "Empenhos",
+            "Licitações",
+            "Contratos",
+            "Relatórios"
+        ]
+
+        for pagina in paginas:
+            if st.button(pagina, use_container_width=True, key=f"nav_{pagina}"):
+                st.session_state.page = pagina
+                st.session_state.edit_mode = False
+                st.session_state.selected_record = None
                 st.rerun()
 
-    st.markdown("---")
-    st.markdown("### Área de Contas / Dotações")
-
-    if st.session_state.filtro_categoria:
-        cat_info = CATEGORIAS[st.session_state.filtro_categoria]
-        st.markdown(f"**Filtrando por:** {cat_info['nome']} {cat_info['icone']}")
-        if st.button("Limpar Filtro"):
-            st.session_state.filtro_categoria = None
+        st.divider()
+        if st.button("Sair", use_container_width=True, key="logout"):
+            st.session_state.authenticated = False
+            st.session_state.username = None
+            st.session_state.page = "Login"
+            st.session_state.edit_mode = False
+            st.session_state.selected_record = None
             st.rerun()
 
-    df = listar_dotacoes(st.session_state.filtro_categoria)
-    if df.empty:
-        st.info("Nenhuma dotação cadastrada para este filtro.")
-    else:
-        cards_cols = st.columns(3)
-        for i, row in df.iterrows():
-            with cards_cols[i % 3]:
-                perc = (row["valor_usado"] / row["valor_total"] * 100) if row["valor_total"] > 0 else 0
-                st.markdown(f"""
-                    <div style="border:1px solid #ddd;border-radius:10px;padding:15px;margin-bottom:10px;background-color:#fafafa;">
-                        <h4>{row['nome']}</h4>
-                        <p><strong>Categoria:</strong> {CATEGORIAS.get(row['categoria'], {}).get('nome', row['categoria'])}</p>
-                        <p><strong>Valor:</strong> R$ {row['valor_total']:,.2f}</p>
-                        <p><strong>Usado:</strong> R$ {row['valor_usado']:,.2f} ({perc:.1f}%)</p>
-                        <progress value="{perc}" max="100" style="width:100%;"></progress>
-                        <p><strong>Fonte:</strong> {row['fonte']}</p>
-                        <p><strong>Status:</strong> {row['status']}</p>
-                    </div>
-                """, unsafe_allow_html=True)
-                with st.expander("Incluir Valor", expanded=False):
-                    with st.form(key=f"form_incluir_{row['id']}"):
-                        valor_add = st.number_input("Valor a incluir (R$)", min_value=0.01, step=0.01, key=f"val_{row['id']}")
-                        desc_add = st.text_input("Descrição", key=f"desc_{row['id']}")
-                        submit_add = st.form_submit_button("Confirmar Inclusão")
-                        if submit_add:
-                            ok = incluir_valor_dotacao(row["id"], valor_add, desc_add)
-                            if ok:
-                                st.success("Valor incluído com sucesso!")
-                                st.rerun()
-                            else:
-                                st.error("Erro: valor inválido ou execede o limite da dotação.")
-                with st.expander("Histórico"):
-                    st.text(row["historico"] if row["historico"] else "Sem movimentações")
 
-elif menu == "PLANEJAMENTO":
-    st.title("Planejamento")
-    tabs = st.tabs(["PPA", "LDO", "LOA", "PAS", "Plano Saúde"])
-    for i, nome in enumerate(["PPA", "LDO", "LOA", "PAS", "Plano Saúde"]):
-        with tabs[i]:
-            st.subheader(nome)
-            st.write(f"Gerencie os dados de {nome} do município.")
-            arquivo = st.file_uploader(f"Importar {nome}", type=["csv", "xlsx"], key=f"up_{nome}")
-            if arquivo:
-                st.success(f"Arquivo {nome} carregado para processamento.")
-            st.text_area(f"Observações {nome}", key=f"obs_{nome}")
-            if st.button(f"Salvar {nome}", key=f"save_{nome}"):
-                st.success(f"{nome} salvo.")
+def dashboard_page():
+    st.title("Dashboard")
+    st.markdown("Visão geral dos recursos financeiros da saúde pública")
+    st.divider()
 
-elif menu == "LICITAÇÕES":
-    st.title("Licitações e Contratos")
-    tabs = st.tabs(["Licitações", "Ordens de Compra", "Contratos"])
-    with tabs[0]:
-        st.subheader("Licitações")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            num = st.text_input("Número da Licitação")
-        with col2:
-            modalidade = st.selectbox("Modalidade", ["Pregão", "Concorrência", "Convite", "Tomada de Preços", "Dispensa"])
-        with col3:
-            valor = st.number_input("Valor Estimado", min_value=0.0, step=0.01)
-        if st.button("Salvar Licitação"):
-            st.success("Licitação salva.")
-    with tabs[1]:
-        st.subheader("Ordens de Compra")
-        st.text_input("Número OC")
-        st.selectbox("Fornecedor", ["Fornecedor A", "Fornecedor B", "Fornecedor C"])
-        st.number_input("Valor OC", min_value=0.0, step=0.01)
-        if st.button("Salvar OC"):
-            st.success("Ordem de Compra salva.")
-    with tabs[2]:
-        st.subheader("Contratos")
-        st.text_input("Número do Contrato")
-        st.date_input("Data Início")
-        st.date_input("Data Fim")
-        if st.button("Salvar Contrato"):
-            st.success("Contrato salvo.")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.markdown(
+            """
+            <div style='background-color: #1f77b4; padding: 15px; border-radius: 10px; color: white; text-align: center;'>
+                <h5>REPASSE FEDERAL</h5>
+                <h3>R$ 1.250.000,00</h3>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    with col2:
+        st.markdown(
+            """
+            <div style='background-color: #2ca02c; padding: 15px; border-radius: 10px; color: white; text-align: center;'>
+                <h5>REPASSE ESTADUAL</h5>
+                <h3>R$ 890.000,00</h3>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    with col3:
+        st.markdown(
+            """
+            <div style='background-color: #ff7f0e; padding: 15px; border-radius: 10px; color: white; text-align: center;'>
+                <h5>RECURSO MUNICIPAL</h5>
+                <h3>R$ 450.000,00</h3>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    with col4:
+        st.markdown(
+            """
+            <div style='background-color: #9467bd; padding: 15px; border-radius: 10px; color: white; text-align: center;'>
+                <h5>TRANSFERÊNCIA</h5>
+                <h3>R$ 320.000,00</h3>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    with col5:
+        st.markdown(
+            """
+            <div style='background-color: #d62728; padding: 15px; border-radius: 10px; color: white; text-align: center;'>
+                <h5>TRANSPOSIÇÃO</h5>
+                <h3>R$ 180.000,00</h3>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-elif menu == "CADASTROS":
-    st.title("Cadastros")
-    tabs = st.tabs(["Fornecedores", "Prestadores", "Pacientes"])
-    with tabs[0]:
-        st.subheader("Fornecedores")
-        st.text_input("Razão Social")
-        st.text_input("CNPJ")
-        if st.button("Salvar Fornecedor"):
-            st.success("Fornecedor salvo.")
-    with tabs[1]:
-        st.subheader("Prestadores")
-        st.text_input("Nome do Prestador")
-        st.selectbox("Categoria Profissional", ["Médico", "Enfermeiro", "Dentista", "Farmacêutico", "Técnico"])
-        if st.button("Salvar Prestador"):
-            st.success("Prestador salvo.")
-    with tabs[2]:
-        st.subheader("Pacientes")
-        st.text_input("Nome do Paciente")
-        st.date_input("Data de Nascimento")
-        if st.button("Salvar Paciente"):
-            st.success("Paciente salvo.")
+    st.markdown("<<br>", unsafe_allow_html=True)
 
-elif menu == "TABELAS SUS":
-    st.title("Tabelas SUS")
-    tabs = st.tabs(TABELAS_SUS)
-    for i, nome in enumerate(TABELAS_SUS):
-        with tabs[i]:
-            st.subheader(nome)
-            st.write(f"Dados e importação da tabela {nome}.")
-            st.file_uploader(f"Importar {nome}", key=f"sus_up_{nome}")
-            st.text_area(f"Registros {nome}", key=f"sus_txt_{nome}")
-            if st.button(f"Salvar {nome}", key=f"sus_save_{nome}"):
-                st.success(f"{nome} salvo.")
+    col_left, col_right = st.columns(2)
+    with col_left:
+        st.subheader("Últimas Movimentações")
+        dados = [
+            {"Data": "2024-01-15", "Descrição": "Repasse Federal Janeiro", "Valor": 125000.00, "Tipo": "Entrada"},
+            {"Data": "2024-01-18", "Descrição": "Pagamento Fornecedor XYZ", "Valor": 45000.00, "Tipo": "Saída"},
+            {"Data": "2024-01-22", "Descrição": "Repasse Estadual", "Valor": 89000.00, "Tipo": "Entrada"},
+            {"Data": "2024-01-25", "Descrição": "Empenho Material Médico", "Valor": 23000.00, "Tipo": "Saída"},
+            {"Data": "2024-01-28", "Descrição": "Receita de Convênio", "Valor": 15000.00, "Tipo": "Entrada"},
+        ]
+        df = pd.DataFrame(dados)
+        df["Valor"] = df["Valor"].apply(formatar_moeda)
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
-elif menu == "CORE SAÚDE":
-    st.title("Core Saúde")
-    st.subheader("Áreas de Atenção e Serviços")
-    for area in CORE_SAUDE:
-        with st.expander(area):
-            st.write(f"Detalhamento e indicadores de {area}.")
-            st.metric("Atendimentos no Mês", 0)
-            st.metric("Meta", 0)
-            st.progress(0)
+    with col_right:
+        st.subheader("Resumo do Mês")
+        cursor = conn.cursor()
 
-elif menu == "SISTEMAS EXTERNOS":
-    st.title("Sistemas Externos e Links Úteis")
-    for nome, url in LINKS_UTEIS.items():
-        st.markdown(f"- [{nome}]({url})")
-    st.subheader("Outros Sistemas")
-    for sis in SISTEMAS_EXTERNOS:
-        st.write(f"- {sis}")
+        cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_pagar WHERE status='Pago'")
+        total_pago = cursor.fetchone()[0]
 
-elif menu == "ORGANOGRAMA":
-    st.title("Organograma e Fluxos")
-    tabs = st.tabs(["Organograma", "Fluxos"])
-    with tabs[0]:
-        st.subheader("Organograma da Secretaria de Saúde")
-        for linha in ORGANOGRAMA:
-            st.write(linha)
-    with tabs[1]:
-        st.subheader("Fluxos de Processos")
-        for fluxo in FLUXOS:
-            with st.expander(fluxo):
-                st.write(f"Descrição do fluxo: {fluxo}")
+        cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_pagar WHERE status='Pendente'")
+        total_pagar_pendente = cursor.fetchone()[0]
 
-elif menu == "FINANCEIRO":
-    st.title("Financeiro")
-    tabs = st.tabs(["Execução Financeira", "Suplementações", "Cadastrar Nova Conta"])
-    with tabs[0]:
-        st.subheader("Execução Financeira")
-        st.write("Acompanhamento de empenhos, liquidações e pagamentos.")
-        st.bar_chart({"Empenhado": [100000], "Liquidado": [80000], "Pago": [70000]})
-    with tabs[1]:
-        st.subheader("Suplementações")
-        st.selectbox("Dotação", ["Dotação 1", "Dotação 2"])
-        st.number_input("Valor Suplementado", min_value=0.0, step=0.01)
-        if st.button("Salvar Suplementação"):
-            st.success("Suplementação salva.")
-    with tabs[2]:
-        st.subheader("Cadastrar Nova Conta / Dotação")
-        with st.form("form_nova_conta"):
-            nome = st.text_input("Nome da Conta / Dotação")
-            categoria = st.selectbox("Categoria", list(CATEGORIAS.keys()), format_func=lambda x: CATEGORIAS[x]["nome"])
-            valor_total = st.number_input("Valor Total (R$)", min_value=0.01, step=0.01)
-            fonte = st.selectbox("Fonte", ["Federal", "Estadual", "Municipal", "Transferência", "Transposição", "Outra"])
-            status = st.selectbox("Status", ["Ativa", "Inativa", "Suspensa", "Encerrada"])
-            submitted = st.form_submit_button("Cadastrar Conta")
-            if submitted:
-                if nome and valor_total > 0:
-                    criar_dotacao(nome, categoria, valor_total, fonte, status)
-                    st.success("Conta cadastrada com sucesso!")
-                    st.rerun()
-                else:
-                    st.error("Preencha nome e valor válido.")
+        cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_receber WHERE status='Recebido'")
+        total_recebido = cursor.fetchone()[0]
 
-elif menu == "RELATÓRIOS":
-    st.title("Relatórios e Exportações")
-    st.subheader("Relatórios Consolidados")
-    if st.button("Gerar Relatório Financeiro Consolidado"):
-        df = listar_dotacoes()
-        if not df.empty:
-            st.dataframe(df)
-            csv = df.to_csv(index=False).encode("utf-8")
-            st.download_button("Exportar CSV", data=csv, file_name="relatorio_dotacoes.csv", mime="text/csv")
-        else:
-            st.warning("Nenhuma dotação para exportar.")
-    st.markdown("### Resumo por Categoria")
-    resumo = []
-    for cat_key, cat_info in CATEGORIAS.items():
-        total, usado, perc, qtd = get_resumo_categoria(cat_key)
-        resumo.append({
-            "Categoria": cat_info["nome"],
-            "Total": total,
-            "Usado": usado,
-            "Saldo": total - usado,
-            "Quantidade": qtd
+        cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_receber WHERE status='Pendente'")
+        total_receber_pendente = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM empenhos WHERE status='Ativo'")
+        total_empenhos = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COALESCE(SUM(valor_estimado), 0) FROM licitacoes WHERE situacao='Em andamento'")
+        total_licitacoes = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contratos WHERE situacao='Vigente'")
+        total_contratos = cursor.fetchone()[0]
+
+        resumo = pd.DataFrame({
+            "Métrica": [
+                "Total Pago (Contas a Pagar)",
+                "Total Pendente (Contas a Pagar)",
+                "Total Recebido (Contas a Receber)",
+                "Total Pendente (Contas a Receber)",
+                "Empenhos Ativos",
+                "Licitações em Andamento",
+                "Contratos Vigentes"
+            ],
+            "Valor": [
+                formatar_moeda(total_pago),
+                formatar_moeda(total_pagar_pendente),
+                formatar_moeda(total_recebido),
+                formatar_moeda(total_receber_pendente),
+                formatar_moeda(total_empenhos),
+                formatar_moeda(total_licitacoes),
+                formatar_moeda(total_contratos)
+            ]
         })
-    df_resumo = pd.DataFrame(resumo)
-    st.dataframe(df_resumo)
-    if not df_resumo.empty:
-        csv_resumo = df_resumo.to_csv(index=False).encode("utf-8")
-        st.download_button("Exportar Resumo CSV", data=csv_resumo, file_name="resumo_categorias.csv", mime="text/csv")
+        st.dataframe(resumo, use_container_width=True, hide_index=True)
+
+
+def contas_pagar_page():
+    st.title("Contas a Pagar")
+    st.markdown("Cadastro e gerenciamento de contas a pagar")
+    st.divider()
+
+    cursor = conn.cursor()
+
+    with st.expander("Adicionar Nova Conta a Pagar", expanded=False):
+        with st.form("form_add_pagar"):
+            col1, col2 = st.columns(2)
+            with col1:
+                fornecedor = st.text_input("Fornecedor", key="add_fornecedor_pagar")
+                descricao = st.text_input("Descrição", key="add_descricao_pagar")
+                valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f", key="add_valor_pagar")
+            with col2:
+                vencimento = st.date_input("Data de Vencimento", key="add_vencimento_pagar")
+                status = st.selectbox("Status", ["Pendente", "Pago", "Atrasado"], key="add_status_pagar")
+                data_pagamento = st.date_input("Data de Pagamento", value=None, key="add_data_pagamento_pagar")
+            observacao = st.text_area("Observação", key="add_observacao_pagar")
+            submitted = st.form_submit_button("Salvar", use_container_width=True)
+            if submitted:
+                if not fornecedor or not descricao or valor <= 0:
+                    st.error("Preencha todos os campos obrigatórios com valores válidos.")
+                else:
+                    try:
+                        dp = data_pagamento if status == "Pago" else None
+                        cursor.execute('''
+                            INSERT INTO contas_pagar (fornecedor, descricao, valor, vencimento, status, data_pagamento, observacao)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ''', (fornecedor, descricao, valor, vencimento, status, dp, observacao))
+                        conn.commit()
+                        st.success("Conta a pagar registrada com sucesso!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
+
+    cursor.execute("SELECT * FROM contas_pagar ORDER BY vencimento DESC")
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
+    df = pd.DataFrame(rows, columns=columns)
+
+    if not df.empty:
+        df["valor"] = df["valor"].apply(formatar_moeda)
+
+    st.subheader("Contas Cadastradas")
+    edited_df = st.data_editor(
+        df if not df.empty else pd.DataFrame(columns=columns),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_pagar",
+        hide_index=True,
+        column_config={
+            "valor": st.column_config.TextColumn("Valor (R$)")
+        }
+    )
+
+    if not df.empty and not edited_df.equals(df):
+        try:
+            for _, row in edited_df.iterrows():
+                row_id = row["id"]
+                valor_numerico = parse_valor(row["valor"])
+                cursor.execute('''
+                    UPDATE contas_pagar
+                    SET fornecedor=?, descricao=?, valor=?, vencimento=?, status=?, data_pagamento=?, observacao=?
+                    WHERE id=?
+                ''', (
+                    row["fornecedor"], row["descricao"], valor_numerico, row["vencimento"],
+                    row["status"], row.get("data_pagamento"), row.get("observacao"), row_id
+                ))
+            conn.commit()
+            st.success("Alterações salvas!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Erro ao atualizar: {e}")
+
+    if not df.empty:
+        st.subheader("Excluir Registro")
+        ids = df["id"].tolist()
+        id_excluir = st.selectbox("Selecione o ID para excluir", ids, key="delete_pagar")
+        if st.button("Excluir", key="btn_delete_pagar"):
+            try:
+                cursor.execute("DELETE FROM contas_pagar WHERE id=?", (id_excluir,))
+                conn.commit()
+                st.success("Registro excluído!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao excluir: {e}")
+
+    st.divider()
+    st.subheader("Totais")
+    cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_pagar WHERE status='Pago'")
+    total_pago = cursor.fetchone()[0]
+    cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_pagar WHERE status='Pendente'")
+    total_pendente = cursor.fetchone()[0]
+    cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_pagar WHERE status='Atrasado'")
+    total_atrasado = cursor.fetchone()[0]
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Pago", formatar_moeda(total_pago))
+    col2.metric("Total Pendente", formatar_moeda(total_pendente))
+    col3.metric("Total Atrasado", formatar_moeda(total_atrasado))
+
+
+def contas_receber_page():
+    st.title("Contas a Receber")
+    st.markdown("Cadastro e gerenciamento de contas a receber")
+    st.divider()
+
+    cursor = conn.cursor()
+
+    with st.expander("Adicionar Nova Conta a Receber", expanded=False):
+        with st.form("form_add_receber"):
+            col1, col2 = st.columns(2)
+            with col1:
+                cliente = st.text_input("Cliente", key="add_cliente_receber")
+                descricao = st.text_input("Descrição", key="add_descricao_receber")
+                valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f", key="add_valor_receber")
+            with col2:
+                vencimento = st.date_input("Data de Vencimento", key="add_vencimento_receber")
+                status = st.selectbox("Status", ["Pendente", "Recebido", "Atrasado"], key="add_status_receber")
+                data_recebimento = st.date_input("Data de Recebimento", value=None, key="add_data_recebimento_receber")
+            observacao = st.text_area("Observação", key="add_observacao_receber")
+            submitted = st.form_submit_button("Salvar", use_container_width=True)
+            if submitted:
+                if not cliente or not descricao or valor <= 0:
+                    st.error("Preencha todos os campos obrigatórios com valores válidos.")
+                else:
+                    try:
+                        dr = data_recebimento if status == "Recebido" else None
+                        cursor.execute('''
+                            INSERT INTO contas_receber (cliente, descricao, valor, vencimento, status, data_recebimento, observacao)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ''', (cliente, descricao, valor, vencimento, status, dr, observacao))
+                        conn.commit()
+                        st.success("Conta a receber registrada com sucesso!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
+
+    cursor.execute("SELECT * FROM contas_receber ORDER BY vencimento DESC")
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
+    df = pd.DataFrame(rows, columns=columns)
+
+    if not df.empty:
+        df["valor"] = df["valor"].apply(formatar_moeda)
+
+    st.subheader("Contas Cadastradas")
+    edited_df = st.data_editor(
+        df if not df.empty else pd.DataFrame(columns=columns),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_receber",
+        hide_index=True,
+        column_config={
+            "valor": st.column_config.TextColumn("Valor (R$)")
+        }
+    )
+
+    if not df.empty and not edited_df.equals(df):
+        try:
+            for _, row in edited_df.iterrows():
+                row_id = row["id"]
+                valor_numerico = parse_valor(row["valor"])
+                cursor.execute('''
+                    UPDATE contas_receber
+                    SET cliente=?, descricao=?, valor=?, vencimento=?, status=?, data_recebimento=?, observacao=?
+                    WHERE id=?
+                ''', (
+                    row["cliente"], row["descricao"], valor_numerico, row["vencimento"],
+                    row["status"], row.get("data_recebimento"), row.get("observacao"), row_id
+                ))
+            conn.commit()
+            st.success("Alterações salvas!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Erro ao atualizar: {e}")
+
+    if not df.empty:
+        st.subheader("Excluir Registro")
+        ids = df["id"].tolist()
+        id_excluir = st.selectbox("Selecione o ID para excluir", ids, key="delete_receber")
+        if st.button("Excluir", key="btn_delete_receber"):
+            try:
+                cursor.execute("DELETE FROM contas_receber WHERE id=?", (id_excluir,))
+                conn.commit()
+                st.success("Registro excluído!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao excluir: {e}")
+
+    st.divider()
+    st.subheader("Totais")
+    cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_receber WHERE status='Recebido'")
+    total_recebido = cursor.fetchone()[0]
+    cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_receber WHERE status='Pendente'")
+    total_pendente = cursor.fetchone()[0]
+    cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM contas_receber WHERE status='Atrasado'")
+    total_atrasado = cursor.fetchone()[0]
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Recebido", formatar_moeda(total_recebido))
+    col2.metric("Total Pendente", formatar_moeda(total_pendente))
+    col3.metric("Total Atrasado", formatar_moeda(total_atrasado))
+
+
+def empenhos_page():
+    st.title("Empenhos")
+    st.markdown("Cadastro e gerenciamento de empenhos")
+    st.divider()
+
+    cursor = conn.cursor()
+
+    with st.expander("Adicionar Novo Empenho", expanded=False):
+        with st.form("form_add_empenho"):
+            col1, col2 = st.columns(2)
+            with col1:
+                numero_empenho = st.text_input("Número do Empenho", key="add_numero_empenho")
+                fornecedor = st.text_input("Fornecedor", key="add_fornecedor_empenho")
+                descricao = st.text_input("Descrição", key="add_descricao_empenho")
+            with col2:
+                valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f", key="add_valor_empenho")
+                data_empenho = st.date_input("Data do Empenho", key="add_data_empenho")
+                status = st.selectbox("Status", ["Ativo", "Cancelado"], key="add_status_empenho")
+                data_cancelamento = st.date_input("Data de Cancelamento", value=None, key="add_data_cancelamento_empenho")
+            submitted = st.form_submit_button("Salvar", use_container_width=True)
+            if submitted:
+                if not numero_empenho or not fornecedor or not descricao or valor <= 0:
+                    st.error("Preencha todos os campos obrigatórios com valores válidos.")
+                else:
+                    try:
+                        dc = data_cancelamento if status == "Cancelado" else None
+                        cursor.execute('''
+                            INSERT INTO empenhos (numero_empenho, fornecedor, descricao, valor, data_empenho, data_cancelamento, status)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ''', (numero_empenho, fornecedor, descricao, valor, data_empenho, dc, status))
+                        conn.commit()
+                        st.success("Empenho registrado com sucesso!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
+
+    cursor.execute("SELECT * FROM empenhos ORDER BY data_empenho DESC")
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
+    df = pd.DataFrame(rows, columns=columns)
+
+    if not df.empty:
+        df["valor"] = df["valor"].apply(formatar_moeda)
+
+    st.subheader("Empenhos Cadastrados")
+    edited_df = st.data_editor(
+        df if not df.empty else pd.DataFrame(columns=columns),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_empenhos",
+        hide_index=True,
+        column_config={
+            "valor": st.column_config.TextColumn("Valor (R$)")
+        }
+    )
+
+    if not df.empty and not edited_df.equals(df):
+        try:
+            for _, row in edited_df.iterrows():
+                row_id = row["id"]
+                valor_numerico = parse_valor(row["valor"])
+                cursor.execute('''
+                    UPDATE empenhos
+                    SET numero_empenho=?, fornecedor=?, descricao=?, valor=?, data_empenho=?, data_cancelamento=?, status=?
+                    WHERE id=?
+                ''', (
+                    row["numero_empenho"], row["fornecedor"], row["descricao"], valor_numerico,
+                    row["data_empenho"], row.get("data_cancelamento"), row["status"], row_id
+                ))
+            conn.commit()
+            st.success("Alterações salvas!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Erro ao atualizar: {e}")
+
+    if not df.empty:
+        st.subheader("Excluir Registro")
+        ids = df["id"].tolist()
+        id_excluir = st.selectbox("Selecione o ID para excluir", ids, key="delete_empenho")
+        if st.button("Excluir", key="btn_delete_empenho"):
+            try:
+                cursor.execute("DELETE FROM empenhos WHERE id=?", (id_excluir,))
+                conn.commit()
+                st.success("Registro excluído!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao excluir: {e}")
+
+
+def licitacoes_page():
+    st.title("Licitações")
+    st.markdown("Cadastro e gerenciamento de licitações")
+    st.divider()
+
+    cursor = conn.cursor()
+
+    with st.expander("Adicionar Nova Licitação", expanded=False):
+        with st.form("form_add_licitacao"):
+            col1, col2 = st.columns(2)
+            with col1:
+                modalidade = st.text_input("Modalidade", key="add_modalidade_licitacao")
+                objeto = st.text_input("Objeto", key="add_objeto_licitacao")
+                valor_estimado = st.number_input("Valor Estimado (R$)", min_value=0.0, format="%.2f", key="add_valor_estimado_licitacao")
+            with col2:
+                data_abertura = st.date_input("Data de Abertura", key="add_data_abertura_licitacao")
+                situacao = st.selectbox("Situação", ["Em andamento", "Homologada", "Cancelada"], key="add_situacao_licitacao")
+                data_homologacao = st.date_input("Data de Homologação", value=None, key="add_data_homologacao_licitacao")
+            submitted = st.form_submit_button("Salvar", use_container_width=True)
+            if submitted:
+                if not modalidade or not objeto or valor_estimado <= 0:
+                    st.error("Preencha todos os campos obrigatórios com valores válidos.")
+                else:
+                    try:
+                        dh = data_homologacao if situacao == "Homologada" else None
+                        cursor.execute('''
+                            INSERT INTO licitacoes (modalidade, objeto, valor_estimado, data_abertura, data_homologacao, situacao)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        ''', (modalidade, objeto, valor_estimado, data_abertura, dh, situacao))
+                        conn.commit()
+                        st.success("Licitação registrada com sucesso!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
+
+    cursor.execute("SELECT * FROM licitacoes ORDER BY data_abertura DESC")
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
+    df = pd.DataFrame(rows, columns=columns)
+
+    if not df.empty:
+        df["valor_estimado"] = df["valor_estimado"].apply(formatar_moeda)
+
+    st.subheader("Licitações Cadastradas")
+    edited_df = st.data_editor(
+        df if not df.empty else pd.DataFrame(columns=columns),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_licitacoes",
+        hide_index=True,
+        column_config={
+            "valor_estimado": st.column_config.TextColumn("Valor Estimado (R$)")
+        }
+    )
+
+    if not df.empty and not edited_df.equals(df):
+        try:
+            for _, row in edited_df.iterrows():
+                row_id = row["id"]
+                valor_numerico = parse_valor(row["valor_estimado"])
+                cursor.execute('''
+                    UPDATE licitacoes
+                    SET modalidade=?, objeto=?, valor_estimado=?, data_abertura=?, data_homologacao=?, situacao=?
+                    WHERE id=?
+                ''', (
+                    row["modalidade"], row["objeto"], valor_numerico, row["data_abertura"],
+                    row.get("data_homologacao"), row["situacao"], row_id
+                ))
+            conn.commit()
+            st.success("Alterações salvas!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Erro ao atualizar: {e}")
+
+    if not df.empty:
+        st.subheader("Excluir Registro")
+        ids = df["id"].tolist()
+        id_excluir = st.selectbox("Selecione o ID para excluir", ids, key="delete_licitacao")
+        if st.button("Excluir", key="btn_delete_licitacao"):
+            try:
+                cursor.execute("DELETE FROM licitacoes WHERE id=?", (id_excluir,))
+                conn.commit()
+                st.success("Registro excluído!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao excluir: {e}")
+
+
+def contratos_page():
+    st.title("Contratos")
+    st.markdown("Cadastro e gerenciamento de contratos")
+    st.divider()
+
+    cursor = conn.cursor()
+
+    with st.expander("Adicionar Novo Contrato", expanded=False):
+        with st.form("form_add_contrato"):
+            col1, col2 = st.columns(2)
+            with col1:
+                numero_contrato = st.text_input("Número do Contrato", key="add_numero_contrato")
+                fornecedor = st.text_input("Fornecedor", key="add_fornecedor_contrato")
+                objeto = st.text_input("Objeto", key="add_objeto_contrato")
+                valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f", key="add_valor_contrato")
+            with col2:
+                data_inicio = st.date_input("Data de Início", key="add_data_inicio_contrato")
+                data_fim = st.date_input("Data de Fim", key="add_data_fim_contrato")
+                situacao = st.selectbox("Situação", ["Vigente", "Encerrado", "Suspenso"], key="add_situacao_contrato")
+            submitted = st.form_submit_button("Salvar", use_container_width=True)
+            if submitted:
+                if not numero_contrato or not fornecedor or not objeto or valor <= 0:
+                    st.error("Preencha todos os campos obrigatórios com valores válidos.")
+                elif data_fim < data_inicio:
+                    st.error("A data de fim não pode ser anterior à data de início.")
+                else:
+                    try:
+                        cursor.execute('''
+                            INSERT INTO contratos (numero_contrato, fornecedor, objeto, valor, data_inicio, data_fim, situacao)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ''', (numero_contrato, fornecedor, objeto, valor, data_inicio, data_fim, situacao))
+                        conn.commit()
+                        st.success("Contrato registrado com sucesso!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
+
+    cursor.execute("SELECT * FROM contratos ORDER BY data_inicio DESC")
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
+    df = pd.DataFrame(rows, columns=columns)
+
+    if not df.empty:
+        df["valor"] = df["valor"].apply(formatar_moeda)
+
+    st.subheader("Contratos Cadastrados")
+    edited_df = st.data_editor(
+        df if not df.empty else pd.DataFrame(columns=columns),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_contratos",
+        hide_index=True,
+        column_config={
+            "valor": st.column_config.TextColumn("Valor (R$)")
+        }
+    )
+
+    if not df.empty and not edited_df.equals(df):
+        try:
+            for _, row in edited_df.iterrows():
+                row_id = row["id"]
+                valor_numerico = parse_valor(row["valor"])
+                cursor.execute('''
+                    UPDATE contratos
+                    SET numero_contrato=?, fornecedor=?, objeto=?, valor=?, data_inicio=?, data_fim=?, situacao=?
+                    WHERE id=?
+                ''', (
+                    row["numero_contrato"], row["fornecedor"], row["objeto"], valor_numerico,
+                    row["data_inicio"], row["data_fim"], row["situacao"], row_id
+                ))
+            conn.commit()
+            st.success("Alterações salvas!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Erro ao atualizar: {e}")
+
+    if not df.empty:
+        st.subheader("Excluir Registro")
+        ids = df["id"].tolist()
+        id_excluir = st.selectbox("Selecione o ID para excluir", ids, key="delete_contrato")
+        if st.button("Excluir", key="btn_delete_contrato"):
+            try:
+                cursor.execute("DELETE FROM contratos WHERE id=?", (id_excluir,))
+                conn.commit()
+                st.success("Registro excluído!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao excluir: {e}")
+
+
+def relatorios_page():
+    st.title("Relatórios")
+    st.markdown("Visualize e exporte resumos de todas as áreas")
+    st.divider()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        data_inicio = st.date_input("Data Inicial", value=datetime.date.today().replace(day=1), key="rel_inicio")
+    with col2:
+        data_fim = st.date_input("Data Final", value=datetime.date.today(), key="rel_fim")
+
+    if data_fim < data_inicio:
+        st.error("A data final não pode ser anterior à data inicial.")
+        return
+
+    cursor = conn.cursor()
+
+    st.subheader("Contas a Pagar")
+    cursor.execute('''
+        SELECT id, fornecedor, descricao, valor, vencimento, status, data_pagamento, observacao
+        FROM contas_pagar
+        WHERE vencimento BETWEEN ? AND ?
+        ORDER BY vencimento
+    ''', (data_inicio, data_fim))
+    rows = cursor.fetchall()
+    if rows:
+        df = pd.DataFrame(rows, columns=[desc[0] for desc in cursor.description])
+        df["valor"] = df["valor"].apply(formatar_moeda)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma conta a pagar no período selecionado.")
+
+    st.subheader("Contas a Receber")
+    cursor.execute('''
+        SELECT id, cliente, descricao, valor, vencimento, status, data_recebimento, observacao
+        FROM contas_receber
+        WHERE vencimento BETWEEN ? AND ?
+        ORDER BY vencimento
+    ''', (data_inicio, data_fim))
+    rows = cursor.fetchall()
+    if rows:
+        df = pd.DataFrame(rows, columns=[desc[0] for desc in cursor.description])
+        df["valor"] = df["valor"].apply(formatar_moeda)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma conta a receber no período selecionado.")
+
+    st.subheader("Empenhos")
+    cursor.execute('''
+        SELECT id, numero_empenho, fornecedor, descricao, valor, data_empenho, data_cancelamento, status
+        FROM empenhos
+        WHERE data_empenho BETWEEN ? AND ?
+        ORDER BY data_empenho
+    ''', (data_inicio, data_fim))
+    rows = cursor.fetchall()
+    if rows:
+        df = pd.DataFrame(rows, columns=[desc[0] for desc in cursor.description])
+        df["valor"] = df["valor"].apply(formatar_moeda)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum empenho no período selecionado.")
+
+    st.subheader("Licitações")
+    cursor.execute('''
+        SELECT id, modalidade, objeto, valor_estimado, data_abertura, data_homologacao, situacao
+        FROM licitacoes
+        WHERE data_abertura BETWEEN ? AND ?
+        ORDER BY data_abertura
+    ''', (data_inicio, data_fim))
+    rows = cursor.fetchall()
+    if rows:
+        df = pd.DataFrame(rows, columns=[desc[0] for desc in cursor.description])
+        df["valor_estimado"] = df["valor_estimado"].apply(formatar_moeda)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma licitação no período selecionado.")
+
+    st.subheader("Contratos")
+    cursor.execute('''
+        SELECT id, numero_contrato, fornecedor, objeto, valor, data_inicio, data_fim, situacao
+        FROM contratos
+        WHERE data_inicio BETWEEN ? AND ?
+        ORDER BY data_inicio
+    ''', (data_inicio, data_fim))
+    rows = cursor.fetchall()
+    if rows:
+        df = pd.DataFrame(rows, columns=[desc[0] for desc in cursor.description])
+        df["valor"] = df["valor"].apply(formatar_moeda)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum contrato no período selecionado.")
+
+
+def main():
+    init_db()
+
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+    if "page" not in st.session_state:
+        st.session_state.page = "Login"
+    if "edit_mode" not in st.session_state:
+        st.session_state.edit_mode = False
+    if "selected_record" not in st.session_state:
+        st.session_state.selected_record = None
+
+    if not st.session_state.authenticated:
+        login_page()
+    else:
+        sidebar_navigation()
+        pagina = st.session_state.page
+
+        if pagina == "Dashboard":
+            dashboard_page()
+        elif pagina == "Contas a Pagar":
+            contas_pagar_page()
+        elif pagina == "Contas a Receber":
+            contas_receber_page()
+        elif pagina == "Empenhos":
+            empenhos_page()
+        elif pagina == "Licitações":
+            licitacoes_page()
+        elif pagina == "Contratos":
+            contratos_page()
+        elif pagina == "Relatórios":
+            relatorios_page()
+        else:
+            dashboard_page()
+
+
+if __name__ == "__main__":
+    main()
