@@ -1,104 +1,73 @@
 import streamlit as st
 import sqlite3
 import hashlib
+import re
 from datetime import datetime, date
 
-st.set_page_config(page_title="MARMED", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MARMED", layout="wide")
 
-def init_db():
-    conn = sqlite3.connect('marmed.db')
-    c = conn.cursor()
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS usuarios
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  nome TEXT NOT NULL,
-                  email TEXT UNIQUE NOT NULL,
-                  senha TEXT NOT NULL,
-                  tipo TEXT DEFAULT 'usuario',
-                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS contas
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  usuario_id INTEGER,
-                  esfera TEXT,
-                  tipo TEXT,
-                  fonte TEXT,
-                  valor REAL,
-                  descricao TEXT,
-                  data DATE,
-                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                  FOREIGN KEY(usuario_id) REFERENCES usuarios(id))''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS compras
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  usuario_id INTEGER,
-                  esfera TEXT,
-                  descricao TEXT,
-                  valor REAL,
-                  data DATE,
-                  status TEXT DEFAULT 'pendente',
-                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                  FOREIGN KEY(usuario_id) REFERENCES usuarios(id))''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS superavit
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  usuario_id INTEGER,
-                  esfera TEXT,
-                  valor REAL,
-                  data DATE,
-                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                  FOREIGN KEY(usuario_id) REFERENCES usuarios(id))''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS programas_saude
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  usuario_id INTEGER,
-                  nome TEXT,
-                  descricao TEXT,
-                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                  FOREIGN KEY(usuario_id) REFERENCES usuarios(id))''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS uploads
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  usuario_id INTEGER,
-                  categoria TEXT,
-                  nome_arquivo TEXT,
-                  conteudo TEXT,
-                  data DATE,
-                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                  FOREIGN KEY(usuario_id) REFERENCES usuarios(id))''')
-    
-    senha_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
+def format_currency(value):
+    if value is None: value = 0.0
+    v = float(value)
+    inteiro, centavos = f"{v:.2f}".split(".")
+    if len(inteiro) > 3:
+        partes = []
+        while len(inteiro) > 3:
+            partes.insert(0, inteiro[-3:])
+            inteiro = inteiro[:-3]
+        if inteiro:
+            partes.insert(0, inteiro)
+        inteiro = ".".join(partes)
+    return f"R$ {inteiro},{centavos}"
+
+def get_fonte(esfera):
+    if esfera == "Federal": return "1.600"
+    elif esfera == "Estadual": return "1.621"
+    elif esfera == "Municipal": return "1.500"
+    return ""
+
+def get_fonte_superavit(esfera):
+    if esfera == "Federal": return "2.600"
+    elif esfera == "Estadual": return "2.621"
+    return None
+
+def extract_text_from_bytes(file_bytes, filename):
+    text = ""
     try:
-        c.execute("INSERT OR IGNORE INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, ?)",
-                  ("Administrador", "admin", senha_hash, "admin"))
+        if filename.lower().endswith(('.txt', '.csv')):
+            text = file_bytes.decode('utf-8', errors='replace')
+        else:
+            text = f"[Arquivo: {filename}]"
     except:
-        pass
-    
-    conn.commit()
-    conn.close()
+        text = f"[Nao foi possivel extrair texto]"
+    return text
 
-def verificar_login(email, senha):
-    conn = sqlite3.connect('marmed.db')
-    c = conn.cursor()
-    senha_hash = hashlib.sha256(senha.encode()).hexdigest()
-    c.execute("SELECT * FROM usuarios WHERE email = ? AND senha = ?", (email, senha_hash))
-    usuario = c.fetchone()
-    conn.close()
-    return usuario
+def parse_br_currency(val):
+    if val is None: return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    if not val or str(val).strip() == '':
+        return 0.0
+    v = str(val).replace('R$ ', '').replace('R$', '').replace('.', '').replace(',', '.')
+    try:
+        return float(v)
+    except:
+        return 0.0
 
-def format_currency(valor):
-    if valor is None:
-        return "R$ 0,00"
-    v = float(valor)
-    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+def menor_que(a, b):
+    return a &lt; b
 
-init_db()
+def menor_ou_igual(a, b):
+    return a &lt;= b
 
-if 'usuario_id' not in st.session_state:
-    st.session_state.usuario_id = None
-if 'usuario_nome' not in st.session_state:
-    st.session_state.usuario_nome = None
-if 'usuario_tipo' not in st.session_state:
-    st.session_state.usuario_tipo = None
-if 'pagina' not in st.session_state:
-    st.session_state.pagina = 'login'
+def maior_que(a, b):
+    return a > b
+
+def inject_masks():
+    st.markdown("""
+    <script>
+    (function() {
+        function aplicarMascaras() {
+            document.querySelectorAll('[data-testid="stTextInput"]').forEach(function(el) {
+                var label = el.querySelector('label');
+                var input 
