@@ -1,866 +1,1133 @@
 import streamlit as st
-import hashlib
 import sqlite3
-import pandas as pd
-import json
+import hashlib
+import time
 import random
+import os
 from datetime import datetime, timedelta
 
-st.set_page_config(
-    page_title="MARMED - Sistema Integrado",
-    page_icon="🏥",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+DB_PATH = "marmed.db"
 
-# ============== CSS CUSTOMIZADO ==============
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;800&display=swap');
-
-/* Reset */
-* { font-family: 'Montserrat', sans-serif; box-sizing: border-box; }
-
-/* Background gradiente */
-.stApp {
-    background: linear-gradient(135deg, #0a0e27 0%, #0d2137 50%, #1a3a5c 100%) !important;
-    color: #ffffff !important;
-}
-
-/* Canvas de partículas */
-#particles-canvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-    pointer-events: none;
-}
-
-/* Container principal */
-.main-container {
-    position: relative;
-    z-index: 10;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-}
-
-/* Cartão de vidro */
-.glass-card {
-    background: rgba(255, 255, 255, 0.08) !important;
-    backdrop-filter: blur(16px) !important;
-    -webkit-backdrop-filter: blur(16px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    border-radius: 24px !important;
-    padding: 3rem 2.5rem !important;
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4), 0 0 60px rgba(0, 212, 255, 0.1) !important;
-    width: 100%;
-    max-width: 460px;
-    text-align: center;
-    perspective: 1000px;
-}
-
-/* Logo MARMED 3D animação */
-.logo-container {
-    display: flex;
-    justify-content: center;
-    gap: 6px;
-    margin-bottom: 1.5rem;
-    perspective: 800px;
-}
-
-.logo-letter {
-    display: inline-block;
-    font-size: 3.2rem;
-    font-weight: 800;
-    color: #00d4ff;
-    text-shadow: 0 0 20px rgba(0, 212, 255, 0.6), 0 0 40px rgba(0, 212, 255, 0.3);
-    transform-style: preserve-3d;
-    opacity: 0;
-    animation: flyIn3D 1.2s ease-out forwards;
-}
-
-.logo-letter:nth-child(1) { animation-delay: 0.0s; transform: translate3d(-200px, -150px, -300px) rotateX(45deg) rotateY(-60deg); }
-.logo-letter:nth-child(2) { animation-delay: 0.15s; transform: translate3d(180px, -200px, -250px) rotateX(-60deg) rotateY(45deg); }
-.logo-letter:nth-child(3) { animation-delay: 0.3s; transform: translate3d(0px, -250px, -400px) rotateX(75deg) rotateY(0deg); }
-.logo-letter:nth-child(4) { animation-delay: 0.45s; transform: translate3d(-220px, 150px, -350px) rotateX(-45deg) rotateY(60deg); }
-.logo-letter:nth-child(5) { animation-delay: 0.6s; transform: translate3d(200px, 180px, -300px) rotateX(30deg) rotateY(-45deg); }
-.logo-letter:nth-child(6) { animation-delay: 0.75s; transform: translate3d(0px, 220px, -500px) rotateX(-75deg) rotateY(30deg); }
-
-@keyframes flyIn3D {
-    0% {
-        opacity: 0;
-    }
-    30% {
-        opacity: 0.5;
-    }
-    100% {
-        opacity: 1;
-        transform: translate3d(0, 0, 0) rotateX(0) rotateY(0);
-    }
-}
-
-/* Subtítulo */
-.subtitle {
-    font-size: 1.8rem !important;
-    font-weight: 700 !important;
-    color: #ffffff !important;
-    letter-spacing: 2px !important;
-    margin-bottom: 2.5rem !important;
-    text-transform: uppercase;
-    text-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
-}
-
-/* Labels de usuário e senha */
-.login-label {
-    font-size: 1.1rem !important;
-    font-weight: 700 !important;
-    color: #00d4ff !important;
-    text-shadow: 0 0 10px rgba(0, 212, 255, 0.5), 0 0 20px rgba(0, 212, 255, 0.3) !important;
-    margin-bottom: 0.5rem !important;
-    display: block;
-    text-align: left;
-    letter-spacing: 0.5px;
-}
-
-/* Campos de input */
-.stTextInput > div > div > input {
-    background: rgba(0, 0, 0, 0.25) !important;
-    border: 2px solid rgba(0, 212, 255, 0.3) !important;
-    border-radius: 12px !important;
-    color: #ffffff !important;
-    font-size: 1rem !important;
-    padding: 1rem 1.2rem !important;
-    transition: all 0.3s ease !important;
-}
-.stTextInput > div > div > input:focus {
-    border-color: #00d4ff !important;
-    box-shadow: 0 0 20px rgba(0, 212, 255, 0.3) !important;
-    background: rgba(0, 0, 0, 0.35) !important;
-}
-
-/* Botão invisível do form */
-.invisible-submit {
-    display: none !important;
-}
-
-/* Texto Acesso */
-.acesso-text {
-    font-size: 1.2rem !important;
-    font-weight: 600 !important;
-    color: #ffffff !important;
-    margin-top: 2rem !important;
-    letter-spacing: 3px !important;
-    text-transform: uppercase;
-    opacity: 0.9;
-    text-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
-}
-
-.acesso-divider {
-    width: 80px;
-    height: 3px;
-    background: linear-gradient(90deg, transparent, #00d4ff, transparent);
-    margin: 0 auto 0.8rem auto;
-    border-radius: 2px;
-}
-
-/* Mensagens de erro */
-.stAlert {
-    background: rgba(255, 0, 0, 0.15) !important;
-    border: 1px solid rgba(255, 100, 100, 0.4) !important;
-    color: #ffcccc !important;
-    border-radius: 12px !important;
-}
-
-/* Dashboard cards */
-.metric-card {
-    background: rgba(255, 255, 255, 0.08) !important;
-    backdrop-filter: blur(10px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    border-radius: 16px !important;
-    padding: 1.5rem !important;
-    text-align: center !important;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
-    transition: transform 0.3s ease !important;
-}
-.metric-card:hover {
-    transform: translateY(-5px) !important;
-}
-.metric-value {
-    font-size: 2.2rem !important;
-    font-weight: 800 !important;
-    color: #00d4ff !important;
-}
-.metric-label {
-    font-size: 0.95rem !important;
-    color: rgba(255, 255, 255, 0.8) !important;
-    margin-top: 0.5rem !important;
-}
-
-/* Tabelas */
-.stDataFrame {
-    border-radius: 12px !important;
-    overflow: hidden !important;
-}
-
-/* Sidebar */
-.css-1d391kg, .css-163ttbj {
-    background: rgba(10, 14, 39, 0.95) !important;
-}
-
-/* Botões */
-.stButton > button {
-    background: linear-gradient(135deg, #00d4ff, #0077b6) !important;
-    color: #ffffff !important;
-    border: none !important;
-    border-radius: 12px !important;
-    padding: 0.7rem 1.5rem !important;
-    font-weight: 600 !important;
-    transition: all 0.3s ease !important;
-}
-.stButton > button:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 10px 25px rgba(0, 212, 255, 0.4) !important;
-}
-
-/* Esconder footer e menu padrão */
-#MainMenu { visibility: hidden; }
-footer { visibility: hidden; }
-header { visibility: hidden; }
-</style>
-
-<<canvas id="particles-canvas"></canvas>
-
-<script>
-const canvas = document.getElementById('particles-canvas');
-const ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-
-const particles = [];
-for (let i = 0; i < 60; i++) {
-    particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        radius: Math.random() * 2 + 0.5,
-        vx: (Math.random() - 0.5) * 0.5,
-        vy: (Math.random() - 0.5) * 0.5,
-        alpha: Math.random() * 0.5 + 0.2
-    });
-}
-
-function animate() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    particles.forEach(p => {
-        p.x += p.vx;
-        p.y += p.vy;
-        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(0, 212, 255, ${p.alpha})`;
-        ctx.fill();
-    });
-    requestAnimationFrame(animate);
-}
-animate();
-
-window.addEventListener('resize', () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-});
-</script>
-""", unsafe_allow_html=True)
-
-# ============== BANCO DE DADOS ==============
-@st.cache_resource
-def get_db():
-    conn = sqlite3.connect('marmed.db', check_same_thread=False)
-    c = conn.cursor()
-    c.executescript('''
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            usuario TEXT UNIQUE NOT NULL,
-            senha_hash TEXT NOT NULL,
-            nome TEXT NOT NULL,
-            email TEXT,
-            perfil TEXT DEFAULT 'usuario',
-            ativo INTEGER DEFAULT 1,
-            data_criacao TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS contratos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            numero TEXT NOT NULL,
-            objeto TEXT NOT NULL,
-            contratada TEXT NOT NULL,
-            cnpj TEXT,
-            valor REAL DEFAULT 0,
-            data_inicio TEXT,
-            data_fim TEXT,
-            status TEXT DEFAULT 'Ativo',
-            gestor TEXT,
-            observacoes TEXT,
-            data_criacao TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS financeiro (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            descricao TEXT NOT NULL,
-            tipo TEXT NOT NULL,
-            categoria TEXT,
-            valor REAL DEFAULT 0,
-            data_vencimento TEXT,
-            data_pagamento TEXT,
-            status TEXT DEFAULT 'Pendente',
-            contrato_id INTEGER,
-            observacoes TEXT,
-            data_criacao TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (contrato_id) REFERENCES contratos(id)
-        );
-        CREATE TABLE IF NOT EXISTS fornecedores (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            razao_social TEXT NOT NULL,
-            nome_fantasia TEXT,
-            cnpj TEXT UNIQUE,
-            email TEXT,
-            telefone TEXT,
-            endereco TEXT,
-            categoria TEXT,
-            status TEXT DEFAULT 'Ativo',
-            data_criacao TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS medicamentos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            principio_ativo TEXT,
-            fabricante TEXT,
-            codigo TEXT UNIQUE,
-            quantidade INTEGER DEFAULT 0,
-            valor_unitario REAL DEFAULT 0,
-            validade TEXT,
-            status TEXT DEFAULT 'Ativo',
-            data_criacao TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS relatorios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            titulo TEXT NOT NULL,
-            tipo TEXT,
-            conteudo TEXT,
-            data_geracao TEXT DEFAULT CURRENT_TIMESTAMP,
-            gerado_por TEXT
-        );
-    ''')
-    conn.commit()
-    return conn
 
 def init_db():
-    conn = get_db()
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM usuarios WHERE usuario='admin'")
-    if c.fetchone()[0] == 0:
-        senha_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
-        c.execute("""
-            INSERT INTO usuarios (usuario, senha_hash, nome, email, perfil)
-            VALUES (?, ?, ?, ?, ?)
-        """, ("admin", senha_hash, "Administrador MARMED", "admin@marmed.com", "admin"))
-        conn.commit()
-    return conn
 
-def verify_password(password, stored_hash):
-    return hashlib.sha256(password.encode()).hexdigest() == stored_hash
+    c.execute('''CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL,
+        nome TEXT,
+        created_at TEXT
+    )''')
 
-def get_user(username):
-    conn = init_db()
+    c.execute('''CREATE TABLE IF NOT EXISTS pacientes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        cpf TEXT,
+        telefone TEXT,
+        email TEXT,
+        data_nascimento TEXT,
+        endereco TEXT,
+        convenio TEXT,
+        observacoes TEXT,
+        created_at TEXT
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS medicos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        crm TEXT,
+        especialidade TEXT,
+        telefone TEXT,
+        email TEXT,
+        created_at TEXT
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS consultas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        paciente_id INTEGER,
+        medico_id INTEGER,
+        data_hora TEXT,
+        motivo TEXT,
+        status TEXT,
+        observacoes TEXT,
+        created_at TEXT,
+        FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
+        FOREIGN KEY (medico_id) REFERENCES medicos(id)
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS procedimentos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        descricao TEXT,
+        valor REAL,
+        created_at TEXT
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS exames (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        paciente_id INTEGER,
+        nome TEXT NOT NULL,
+        resultado TEXT,
+        data TEXT,
+        medico_id INTEGER,
+        created_at TEXT,
+        FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
+        FOREIGN KEY (medico_id) REFERENCES medicos(id)
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS financeiro (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo TEXT NOT NULL,
+        descricao TEXT,
+        valor REAL,
+        data TEXT,
+        categoria TEXT,
+        created_at TEXT
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS usuarios_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
+        acao TEXT,
+        data_hora TEXT
+    )''')
+
+    default_hash = hashlib.sha256("Diretor2025#".encode()).hexdigest()
+    c.execute("SELECT id FROM usuarios WHERE username = ?", ("admin",))
+    if not c.fetchone():
+        c.execute('''INSERT INTO usuarios (username, password_hash, role, nome, created_at)
+                     VALUES (?, ?, ?, ?, ?)''',
+                  ("admin", default_hash, "administrador", "Administrador", now_str()))
+
+    conn.commit()
+    conn.close()
+
+
+def now_str():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def verify_user(username, password):
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT * FROM usuarios WHERE usuario=? AND ativo=1", (username,))
-    return c.fetchone()
+    c.execute("SELECT id, password_hash, role, nome FROM usuarios WHERE username = ?", (username,))
+    row = c.fetchone()
+    conn.close()
+    if row and row[1] == hash_password(password):
+        return {"id": row[0], "username": username, "role": row[2], "nome": row[3]}
+    return None
 
-# ============== ESTADOS DE SESSÃO ==============
-if 'autenticado' not in st.session_state:
-    st.session_state.autenticado = False
-if 'usuario' not in st.session_state:
-    st.session_state.usuario = None
-if 'nome' not in st.session_state:
-    st.session_state.nome = None
-if 'perfil' not in st.session_state:
-    st.session_state.perfil = None
-if 'pagina' not in st.session_state:
-    st.session_state.pagina = 'Dashboard'
-if 'login_error' not in st.session_state:
-    st.session_state.login_error = None
 
-# ============== PÁGINA DE LOGIN ==============
-def login_page():
-    st.markdown('<div class="main-container">', unsafe_allow_html=True)
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    
-    # Logo MARMED 3D animado
-    st.markdown('''
-        <div class="logo-container">
-            <span class="logo-letter">M</span>
-            <span class="logo-letter">A</span>
-            <span class="logo-letter">R</span>
-            <span class="logo-letter">M</span>
-            <span class="logo-letter">E</span>
-            <span class="logo-letter">D</span>
-        </div>
-    ''', unsafe_allow_html=True)
-    
-    st.markdown('<div class="subtitle">SISTEMA INTEGRADO DE GESTAO</div>', unsafe_allow_html=True)
-    
-    # Formulário de login (submissão por Enter)
-    with st.form("login_form", clear_on_submit=False):
-        st.markdown('<label class="login-label">👤 Usuário</label>', unsafe_allow_html=True)
-        username = st.text_input("", key="login_user", placeholder="Digite seu usuário", label_visibility="collapsed")
-        
-        st.markdown('<label class="login-label">🔒 Senha</label>', unsafe_allow_html=True)
-        password = st.text_input("", type="password", key="login_pass", placeholder="Digite sua senha", label_visibility="collapsed")
-        
-        # Botão invisível que mantém funcionalidade de Enter
-        submitted = st.form_submit_button("Entrar", use_container_width=True)
-    
-    # Ocultar botão via CSS após renderização
-    st.markdown('''
-        <style>
-        div[data-testid="stForm"] button[kind="secondaryFormSubmit"] {
-            display: none !important;
+def log_action(username, acao):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO usuarios_log (username, acao, data_hora) VALUES (?, ?, ?)",
+              (username, acao, now_str()))
+    conn.commit()
+    conn.close()
+
+
+def change_password(username, current, new, confirm):
+    if not current or not new or not confirm:
+        return "Preencha todos os campos."
+    if new != confirm:
+        return "Nova senha e confirmacao nao coincidem."
+    if len(new) < 6:
+        return "Nova senha deve ter no minimo 6 caracteres."
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT password_hash FROM usuarios WHERE username = ?", (username,))
+    row = c.fetchone()
+    if not row or row[0] != hash_password(current):
+        conn.close()
+        return "Senha atual incorreta."
+    c.execute("UPDATE usuarios SET password_hash = ? WHERE username = ?",
+              (hash_password(new), username))
+    conn.commit()
+    conn.close()
+    return None
+
+
+def format_currency(value):
+    if value is None:
+        value = 0.0
+    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def load_css():
+    css = """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+
+    html, body, .stApp {
+        background: #050b14 !important;
+        color: #e0f7ff !important;
+        font-family: 'Orbitron', sans-serif;
+    }
+
+    #particles-canvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 0;
+        pointer-events: none;
+    }
+
+    .glass-card {
+        position: relative;
+        z-index: 10;
+        background: rgba(10, 20, 35, 0.75);
+        border: 1px solid rgba(0, 212, 255, 0.25);
+        border-radius: 20px;
+        padding: 2.5rem;
+        max-width: 480px;
+        margin: 0 auto;
+        box-shadow: 0 0 40px rgba(0, 212, 255, 0.15), inset 0 0 20px rgba(0, 212, 255, 0.05);
+        backdrop-filter: blur(12px);
+    }
+
+    .title-3d {
+        font-family: 'Orbitron', sans-serif;
+        font-size: 3.5rem;
+        font-weight: 900;
+        text-align: center;
+        color: #00d4ff;
+        text-shadow: 0 0 20px rgba(0, 212, 255, 0.8), 0 0 40px rgba(0, 212, 255, 0.5);
+        margin-bottom: 0.5rem;
+    }
+
+    .title-3d span {
+        display: inline-block;
+        animation: flyIn 1.2s ease-out forwards;
+        opacity: 0;
+        transform: translate3d(120px, -120px, 300px) rotateY(90deg);
+    }
+
+    .title-3d span:nth-child(1) { animation-delay: 0.0s; }
+    .title-3d span:nth-child(2) { animation-delay: 0.1s; }
+    .title-3d span:nth-child(3) { animation-delay: 0.2s; }
+    .title-3d span:nth-child(4) { animation-delay: 0.3s; }
+    .title-3d span:nth-child(5) { animation-delay: 0.4s; }
+    .title-3d span:nth-child(6) { animation-delay: 0.5s; }
+
+    @keyframes flyIn {
+        0% {
+            opacity: 0;
+            transform: translate3d(120px, -120px, 300px) rotateY(90deg);
+            text-shadow: 0 0 0 transparent;
         }
-        </style>
-    ''', unsafe_allow_html=True)
-    
-    # Texto Acesso no rodapé do card
-    st.markdown('<div class="acesso-divider"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="acesso-text">Acesso</div>', unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)  # fecha glass-card
-    st.markdown('</div>', unsafe_allow_html=True)  # fecha main-container
-    
-    if submitted:
-        if not username or not password:
-            st.error("⚠️ Preencha usuário e senha.")
-        else:
-            user = get_user(username)
-            if user and verify_password(password, user[2]):
-                st.session_state.autenticado = True
-                st.session_state.usuario = user[1]
-                st.session_state.nome = user[3]
-                st.session_state.perfil = user[5]
-                st.session_state.pagina = 'Dashboard'
+        60% {
+            opacity: 1;
+            transform: translate3d(-10px, 5px, -30px) rotateY(-10deg);
+            text-shadow: 0 0 30px rgba(0, 212, 255, 1);
+        }
+        100% {
+            opacity: 1;
+            transform: translate3d(0, 0, 0) rotateY(0deg);
+            text-shadow: 0 0 20px rgba(0, 212, 255, 0.8), 0 0 40px rgba(0, 212, 255, 0.5);
+        }
+    }
+
+    .subtitle-glow {
+        text-align: center;
+        font-size: 1.8rem;
+        color: #a0eaff;
+        text-shadow: 0 0 15px rgba(0, 212, 255, 0.6);
+        margin-bottom: 2rem;
+        letter-spacing: 2px;
+    }
+
+    .cyan-label {
+        color: #00d4ff !important;
+        font-weight: 700;
+        text-shadow: 0 0 8px rgba(0, 212, 255, 0.8);
+        font-size: 1rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .access-text {
+        text-align: center;
+        color: #00d4ff;
+        font-size: 0.95rem;
+        margin-top: 1.5rem;
+        text-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+    }
+
+    .stTextInput > div > div > input {
+        background: rgba(0, 20, 40, 0.6) !important;
+        color: #e0f7ff !important;
+        border: 1px solid rgba(0, 212, 255, 0.4) !important;
+        border-radius: 10px !important;
+        box-shadow: 0 0 10px rgba(0, 212, 255, 0.1) inset !important;
+    }
+
+    .stTextInput > div > div > input:focus {
+        border-color: #00d4ff !important;
+        box-shadow: 0 0 15px rgba(0, 212, 255, 0.3) !important;
+    }
+
+    .stButton > button {
+        background: linear-gradient(90deg, #00d4ff, #0066ff) !important;
+        color: #050b14 !important;
+        font-weight: 900 !important;
+        border: none !important;
+        border-radius: 12px !important;
+        box-shadow: 0 0 20px rgba(0, 212, 255, 0.4) !important;
+        transition: all 0.3s ease !important;
+    }
+
+    .stButton > button:hover {
+        transform: scale(1.03);
+        box-shadow: 0 0 30px rgba(0, 212, 255, 0.7) !important;
+    }
+
+    .metric-card {
+        background: rgba(10, 25, 45, 0.8);
+        border: 1px solid rgba(0, 212, 255, 0.2);
+        border-radius: 15px;
+        padding: 1.2rem;
+        text-align: center;
+        box-shadow: 0 0 15px rgba(0, 212, 255, 0.1);
+    }
+
+    .metric-value {
+        font-size: 2rem;
+        font-weight: 900;
+        color: #00d4ff;
+        text-shadow: 0 0 10px rgba(0, 212, 255, 0.6);
+    }
+
+    .metric-label {
+        font-size: 0.95rem;
+        color: #a0eaff;
+        margin-top: 0.3rem;
+    }
+
+    .sidebar-title {
+        font-family: 'Orbitron', sans-serif;
+        font-weight: 900;
+        text-shadow: 0 0 15px rgba(0, 212, 255, 0.6);
+    }
+
+    h1, h2, h3, h4, h5, h6, p, label, span, div {
+        color: #e0f7ff !important;
+    }
+
+    .stDataFrame, .stTable {
+        background: rgba(10, 25, 45, 0.6) !important;
+    }
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
+
+def particles_html():
+    return """
+    <canvas id="particles-canvas"></canvas>
+    <script>
+    const canvas = document.getElementById('particles-canvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+    for (let i = 0; i < 80; i++) {
+        particles.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            r: Math.random() * 2 + 1,
+            dx: (Math.random() - 0.5) * 0.5,
+            dy: (Math.random() - 0.5) * 0.5,
+            alpha: Math.random() * 0.5 + 0.2
+        });
+    }
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => {
+            p.x += p.dx;
+            p.y += p.dy;
+            if (p.x < 0 || p.x > canvas.width) p.dx *= -1;
+            if (p.y < 0 || p.y > canvas.height) p.dy *= -1;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0, 212, 255, ' + p.alpha + ')';
+            ctx.fill();
+        });
+        requestAnimationFrame(animate);
+    }
+    animate();
+    </script>
+    """
+
+
+def login_page():
+    load_css()
+    st.markdown(particles_html(), unsafe_allow_html=True)
+
+    st.markdown("<<div style='height:10vh;'></div>", unsafe_allow_html=True)
+
+    st.markdown(
+        '<div class="glass-card">'
+        '<div class="title-3d">'
+        '<span>M</span><span>A</span><span>R</span><span>M</span><span>E</span><span>D</span>'
+        '</div>'
+        '<div class="subtitle-glow">SISTEMA INTEGRADO DE GESTAO</div>'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown("<<div style='height:2vh;'></div>", unsafe_allow_html=True)
+
+    with st.container():
+        st.markdown(
+            '<div class="glass-card">',
+            unsafe_allow_html=True
+        )
+
+        st.markdown('<div class="cyan-label">Usuario</div>', unsafe_allow_html=True)
+        username = st.text_input("", key="login_user", label_visibility="collapsed")
+
+        st.markdown('<div class="cyan-label">Senha</div>', unsafe_allow_html=True)
+        password = st.text_input("", type="password", key="login_pass", label_visibility="collapsed")
+
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            submitted = st.button("ENTRAR", use_container_width=True, key="login_btn")
+
+        if submitted:
+            user = verify_user(username, password)
+            if user:
+                st.session_state["user"] = user
+                st.session_state["authenticated"] = True
+                st.session_state["page"] = "Dashboard"
+                log_action(username, "Login realizado")
                 st.rerun()
             else:
-                st.error("❌ Usuário ou senha inválidos.")
+                st.error("Usuario ou senha invalidos.")
 
-# ============== SIDEBAR ==============
+        st.markdown('<div class="access-text">Acesso</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
 def sidebar():
-    if not st.session_state.autenticado:
-        return
-    
-    with st.sidebar:
-        st.markdown(f"""
-        <div style="text-align: center; margin-bottom: 2rem;">
-            <h2 style="color: #00d4ff; font-weight: 800;">MARMED</h2>
-            <p style="color: rgba(255,255,255,0.7);">Olá, {st.session_state.nome}</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        paginas = ['Dashboard', 'Contratos', 'Financeiro', 'Fornecedores', 'Medicamentos', 'Usuários', 'Relatórios', 'Trocar Senha']
-        
-        for pagina in paginas:
-            if pagina == 'Usuários' and st.session_state.perfil != 'admin':
-                continue
-            if st.button(pagina, key=f"nav_{pagina}", use_container_width=True):
-                st.session_state.pagina = pagina
-                st.rerun()
-        
-        st.markdown('<hr style="border-color: rgba(255,255,255,0.1); margin: 2rem 0;">', unsafe_allow_html=True)
-        if st.button('🚪 Sair', key='btn_sair', use_container_width=True):
-            for key in ['autenticado', 'usuario', 'nome', 'perfil', 'pagina']:
-                st.session_state[key] = None if key in ['usuario', 'nome', 'perfil', 'pagina'] else False
-            st.rerun()
+    st.sidebar.markdown('<h1 style="text-align:center; color:#00d4ff;">MARMED</h1>', unsafe_allow_html=True)
+    st.sidebar.markdown(f"<<p style='text-align:center;'>Usuario: {st.session_state['user']['nome']}</p>", unsafe_allow_html=True)
 
-# ============== DASHBOARD ==============
-def dashboard():
-    st.markdown("<<h1 style='color: #ffffff; font-weight: 800;'>Dashboard</h1>", unsafe_allow_html=True)
-    st.markdown("<<p style='color: rgba(255,255,255,0.7);'>Visão geral do sistema MARMED</p>", unsafe_allow_html=True)
-    
-    conn = init_db()
-    c = conn.cursor()
-    
-    c.execute("SELECT COUNT(*) FROM contratos")
-    total_contratos = c.fetchone()[0]
-    c.execute("SELECT COALESCE(SUM(valor), 0) FROM financeiro WHERE tipo='Receita'")
-    total_receitas = c.fetchone()[0] or 0
-    c.execute("SELECT COALESCE(SUM(valor), 0) FROM financeiro WHERE tipo='Despesa'")
-    total_despesas = c.fetchone()[0] or 0
-    c.execute("SELECT COUNT(*) FROM fornecedores WHERE status='Ativo'")
-    total_fornecedores = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM medicamentos")
-    total_medicamentos = c.fetchone()[0]
-    
-    col1, col2, col3, col4, col5 = st.columns(5)
-    metricas = [
-        (col1, "Contratos", total_contratos, "📄"),
-        (col2, "Receitas", f"R$ {total_receitas:,.2f}", "💰"),
-        (col3, "Despesas", f"R$ {total_despesas:,.2f}", "💸"),
-        (col4, "Fornecedores", total_fornecedores, "🏢"),
-        (col5, "Medicamentos", total_medicamentos, "💊")
+    menu = [
+        "Dashboard",
+        "Pacientes",
+        "Medicos",
+        "Consultas",
+        "Procedimentos",
+        "Exames",
+        "Financeiro",
+        "Usuarios",
+        "Trocar Senha",
+        "Sair"
     ]
-    
-    for col, label, value, icon in metricas:
-        with col:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div style="font-size: 2rem;">{icon}</div>
-                <div class="metric-value">{value}</div>
-                <div class="metric-label">{label}</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    st.markdown("<<br>", unsafe_allow_html=True)
-    
-    col_left, col_right = st.columns(2)
-    with col_left:
-        st.markdown("<<h3 style='color: #00d4ff;'>Contratos Recentes</h3>", unsafe_allow_html=True)
-        df = pd.read_sql_query("SELECT numero, contratada, valor, status FROM contratos ORDER BY id DESC LIMIT 5", conn)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    
-    with col_right:
-        st.markdown("<<h3 style='color: #00d4ff;'>Movimentações Financeiras</h3>", unsafe_allow_html=True)
-        df = pd.read_sql_query("SELECT descricao, tipo, valor, status FROM financeiro ORDER BY id DESC LIMIT 5", conn)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+    choice = st.sidebar.radio("Navegacao", menu, label_visibility="collapsed")
+    return choice
 
-# ============== CRUD GENÉRICO ==============
-def crud_page(tabela, colunas, titulo, form_fields):
-    st.markdown(f"<<h1 style='color: #ffffff; font-weight: 800;'>{titulo}</h1>", unsafe_allow_html=True)
-    
-    conn = init_db()
+
+def count_rows(table):
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    
-    tab_list, tab_create, tab_edit = st.tabs(["📋 Listar", "➕ Cadastrar", "✏️ Editar/Excluir"])
-    
-    # LISTAR
-    with tab_list:
-        df = pd.read_sql_query(f"SELECT {', '.join(colunas)} FROM {tabela} ORDER BY id DESC", conn)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    
-    # CRIAR
-    with tab_create:
-        with st.form(f"form_criar_{tabela}"):
-            valores = {}
-            for field in form_fields:
-                nome = field['nome']
-                tipo = field.get('tipo', 'text')
-                if tipo == 'text':
-                    valores[nome] = st.text_input(field['label'])
-                elif tipo == 'number':
-                    valores[nome] = st.number_input(field['label'], value=0.0)
-                elif tipo == 'date':
-                    valores[nome] = st.date_input(field['label'], datetime.today()).strftime('%Y-%m-%d')
-                elif tipo == 'select':
-                    valores[nome] = st.selectbox(field['label'], field['opcoes'])
-                elif tipo == 'textarea':
-                    valores[nome] = st.text_area(field['label'])
-            
-            submitted = st.form_submit_button("Salvar", use_container_width=True)
-            if submitted:
-                campos = list(valores.keys())
-                placeholders = ', '.join(['?' for _ in campos])
-                c.execute(f"INSERT INTO {tabela} ({', '.join(campos)}) VALUES ({placeholders})", list(valores.values()))
-                conn.commit()
-                st.success("✅ Cadastro realizado com sucesso!")
-                st.rerun()
-    
-    # EDITAR / EXCLUIR
-    with tab_edit:
-        df = pd.read_sql_query(f"SELECT id, {', '.join(colunas)} FROM {tabela} ORDER BY id DESC", conn)
-        if df.empty:
-            st.info("Nenhum registro encontrado.")
+    c.execute(f"SELECT COUNT(*) FROM {table}")
+    result = c.fetchone()[0]
+    conn.close()
+    return result
+
+
+def dashboard_page():
+    st.markdown("<<h1 style='color:#00d4ff;'>Dashboard</h1>", unsafe_allow_html=True)
+
+    cols = st.columns(4)
+    metrics = [
+        ("Pacientes", count_rows("pacientes")),
+        ("Medicos", count_rows("medicos")),
+        ("Consultas", count_rows("consultas")),
+        ("Exames", count_rows("exames")),
+    ]
+    for col, (label, value) in zip(cols, metrics):
+        col.markdown(
+            f'<div class="metric-card"><div class="metric-value">{value}</div><div class="metric-label">{label}</div></div>',
+            unsafe_allow_html=True
+        )
+
+    st.markdown("<<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    cols2 = st.columns(4)
+    metrics2 = [
+        ("Procedimentos", count_rows("procedimentos")),
+        ("Usuarios", count_rows("usuarios")),
+        ("Financeiro", count_rows("financeiro")),
+    ]
+    for col, (label, value) in zip(cols2, metrics2):
+        col.markdown(
+            f'<div class="metric-card"><div class="metric-value">{value}</div><div class="metric-label">{label}</div></div>',
+            unsafe_allow_html=True
+        )
+
+    st.markdown("<<div style='height:30px;'></div>", unsafe_allow_html=True)
+    st.markdown("<<h3 style='color:#00d4ff;'>Acoes Recentes</h3>", unsafe_allow_html=True)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT username, acao, data_hora FROM usuarios_log ORDER BY id DESC LIMIT 10")
+    rows = c.fetchall()
+    conn.close()
+    if rows:
+        st.table({"Usuario": [r[0] for r in rows], "Acao": [r[1] for r in rows], "Data/Hora": [r[2] for r in rows]})
+    else:
+        st.info("Nenhuma acao registrada.")
+
+
+def generic_crud_page(title, table, fields, list_columns, order_by="id"):
+    st.markdown(f"<<h1 style='color:#00d4ff;'>{title}</h1>", unsafe_allow_html=True)
+
+    tab1, tab2, tab3 = st.tabs(["Listar", "Adicionar", "Editar/Excluir"])
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(f"SELECT {', '.join(list_columns)} FROM {table} ORDER BY {order_by} DESC")
+    rows = c.fetchall()
+    conn.close()
+
+    with tab1:
+        if rows:
+            st.table({col: [r[i] for r in rows] for i, col in enumerate(list_columns)})
         else:
-            id_sel = st.selectbox("Selecione o registro", df['id'].tolist(), format_func=lambda x: f"ID {x}")
-            registro = df[df['id'] == id_sel].iloc[0]
-            
-            with st.form(f"form_editar_{tabela}"):
-                valores = {}
-                for field in form_fields:
-                    nome = field['nome']
-                    tipo = field.get('tipo', 'text')
-                    val_atual = registro.get(nome, '')
-                    if tipo == 'text':
-                        valores[nome] = st.text_input(field['label'], value=str(val_atual) if val_atual else '')
-                    elif tipo == 'number':
-                        valores[nome] = st.number_input(field['label'], value=float(val_atual) if val_atual else 0.0)
-                    elif tipo == 'date':
-                        try:
-                            default = datetime.strptime(val_atual, '%Y-%m-%d')
-                        except:
-                            default = datetime.today()
-                        valores[nome] = st.date_input(field['label'], default).strftime('%Y-%m-%d')
-                    elif tipo == 'select':
-                        valores[nome] = st.selectbox(field['label'], field['opcoes'], index=field['opcoes'].index(val_atual) if val_atual in field['opcoes'] else 0)
-                    elif tipo == 'textarea':
-                        valores[nome] = st.text_area(field['label'], value=str(val_atual) if val_atual else '')
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    atualizar = st.form_submit_button("Atualizar", use_container_width=True)
-                with col2:
-                    excluir = st.form_submit_button("Excluir", use_container_width=True)
-                
-                if atualizar:
-                    sets = ', '.join([f"{k}=?" for k in valores.keys()])
-                    vals = list(valores.values()) + [id_sel]
-                    c.execute(f"UPDATE {tabela} SET {sets} WHERE id=?", vals)
-                    conn.commit()
-                    st.success("✅ Registro atualizado!")
-                    st.rerun()
-                
-                if excluir:
-                    c.execute(f"DELETE FROM {tabela} WHERE id=?", (id_sel,))
-                    conn.commit()
-                    st.warning("🗑️ Registro excluído!")
-                    st.rerun()
+            st.info("Nenhum registro encontrado.")
 
-# ============== PÁGINAS DE MÓDULOS ==============
-def contratos_page():
-    form_fields = [
-        {'nome': 'numero', 'label': 'Número do Contrato', 'tipo': 'text'},
-        {'nome': 'objeto', 'label': 'Objeto', 'tipo': 'text'},
-        {'nome': 'contratada', 'label': 'Contratada', 'tipo': 'text'},
-        {'nome': 'cnpj', 'label': 'CNPJ', 'tipo': 'text'},
-        {'nome': 'valor', 'label': 'Valor (R$)', 'tipo': 'number'},
-        {'nome': 'data_inicio', 'label': 'Data Início', 'tipo': 'date'},
-        {'nome': 'data_fim', 'label': 'Data Fim', 'tipo': 'date'},
-        {'nome': 'status', 'label': 'Status', 'tipo': 'select', 'opcoes': ['Ativo', 'Inativo', 'Encerrado', 'Suspenso']},
-        {'nome': 'gestor', 'label': 'Gestor', 'tipo': 'text'},
-        {'nome': 'observacoes', 'label': 'Observações', 'tipo': 'textarea'},
+    with tab2:
+        with st.form(f"add_{table}"):
+            values = {}
+            for field in fields:
+                if field["type"] == "text":
+                    values[field["name"]] = st.text_input(field["label"])
+                elif field["type"] == "number":
+                    values[field["name"]] = st.number_input(field["label"], min_value=0.0, step=0.01)
+                elif field["type"] == "date":
+                    values[field["name"]] = st.date_input(field["label"]).strftime("%Y-%m-%d")
+                elif field["type"] == "datetime":
+                    values[field["name"]] = st.text_input(field["label"], value=now_str())
+                elif field["type"] == "select":
+                    values[field["name"]] = st.selectbox(field["label"], field["options"])
+                elif field["type"] == "textarea":
+                    values[field["name"]] = st.text_area(field["label"])
+            submitted = st.form_submit_button("Salvar")
+            if submitted:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                cols = [f"{k}" for k in values.keys()] + ["created_at"]
+                placeholders = ["?"] * len(cols)
+                c.execute(f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join(placeholders)})",
+                          list(values.values()) + [now_str()])
+                conn.commit()
+                conn.close()
+                log_action(st.session_state["user"]["username"], f"Adicionou {title}")
+                st.success("Registro salvo com sucesso!")
+                st.rerun()
+
+    with tab3:
+        if not rows:
+            st.info("Nenhum registro para editar ou excluir.")
+            return
+
+        selected_id = st.selectbox("Selecione o registro", [r[0] for r in rows], format_func=lambda x: f"ID {x}")
+
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute(f"SELECT * FROM {table} WHERE id = ?", (selected_id,))
+        record = c.fetchone()
+        col_names = [desc[0] for desc in c.description]
+        conn.close()
+
+        record_dict = dict(zip(col_names, record))
+
+        with st.form(f"edit_{table}"):
+            updated = {}
+            for field in fields:
+                current = record_dict.get(field["name"], "")
+                if field["type"] == "text":
+                    updated[field["name"]] = st.text_input(field["label"], value=str(current) if current else "")
+                elif field["type"] == "number":
+                    updated[field["name"]] = st.number_input(field["label"], value=float(current) if current else 0.0, step=0.01)
+                elif field["type"] == "date":
+                    updated[field["name"]] = st.text_input(field["label"], value=str(current) if current else "")
+                elif field["type"] == "datetime":
+                    updated[field["name"]] = st.text_input(field["label"], value=str(current) if current else now_str())
+                elif field["type"] == "select":
+                    updated[field["name"]] = st.selectbox(field["label"], field["options"], index=field["options"].index(current) if current in field["options"] else 0)
+                elif field["type"] == "textarea":
+                    updated[field["name"]] = st.text_area(field["label"], value=str(current) if current else "")
+
+            col_save, col_delete = st.columns(2)
+            with col_save:
+                save = st.form_submit_button("Atualizar")
+            with col_delete:
+                delete = st.form_submit_button("Excluir")
+
+            if save:
+                set_clause = ", ".join([f"{k} = ?" for k in updated.keys()])
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", list(updated.values()) + [selected_id])
+                conn.commit()
+                conn.close()
+                log_action(st.session_state["user"]["username"], f"Editou {title}")
+                st.success("Registro atualizado!")
+                st.rerun()
+
+            if delete:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute(f"DELETE FROM {table} WHERE id = ?", (selected_id,))
+                conn.commit()
+                conn.close()
+                log_action(st.session_state["user"]["username"], f"Excluiu {title}")
+                st.success("Registro excluido!")
+                st.rerun()
+
+
+def pacientes_page():
+    fields = [
+        {"name": "nome", "label": "Nome", "type": "text"},
+        {"name": "cpf", "label": "CPF", "type": "text"},
+        {"name": "telefone", "label": "Telefone", "type": "text"},
+        {"name": "email", "label": "Email", "type": "text"},
+        {"name": "data_nascimento", "label": "Data de Nascimento", "type": "date"},
+        {"name": "endereco", "label": "Endereco", "type": "text"},
+        {"name": "convenio", "label": "Convenio", "type": "text"},
+        {"name": "observacoes", "label": "Observacoes", "type": "textarea"},
     ]
-    crud_page('contratos', ['numero', 'objeto', 'contratada', 'valor', 'data_inicio', 'data_fim', 'status'], 'Gestão de Contratos', form_fields)
+    generic_crud_page("Pacientes", "pacientes", fields, ["id", "nome", "cpf", "telefone"])
+
+
+def medicos_page():
+    fields = [
+        {"name": "nome", "label": "Nome", "type": "text"},
+        {"name": "crm", "label": "CRM", "type": "text"},
+        {"name": "especialidade", "label": "Especialidade", "type": "text"},
+        {"name": "telefone", "label": "Telefone", "type": "text"},
+        {"name": "email", "label": "Email", "type": "text"},
+    ]
+    generic_crud_page("Medicos", "medicos", fields, ["id", "nome", "crm", "especialidade"])
+
+
+def get_select_options(table, id_col="id", label_col="nome"):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(f"SELECT {id_col}, {label_col} FROM {table}")
+    rows = c.fetchall()
+    conn.close()
+    return {f"{r[1]} (ID {r[0]})": r[0] for r in rows}
+
+
+def consultas_page():
+    st.markdown("<<h1 style='color:#00d4ff;'>Consultas</h1>", unsafe_allow_html=True)
+
+    pacientes = get_select_options("pacientes")
+    medicos = get_select_options("medicos")
+
+    if not pacientes or not medicos:
+        st.warning("Cadastre pacientes e medicos antes de agendar consultas.")
+        return
+
+    tab1, tab2, tab3 = st.tabs(["Listar", "Adicionar", "Editar/Excluir"])
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''SELECT c.id, p.nome, m.nome, c.data_hora, c.status
+                 FROM consultas c
+                 JOIN pacientes p ON c.paciente_id = p.id
+                 JOIN medicos m ON c.medico_id = m.id
+                 ORDER BY c.id DESC''')
+    rows = c.fetchall()
+    conn.close()
+
+    with tab1:
+        if rows:
+            st.table({"ID": [r[0] for r in rows], "Paciente": [r[1] for r in rows],
+                      "Medico": [r[2] for r in rows], "Data/Hora": [r[3] for r in rows], "Status": [r[4] for r in rows]})
+        else:
+            st.info("Nenhuma consulta encontrada.")
+
+    with tab2:
+        with st.form("add_consulta"):
+            paciente_label = st.selectbox("Paciente", list(pacientes.keys()))
+            medico_label = st.selectbox("Medico", list(medicos.keys()))
+            data_hora = st.text_input("Data e Hora", value=now_str())
+            motivo = st.text_input("Motivo")
+            status = st.selectbox("Status", ["Agendada", "Confirmada", "Cancelada", "Realizada"])
+            observacoes = st.text_area("Observacoes")
+            submitted = st.form_submit_button("Salvar")
+            if submitted:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute('''INSERT INTO consultas (paciente_id, medico_id, data_hora, motivo, status, observacoes, created_at)
+                             VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                          (pacientes[paciente_label], medicos[medico_label], data_hora, motivo, status, observacoes, now_str()))
+                conn.commit()
+                conn.close()
+                log_action(st.session_state["user"]["username"], "Adicionou consulta")
+                st.success("Consulta salva!")
+                st.rerun()
+
+    with tab3:
+        if not rows:
+            st.info("Nenhuma consulta para editar.")
+            return
+
+        selected_id = st.selectbox("Selecione a consulta", [r[0] for r in rows], format_func=lambda x: f"Consulta ID {x}")
+
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT * FROM consultas WHERE id = ?", (selected_id,))
+        record = c.fetchone()
+        col_names = [desc[0] for desc in c.description]
+        conn.close()
+        record_dict = dict(zip(col_names, record))
+
+        with st.form("edit_consulta"):
+            paciente_label = st.selectbox("Paciente", list(pacientes.keys()),
+                                          index=list(pacientes.values()).index(record_dict["paciente_id"]))
+            medico_label = st.selectbox("Medico", list(medicos.keys()),
+                                        index=list(medicos.values()).index(record_dict["medico_id"]))
+            data_hora = st.text_input("Data e Hora", value=record_dict["data_hora"])
+            motivo = st.text_input("Motivo", value=record_dict["motivo"] or "")
+            status = st.selectbox("Status", ["Agendada", "Confirmada", "Cancelada", "Realizada"],
+                                  index=["Agendada", "Confirmada", "Cancelada", "Realizada"].index(record_dict["status"]) if record_dict["status"] in ["Agendada", "Confirmada", "Cancelada", "Realizada"] else 0)
+            observacoes = st.text_area("Observacoes", value=record_dict["observacoes"] or "")
+
+            col_save, col_delete = st.columns(2)
+            with col_save:
+                save = st.form_submit_button("Atualizar")
+            with col_delete:
+                delete = st.form_submit_button("Excluir")
+
+            if save:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute('''UPDATE consultas SET paciente_id=?, medico_id=?, data_hora=?, motivo=?, status=?, observacoes=?
+                             WHERE id=?''',
+                          (pacientes[paciente_label], medicos[medico_label], data_hora, motivo, status, observacoes, selected_id))
+                conn.commit()
+                conn.close()
+                log_action(st.session_state["user"]["username"], "Editou consulta")
+                st.success("Consulta atualizada!")
+                st.rerun()
+
+            if delete:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute("DELETE FROM consultas WHERE id = ?", (selected_id,))
+                conn.commit()
+                conn.close()
+                log_action(st.session_state["user"]["username"], "Excluiu consulta")
+                st.success("Consulta excluida!")
+                st.rerun()
+
+
+def procedimentos_page():
+    fields = [
+        {"name": "nome", "label": "Nome", "type": "text"},
+        {"name": "descricao", "label": "Descricao", "type": "textarea"},
+        {"name": "valor", "label": "Valor", "type": "number"},
+    ]
+    generic_crud_page("Procedimentos", "procedimentos", fields, ["id", "nome", "valor"])
+
+
+def exames_page():
+    st.markdown("<<h1 style='color:#00d4ff;'>Exames</h1>", unsafe_allow_html=True)
+
+    pacientes = get_select_options("pacientes")
+    medicos = get_select_options("medicos")
+
+    if not pacientes or not medicos:
+        st.warning("Cadastre pacientes e medicos antes de registrar exames.")
+        return
+
+    tab1, tab2, tab3 = st.tabs(["Listar", "Adicionar", "Editar/Excluir"])
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''SELECT e.id, p.nome, e.nome, e.resultado, e.data, m.nome
+                 FROM exames e
+                 JOIN pacientes p ON e.paciente_id = p.id
+                 JOIN medicos m ON e.medico_id = m.id
+                 ORDER BY e.id DESC''')
+    rows = c.fetchall()
+    conn.close()
+
+    with tab1:
+        if rows:
+            st.table({"ID": [r[0] for r in rows], "Paciente": [r[1] for r in rows],
+                      "Exame": [r[2] for r in rows], "Resultado": [r[3] for r in rows],
+                      "Data": [r[4] for r in rows], "Medico": [r[5] for r in rows]})
+        else:
+            st.info("Nenhum exame encontrado.")
+
+    with tab2:
+        with st.form("add_exame"):
+            paciente_label = st.selectbox("Paciente", list(pacientes.keys()))
+            nome = st.text_input("Nome do Exame")
+            resultado = st.text_area("Resultado")
+            data = st.text_input("Data", value=datetime.now().strftime("%Y-%m-%d"))
+            medico_label = st.selectbox("Medico", list(medicos.keys()))
+            submitted = st.form_submit_button("Salvar")
+            if submitted:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute('''INSERT INTO exames (paciente_id, nome, resultado, data, medico_id, created_at)
+                             VALUES (?, ?, ?, ?, ?, ?)''',
+                          (pacientes[paciente_label], nome, resultado, data, medicos[medico_label], now_str()))
+                conn.commit()
+                conn.close()
+                log_action(st.session_state["user"]["username"], "Adicionou exame")
+                st.success("Exame salvo!")
+                st.rerun()
+
+    with tab3:
+        if not rows:
+            st.info("Nenhum exame para editar.")
+            return
+
+        selected_id = st.selectbox("Selecione o exame", [r[0] for r in rows], format_func=lambda x: f"Exame ID {x}")
+
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT * FROM exames WHERE id = ?", (selected_id,))
+        record = c.fetchone()
+        col_names = [desc[0] for desc in c.description]
+        conn.close()
+        record_dict = dict(zip(col_names, record))
+
+        with st.form("edit_exame"):
+            paciente_label = st.selectbox("Paciente", list(pacientes.keys()),
+                                          index=list(pacientes.values()).index(record_dict["paciente_id"]))
+            nome = st.text_input("Nome do Exame", value=record_dict["nome"])
+            resultado = st.text_area("Resultado", value=record_dict["resultado"] or "")
+            data = st.text_input("Data", value=record_dict["data"] or "")
+            medico_label = st.selectbox("Medico", list(medicos.keys()),
+                                        index=list(medicos.values()).index(record_dict["medico_id"]))
+
+            col_save, col_delete = st.columns(2)
+            with col_save:
+                save = st.form_submit_button("Atualizar")
+            with col_delete:
+                delete = st.form_submit_button("Excluir")
+
+            if save:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute('''UPDATE exames SET paciente_id=?, nome=?, resultado=?, data=?, medico_id=? WHERE id=?''',
+                          (pacientes[paciente_label], nome, resultado, data, medicos[medico_label], selected_id))
+                conn.commit()
+                conn.close()
+                log_action(st.session_state["user"]["username"], "Editou exame")
+                st.success("Exame atualizado!")
+                st.rerun()
+
+            if delete:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute("DELETE FROM exames WHERE id = ?", (selected_id,))
+                conn.commit()
+                conn.close()
+                log_action(st.session_state["user"]["username"], "Excluiu exame")
+                st.success("Exame excluido!")
+                st.rerun()
+
 
 def financeiro_page():
-    conn = init_db()
-    contratos = pd.read_sql_query("SELECT id, numero FROM contratos", conn)
-    opcoes_contratos = contratos['numero'].tolist() if not contratos.empty else ['Nenhum']
-    
-    form_fields = [
-        {'nome': 'descricao', 'label': 'Descrição', 'tipo': 'text'},
-        {'nome': 'tipo', 'label': 'Tipo', 'tipo': 'select', 'opcoes': ['Receita', 'Despesa']},
-        {'nome': 'categoria', 'label': 'Categoria', 'tipo': 'select', 'opcoes': ['Pessoa', 'Material', 'Serviço', 'Medicamento', 'Outros']},
-        {'nome': 'valor', 'label': 'Valor (R$)', 'tipo': 'number'},
-        {'nome': 'data_vencimento', 'label': 'Data Vencimento', 'tipo': 'date'},
-        {'nome': 'data_pagamento', 'label': 'Data Pagamento', 'tipo': 'date'},
-        {'nome': 'status', 'label': 'Status', 'tipo': 'select', 'opcoes': ['Pendente', 'Pago', 'Atrasado', 'Cancelado']},
-        {'nome': 'contrato_id', 'label': 'Contrato (ID)', 'tipo': 'text'},
-        {'nome': 'observacoes', 'label': 'Observações', 'tipo': 'textarea'},
-    ]
-    crud_page('financeiro', ['descricao', 'tipo', 'categoria', 'valor', 'data_vencimento', 'status'], 'Gestão Financeira', form_fields)
+    st.markdown("<<h1 style='color:#00d4ff;'>Financeiro</h1>", unsafe_allow_html=True)
 
-def fornecedores_page():
-    form_fields = [
-        {'nome': 'razao_social', 'label': 'Razão Social', 'tipo': 'text'},
-        {'nome': 'nome_fantasia', 'label': 'Nome Fantasia', 'tipo': 'text'},
-        {'nome': 'cnpj', 'label': 'CNPJ', 'tipo': 'text'},
-        {'nome': 'email', 'label': 'E-mail', 'tipo': 'text'},
-        {'nome': 'telefone', 'label': 'Telefone', 'tipo': 'text'},
-        {'nome': 'endereco', 'label': 'Endereço', 'tipo': 'text'},
-        {'nome': 'categoria', 'label': 'Categoria', 'tipo': 'select', 'opcoes': ['Medicamentos', 'Material Médico', 'Serviços', 'Tecnologia', 'Outros']},
-        {'nome': 'status', 'label': 'Status', 'tipo': 'select', 'opcoes': ['Ativo', 'Inativo', 'Bloqueado']},
-    ]
-    crud_page('fornecedores', ['razao_social', 'nome_fantasia', 'cnpj', 'categoria', 'status'], 'Cadastro de Fornecedores', form_fields)
+    tab1, tab2, tab3 = st.tabs(["Listar", "Adicionar", "Editar/Excluir"])
 
-def medicamentos_page():
-    form_fields = [
-        {'nome': 'nome', 'label': 'Nome do Medicamento', 'tipo': 'text'},
-        {'nome': 'principio_ativo', 'label': 'Princípio Ativo', 'tipo': 'text'},
-        {'nome': 'fabricante', 'label': 'Fabricante', 'tipo': 'text'},
-        {'nome': 'codigo', 'label': 'Código', 'tipo': 'text'},
-        {'nome': 'quantidade', 'label': 'Quantidade', 'tipo': 'number'},
-        {'nome': 'valor_unitario', 'label': 'Valor Unitário (R$)', 'tipo': 'number'},
-        {'nome': 'validade', 'label': 'Validade', 'tipo': 'date'},
-        {'nome': 'status', 'label': 'Status', 'tipo': 'select', 'opcoes': ['Ativo', 'Inativo', 'Vencido', 'Em Falta']},
-    ]
-    crud_page('medicamentos', ['nome', 'principio_ativo', 'fabricante', 'quantidade', 'validade', 'status'], 'Controle de Medicamentos', form_fields)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, tipo, descricao, valor, data, categoria FROM financeiro ORDER BY id DESC")
+    rows = c.fetchall()
+    c.execute("SELECT SUM(valor) FROM financeiro WHERE tipo = 'Receita'")
+    receitas = c.fetchone()[0] or 0.0
+    c.execute("SELECT SUM(valor) FROM financeiro WHERE tipo = 'Despesa'")
+    despesas = c.fetchone()[0] or 0.0
+    conn.close()
+
+    saldo = receitas - despesas
+
+    cols = st.columns(3)
+    cols[0].markdown(f'<div class="metric-card"><div class="metric-value">{format_currency(receitas)}</div><div class="metric-label">Receitas</div></div>', unsafe_allow_html=True)
+    cols[1].markdown(f'<div class="metric-card"><div class="metric-value">{format_currency(despesas)}</div><div class="metric-label">Despesas</div></div>', unsafe_allow_html=True)
+    cols[2].markdown(f'<div class="metric-card"><div class="metric-value">{format_currency(saldo)}</div><div class="metric-label">Saldo</div></div>', unsafe_allow_html=True)
+
+    st.markdown("<<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    with tab1:
+        if rows:
+            st.table({"ID": [r[0] for r in rows], "Tipo": [r[1] for r in rows], "Descricao": [r[2] for r in rows],
+                      "Valor": [format_currency(r[3]) for r in rows], "Data": [r[4] for r in rows], "Categoria": [r[5] for r in rows]})
+        else:
+            st.info("Nenhum lancamento financeiro.")
+
+    with tab2:
+        with st.form("add_financeiro"):
+            tipo = st.selectbox("Tipo", ["Receita", "Despesa"])
+            descricao = st.text_input("Descricao")
+            valor = st.number_input("Valor", min_value=0.0, step=0.01)
+            data = st.text_input("Data", value=datetime.now().strftime("%Y-%m-%d"))
+            categoria = st.text_input("Categoria")
+            submitted = st.form_submit_button("Salvar")
+            if submitted:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute('''INSERT INTO financeiro (tipo, descricao, valor, data, categoria, created_at)
+                             VALUES (?, ?, ?, ?, ?, ?)''',
+                          (tipo, descricao, valor, data, categoria, now_str()))
+                conn.commit()
+                conn.close()
+                log_action(st.session_state["user"]["username"], "Adicionou lancamento financeiro")
+                st.success("Lancamento salvo!")
+                st.rerun()
+
+    with tab3:
+        if not rows:
+            st.info("Nenhum lancamento para editar.")
+            return
+
+        selected_id = st.selectbox("Selecione o lancamento", [r[0] for r in rows], format_func=lambda x: f"Lancamento ID {x}")
+
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT * FROM financeiro WHERE id = ?", (selected_id,))
+        record = c.fetchone()
+        col_names = [desc[0] for desc in c.description]
+        conn.close()
+        record_dict = dict(zip(col_names, record))
+
+        with st.form("edit_financeiro"):
+            tipo = st.selectbox("Tipo", ["Receita", "Despesa"],
+                                index=["Receita", "Despesa"].index(record_dict["tipo"]) if record_dict["tipo"] in ["Receita", "Despesa"] else 0)
+            descricao = st.text_input("Descricao", value=record_dict["descricao"] or "")
+            valor = st.number_input("Valor", value=float(record_dict["valor"]) if record_dict["valor"] else 0.0, step=0.01)
+            data = st.text_input("Data", value=record_dict["data"] or "")
+            categoria = st.text_input("Categoria", value=record_dict["categoria"] or "")
+
+            col_save, col_delete = st.columns(2)
+            with col_save:
+                save = st.form_submit_button("Atualizar")
+            with col_delete:
+                delete = st.form_submit_button("Excluir")
+
+            if save:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute('''UPDATE financeiro SET tipo=?, descricao=?, valor=?, data=?, categoria=? WHERE id=?''',
+                          (tipo, descricao, valor, data, categoria, selected_id))
+                conn.commit()
+                conn.close()
+                log_action(st.session_state["user"]["username"], "Editou lancamento financeiro")
+                st.success("Lancamento atualizado!")
+                st.rerun()
+
+            if delete:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute("DELETE FROM financeiro WHERE id = ?", (selected_id,))
+                conn.commit()
+                conn.close()
+                log_action(st.session_state["user"]["username"], "Excluiu lancamento financeiro")
+                st.success("Lancamento excluido!")
+                st.rerun()
+
 
 def usuarios_page():
-    if st.session_state.perfil != 'admin':
-        st.error("Acesso negado.")
-        return
-    
-    form_fields = [
-        {'nome': 'usuario', 'label': 'Usuário', 'tipo': 'text'},
-        {'nome': 'senha_hash', 'label': 'Senha (será criptografada)', 'tipo': 'text'},
-        {'nome': 'nome', 'label': 'Nome Completo', 'tipo': 'text'},
-        {'nome': 'email', 'label': 'E-mail', 'tipo': 'text'},
-        {'nome': 'perfil', 'label': 'Perfil', 'tipo': 'select', 'opcoes': ['admin', 'gestor', 'usuario']},
-        {'nome': 'ativo', 'label': 'Ativo', 'tipo': 'select', 'opcoes': ['1', '0']},
-    ]
-    
-    st.markdown("<<h1 style='color: #ffffff; font-weight: 800;'>Gestão de Usuários</h1>", unsafe_allow_html=True)
-    conn = init_db()
+    st.markdown("<<h1 style='color:#00d4ff;'>Usuarios</h1>", unsafe_allow_html=True)
+
+    tab1, tab2, tab3 = st.tabs(["Listar", "Adicionar", "Editar/Excluir"])
+
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    
-    tab_list, tab_create, tab_edit = st.tabs(["📋 Listar", "➕ Cadastrar", "✏️ Editar/Excluir"])
-    
-    with tab_list:
-        df = pd.read_sql_query("SELECT id, usuario, nome, email, perfil, ativo, data_criacao FROM usuarios ORDER BY id DESC", conn)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    
-    with tab_create:
-        with st.form("form_criar_usuario"):
-            usuario = st.text_input("Usuário")
-            senha = st.text_input("Senha", type="password")
-            nome = st.text_input("Nome Completo")
-            email = st.text_input("E-mail")
-            perfil = st.selectbox("Perfil", ['admin', 'gestor', 'usuario'])
-            ativo = st.selectbox("Ativo", ['1', '0'])
-            
-            submitted = st.form_submit_button("Salvar", use_container_width=True)
-            if submitted:
-                senha_hash = hashlib.sha256(senha.encode()).hexdigest()
-                c.execute("INSERT INTO usuarios (usuario, senha_hash, nome, email, perfil, ativo) VALUES (?, ?, ?, ?, ?, ?)",
-                         (usuario, senha_hash, nome, email, perfil, int(ativo)))
-                conn.commit()
-                st.success("✅ Usuário cadastrado com sucesso!")
-                st.rerun()
-    
-    with tab_edit:
-        df = pd.read_sql_query("SELECT id, usuario, nome, email, perfil, ativo FROM usuarios ORDER BY id DESC", conn)
-        if df.empty:
-            st.info("Nenhum usuário encontrado.")
+    c.execute("SELECT id, username, role, nome, created_at FROM usuarios ORDER BY id DESC")
+    rows = c.fetchall()
+    conn.close()
+
+    with tab1:
+        if rows:
+            st.table({"ID": [r[0] for r in rows], "Usuario": [r[1] for r in rows], "Perfil": [r[2] for r in rows],
+                      "Nome": [r[3] for r in rows], "Criado em": [r[4] for r in rows]})
         else:
-            id_sel = st.selectbox("Selecione o usuário", df['id'].tolist(), format_func=lambda x: f"ID {x}")
-            registro = df[df['id'] == id_sel].iloc[0]
-            
-            with st.form("form_editar_usuario"):
-                usuario = st.text_input("Usuário", value=registro['usuario'])
-                senha = st.text_input("Nova Senha (deixe em branco para manter)", type="password")
-                nome = st.text_input("Nome Completo", value=registro['nome'])
-                email = st.text_input("E-mail", value=registro['email'])
-                perfil = st.selectbox("Perfil", ['admin', 'gestor', 'usuario'], index=['admin', 'gestor', 'usuario'].index(registro['perfil']))
-                ativo = st.selectbox("Ativo", ['1', '0'], index=['1', '0'].index(str(registro['ativo'])))
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    atualizar = st.form_submit_button("Atualizar", use_container_width=True)
-                with col2:
-                    excluir = st.form_submit_button("Excluir", use_container_width=True)
-                
-                if atualizar:
-                    if senha:
-                        senha_hash = hashlib.sha256(senha.encode()).hexdigest()
-                        c.execute("UPDATE usuarios SET usuario=?, senha_hash=?, nome=?, email=?, perfil=?, ativo=? WHERE id=?",
-                                 (usuario, senha_hash, nome, email, perfil, int(ativo), id_sel))
+            st.info("Nenhum usuario encontrado.")
+
+    with tab2:
+        with st.form("add_usuario"):
+            username = st.text_input("Usuario")
+            nome = st.text_input("Nome")
+            role = st.selectbox("Perfil", ["administrador", "medico", "recepcionista", "financeiro"])
+            password = st.text_input("Senha", type="password")
+            confirm = st.text_input("Confirmar Senha", type="password")
+            submitted = st.form_submit_button("Salvar")
+            if submitted:
+                if password != confirm:
+                    st.error("Senhas nao coincidem.")
+                elif len(password) < 6:
+                    st.error("Senha deve ter no minimo 6 caracteres.")
+                else:
+                    conn = sqlite3.connect(DB_PATH)
+                    c = conn.cursor()
+                    try:
+                        c.execute('''INSERT INTO usuarios (username, password_hash, role, nome, created_at)
+                                     VALUES (?, ?, ?, ?, ?)''',
+                                  (username, hash_password(password), role, nome, now_str()))
+                        conn.commit()
+                        conn.close()
+                        log_action(st.session_state["user"]["username"], "Adicionou usuario")
+                        st.success("Usuario salvo!")
+                        st.rerun()
+                    except sqlite3.IntegrityError:
+                        st.error("Nome de usuario ja existe.")
+
+    with tab3:
+        if not rows:
+            st.info("Nenhum usuario para editar.")
+            return
+
+        selected_id = st.selectbox("Selecione o usuario", [r[0] for r in rows], format_func=lambda x: f"Usuario ID {x}")
+
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT * FROM usuarios WHERE id = ?", (selected_id,))
+        record = c.fetchone()
+        col_names = [desc[0] for desc in c.description]
+        conn.close()
+        record_dict = dict(zip(col_names, record))
+
+        with st.form("edit_usuario"):
+            username = st.text_input("Usuario", value=record_dict["username"])
+            nome = st.text_input("Nome", value=record_dict["nome"] or "")
+            role = st.selectbox("Perfil", ["administrador", "medico", "recepcionista", "financeiro"],
+                                index=["administrador", "medico", "recepcionista", "financeiro"].index(record_dict["role"]) if record_dict["role"] in ["administrador", "medico", "recepcionista", "financeiro"] else 0)
+            new_password = st.text_input("Nova Senha (deixe em branco para manter)", type="password")
+
+            col_save, col_delete = st.columns(2)
+            with col_save:
+                save = st.form_submit_button("Atualizar")
+            with col_delete:
+                delete = st.form_submit_button("Excluir")
+
+            if save:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                if new_password:
+                    if len(new_password) < 6:
+                        st.error("Nova senha deve ter no minimo 6 caracteres.")
                     else:
-                        c.execute("UPDATE usuarios SET usuario=?, nome=?, email=?, perfil=?, ativo=? WHERE id=?",
-                                 (usuario, nome, email, perfil, int(ativo), id_sel))
+                        c.execute("UPDATE usuarios SET username=?, password_hash=?, role=?, nome=? WHERE id=?",
+                                  (username, hash_password(new_password), role, nome, selected_id))
+                        conn.commit()
+                        conn.close()
+                        log_action(st.session_state["user"]["username"], "Editou usuario")
+                        st.success("Usuario atualizado!")
+                        st.rerun()
+                else:
+                    c.execute("UPDATE usuarios SET username=?, role=?, nome=? WHERE id=?",
+                              (username, role, nome, selected_id))
                     conn.commit()
-                    st.success("✅ Usuário atualizado!")
-                    st.rerun()
-                
-                if excluir:
-                    c.execute("DELETE FROM usuarios WHERE id=?", (id_sel,))
-                    conn.commit()
-                    st.warning("🗑️ Usuário excluído!")
+                    conn.close()
+                    log_action(st.session_state["user"]["username"], "Editou usuario")
+                    st.success("Usuario atualizado!")
                     st.rerun()
 
-def relatorios_page():
-    st.markdown("<<h1 style='color: #ffffff; font-weight: 800;'>Relatórios</h1>", unsafe_allow_html=True)
-    
-    conn = init_db()
-    c = conn.cursor()
-    
-    tipo_relatorio = st.selectbox("Tipo de Relatório", [
-        "Contratos por Status",
-        "Movimentação Financeira",
-        "Fornecedores Ativos",
-        "Medicamentos em Estoque",
-        "Resumo Geral"
-    ])
-    
-    if st.button("Gerar Relatório", use_container_width=True):
-        if tipo_relatorio == "Contratos por Status":
-            df = pd.read_sql_query("SELECT status, COUNT(*) as quantidade, SUM(valor) as valor_total FROM contratos GROUP BY status", conn)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        elif tipo_relatorio == "Movimentação Financeira":
-            df = pd.read_sql_query("SELECT tipo, SUM(valor) as total FROM financeiro GROUP BY tipo", conn)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        elif tipo_relatorio == "Fornecedores Ativos":
-            df = pd.read_sql_query("SELECT * FROM fornecedores WHERE status='Ativo'", conn)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        elif tipo_relatorio == "Medicamentos em Estoque":
-            df = pd.read_sql_query("SELECT nome, quantidade, valor_unitario, validade FROM medicamentos ORDER BY quantidade ASC", conn)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        elif tipo_relatorio == "Resumo Geral":
-            c.execute("SELECT COUNT(*) FROM contratos")
-            contratos = c.fetchone()[0]
-            c.execute("SELECT COUNT(*) FROM financeiro")
-            financeiro = c.fetchone()[0]
-            c.execute("SELECT COUNT(*) FROM fornecedores")
-            fornecedores = c.fetchone()[0]
-            c.execute("SELECT COUNT(*) FROM medicamentos")
-            medicamentos = c.fetchone()[0]
-            
-            resumo = pd.DataFrame({
-                'Módulo': ['Contratos', 'Financeiro', 'Fornecedores', 'Medicamentos'],
-                'Quantidade': [contratos, financeiro, fornecedores, medicamentos]
-            })
-            st.dataframe(resumo, use_container_width=True, hide_index=True)
-        
-        c.execute("INSERT INTO relatorios (titulo, tipo, gerado_por) VALUES (?, ?, ?)",
-                 (tipo_relatorio, tipo_relatorio, st.session_state.usuario))
-        conn.commit()
-        st.success("✅ Relatório gerado e salvo!")
+            if delete:
+                if selected_id == st.session_state["user"]["id"]:
+                    st.error("Nao e possivel excluir o proprio usuario.")
+                else:
+                    conn = sqlite3.connect(DB_PATH)
+                    c = conn.cursor()
+                    c.execute("DELETE FROM usuarios WHERE id = ?", (selected_id,))
+                    conn.commit()
+                    conn.close()
+                    log_action(st.session_state["user"]["username"], "Excluiu usuario")
+                    st.success("Usuario excluido!")
+                    st.rerun()
+
 
 def trocar_senha_page():
-    st.markdown("<<h1 style='color: #ffffff; font-weight: 800;'>Trocar Senha</h1>", unsafe_allow_html=True)
-    
-    conn = init_db()
-    c = conn.cursor()
-    
-    with st.form("form_trocar_senha"):
-        senha_atual = st.text_input("Senha Atual", type="password")
-        nova_senha = st.text_input("Nova Senha", type="password")
-        confirmar_senha = st.text_input("Confirmar Nova Senha", type="password")
-        
-        submitted = st.form_submit_button("Alterar Senha", use_container_width=True)
-        if submitted:
-            if not senha_atual or not nova_senha or not confirmar_senha:
-                st.error("⚠️ Preencha todos os campos.")
-            elif nova_senha != confirmar_senha:
-                st.error("⚠️ As senhas não conferem.")
-            else:
-                c.execute("SELECT senha_hash FROM usuarios WHERE usuario=?", (st.session_state.usuario,))
-                resultado = c.fetchone()
-                if resultado and verify_password(senha_atual, resultado[0]):
-                    nova_hash = hashlib.sha256(nova_senha.encode()).hexdigest()
-                    c.execute("UPDATE usuarios SET senha_hash=? WHERE usuario=?", (nova_hash, st.session_state.usuario))
-                    conn.commit()
-                    st.success("✅ Senha alterada com sucesso!")
-                else:
-                    st.error("❌ Senha atual incorreta.")
+    st.markdown("<<h1 style='color:#00d4ff;'>Trocar Senha</h1>", unsafe_allow_html=True)
 
-# ============== ROTEAMENTO ==============
-if not st.session_state.autenticado:
-    login_page()
-else:
-    sidebar()
-    pagina = st.session_state.pagina
-    
-    if pagina == 'Dashboard':
-        dashboard()
-    elif pagina == 'Contratos':
-        contratos_page()
-    elif pagina == 'Financeiro':
-        financeiro_page()
-    elif pagina == 'Fornecedores':
-        fornecedores_page()
-    elif pagina == 'Medicamentos':
-        medicamentos_page()
-    elif pagina == 'Usuários':
-        usuarios_page()
-    elif pagina == 'Relatórios':
-        relatorios_page()
-    elif pagina == 'Trocar Senha':
-        trocar_senha_page()
+    with st.form("change_password"):
+        st.markdown('<div class="cyan-label">Senha Atual</div>', unsafe_allow_html=True)
+        current = st.text_input("", type="password", key="current_pass", label_visibility="collapsed")
+
+        st.markdown('<div class="cyan-label">Nova Senha</div>', unsafe_allow_html=True)
+        new = st.text_input("", type="password", key="new_pass", label_visibility="collapsed")
+
+        st.markdown('<div class="cyan-label">Confirmar Nova Senha</div>', unsafe_allow_html=True)
+        confirm = st.text_input("", type="password", key="confirm_pass", label_visibility="collapsed")
+
+        submitted = st.form_submit_button("Trocar Senha")
+        if submitted:
+            result = change_password(st.session_state["user"]["username"], current, new, confirm)
+            if result:
+                st.error(result)
+            else:
+                log_action(st.session_state["user"]["username"], "Trocou senha")
+                st.success("Senha alterada com sucesso!")
+
+
+def main():
+    init_db()
+
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+    if "page" not in st.session_state:
+        st.session_state["page"] = "Login"
+
+    if not st.session_state["authenticated"]:
+        login_page()
+    else:
+        load_css()
+        st.markdown(particles_html(), unsafe_allow_html=True)
+        choice = sidebar()
+        st.session_state["page"] = choice
+
+        if choice == "Dashboard":
+            dashboard_page()
+        elif choice == "Pacientes":
+            pacientes_page()
+        elif choice == "Medicos":
+            medicos_page()
+        elif choice == "Consultas":
+            consultas_page()
+        elif choice == "Procedimentos":
+            procedimentos_page()
+        elif choice == "Exames":
+            exames_page()
+        elif choice == "Financeiro":
+            financeiro_page()
+        elif choice == "Usuarios":
+            usuarios_page()
+        elif choice == "Trocar Senha":
+            trocar_senha_page()
+        elif choice == "Sair":
+            log_action(st.session_state["user"]["username"], "Logout")
+            st.session_state["authenticated"] = False
+            st.session_state["user"] = None
+            st.session_state["page"] = "Login"
+            st.rerun()
+
+
+if __name__ == "__main__":
+    main()
