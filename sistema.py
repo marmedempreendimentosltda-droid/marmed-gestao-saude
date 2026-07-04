@@ -43,7 +43,7 @@ def login_page():
             margin-left: auto !important;
             margin-right: auto !important;
         }
-        .marmed-title { font-size: 52px; font-weight: 800; text-align: center; color: #e0f2fe; letter-spacing: 6px; text-shadow: 0 0 20px rgba(14, 165, 233, 0.6); margin-bottom: 8px; }
+        .marmed-title { font-size: 52px; font-weight: 800; text-align: center; color: #e0f2fe; letter-spacing: 6px; margin-bottom: 8px; }
         .subtitle { text-align: center; color: #7dd3fc; font-size: 14px; letter-spacing: 4px; margin-bottom: 36px; text-transform: uppercase; }
         .stTextInput label { color: #22d3ee !important; font-weight: 600; font-size: 13px; letter-spacing: 1px; }
         .stTextInput > div > div > input { background: rgba(30, 41, 59, 0.8) !important; border: 1px solid rgba(34, 211, 238, 0.3) !important; color: #e0f2fe !important; border-radius: 10px !important; }
@@ -73,9 +73,9 @@ def login_page():
         st.markdown('<p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:28px;">Acesso restrito a usuários autorizados</p>', unsafe_allow_html=True)
 
 def dashboard():
-    st.markdown('<h1 style="color:#e0f2fe;text-align:center;font-size:48px;font-weight:800;text-shadow:0 0 25px rgba(14,165,233,0.6);letter-spacing:6px;">MARMED</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 style="color:#e0f2fe;text-align:center;font-size:48px;font-weight:800;letter-spacing:6px;">MARMED</h1>', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#7dd3fc;text-align:center;letter-spacing:4px;margin-bottom:4px;">SISTEMA INTEGRADO DE GESTÃO</h3>', unsafe_allow_html=True)
-    st.markdown('<h2 style="color:#1e40af;text-align:center;letter-spacing:3px;font-size:20px;font-weight:700;margin-bottom:16px;text-shadow:0 0 10px rgba(30,64,175,0.3);">PREFEITURA MUNICIPAL DE LUMINÁRIAS</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1e40af;text-align:center;letter-spacing:3px;font-size:20px;font-weight:700;margin-bottom:16px;">PREFEITURA MUNICIPAL DE LUMINÁRIAS</h2>', unsafe_allow_html=True)
     st.markdown('<hr style="border-color:rgba(34,211,238,0.3);">', unsafe_allow_html=True)
     conn = sqlite3.connect("marmed.db")
     c = conn.cursor()
@@ -161,14 +161,13 @@ def main():
     if not st.session_state["logged_in"]:
         login_page()
     else:
-        st.sidebar.markdown('<h2 style="color:#22d3ee;text-align:center;">MARMED</h2>', unsafe_allow_html=True)
-        st.sidebar.markdown(f'<p style="color:#94a3b8;text-align:center;font-size:12px;">{st.session_state["username"]}</p>', unsafe_allow_html=True)
+        st.sidebar.markdown('<h3 style="color:#22d3ee;text-align:center;letter-spacing:2px;">ABA DE NAVEGAÇÃO</h3>', unsafe_allow_html=True)
         st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        if st.sidebar.button("REPASSE FEDERAL", key="nav_federal", use_container_width=True):
-            st.session_state["page"] = "REPASSE FEDERAL"
+        if st.sidebar.button("CADASTRAR CONTAS", key="nav_cadastrar", use_container_width=True):
+            st.session_state["page"] = "CADASTRAR CONTAS"
             st.rerun()
-        if st.sidebar.button("REPASSE ESTADUAL", key="nav_estadual", use_container_width=True):
-            st.session_state["page"] = "REPASSE ESTADUAL"
+        if st.sidebar.button("CONTAS CADASTRADAS", key="nav_cadastradas", use_container_width=True):
+            st.session_state["page"] = "CONTAS CADASTRADAS"
             st.rerun()
         st.sidebar.markdown('<hr>', unsafe_allow_html=True)
         if st.sidebar.button("Sair", key="logout", use_container_width=True):
@@ -177,10 +176,10 @@ def main():
         page = st.session_state["page"]
         if page == "Dashboard":
             dashboard()
-        elif page == "REPASSE FEDERAL":
-            crud_page("contas_receber", ["cliente", "descricao", "valor", "vencimento", "status"], "REPASSE FEDERAL")
-        elif page == "REPASSE ESTADUAL":
-            crud_page("contas_pagar", ["fornecedor", "descricao", "valor", "vencimento", "status"], "REPASSE ESTADUAL")
+        elif page == "CADASTRAR CONTAS":
+            crud_page("contas_receber", ["cliente", "descricao", "valor", "vencimento", "status"], "CADASTRAR CONTAS")
+        elif page == "CONTAS CADASTRADAS":
+            crud_page("contas_pagar", ["fornecedor", "descricao", "valor", "vencimento", "status"], "CONTAS CADASTRADAS")
         elif page == "Trocar Senha":
             change_password()
 
