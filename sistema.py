@@ -307,7 +307,7 @@ def realizar_compras():
                             if valor_c > saldo: st.markdown(f'<p style="color:#ef4444;">Excede {format_currency(saldo)}</p>', unsafe_allow_html=True)
                         prod = st.text_area("Produto/Servico", height=120)
                         if st.form_submit_button("Solicitar"):
-                            erros = [x for x, v in [("Ficha", ficha), ("Tipo", td), ("Data", data_c), ("Valor", valor_c>0), ("Produto", prod), ("Saldo", valor_c&lt;=saldo)] if not v]
+                            erros = [x for x, v in [("Ficha", ficha), ("Tipo", td), ("Data", data_c), ("Valor", valor_c>0), ("Produto", prod), ("Saldo", valor_c<=saldo)] if not v]
                             if erros: st.error(f"Preencha: {', '.join(erros)}")
                             else:
                                 conn.execute("INSERT INTO ordens_compra (conta_receber_id, esfera, numero_conta, fonte, ficha, tipo_despesa, data_compra, valor_compra, produto_servico, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (cid, esf, num, fonte, ficha, td, data_c, valor_c, prod, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
@@ -468,7 +468,7 @@ def plano_municipal_saude():
     conn.close()
 
 def norte_minha_gestao():
-    st.markdown('<h1 style="color:#e0f2fe;font-size:38px;">🧭 NORTE DA MINHA GESTAO</h1>', unsafe_allow_html=True>
+    st.markdown('<h1 style="color:#e0f2fe;font-size:38px;">🧭 NORTE DA MINHA GESTAO</h1>', unsafe_allow_html=True)
     st.markdown('<hr>', unsafe_allow_html=True)
     
     st.markdown(f'''
@@ -481,7 +481,7 @@ def norte_minha_gestao():
     </div>
     ''', unsafe_allow_html=True)
     
-    st.markdown('<h3 style="color:#a78bfa;">🎯 DIRETRIZES PRIORITARIAS</h3>', unsafe_allow_html=True>
+    st.markdown('<h3 style="color:#a78bfa;">🎯 DIRETRIZES PRIORITARIAS</h3>', unsafe_allow_html=True)
     
     diretrizes = [
         ("Fortalece da Atencao Primaria", "Ampliar cobertura da Estrategia Saude da Familia, garantir acesso com acolhimento e fortalecer o vinculo entre equipe e comunidade.", "#7c3aed"),
