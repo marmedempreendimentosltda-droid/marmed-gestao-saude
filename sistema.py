@@ -193,7 +193,6 @@ st.markdown(
     .mm-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; text-align: center; }
     .mm-card-value { font-size: 22px; font-weight: 800; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .mm-card-label { color: #cbd5e1; font-size: 12px; margin-top: 6px; }
-    .mm-brand-logo { width: 96px; height: 96px; margin: 0 auto 12px auto; border-radius: 50%; background: linear-gradient(135deg, #38bdf8, #818cf8); display: flex; align-items: center; justify-content: center; box-shadow: 0 12px 30px rgba(99,102,241,0.45), 0 0 0 6px rgba(56,189,248,0.10); }
     .mm-brand-title { font-size: 72px; font-weight: 800; color: #f8fafc; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
     .mm-brand-subtitle { font-size: 28px; font-weight: 600; color: #7dd3fc; text-align: center; margin-bottom: 3px; }
     .mm-brand-institution { font-size: 20px; font-weight: 500; color: #cbd5e1; text-align: center; margin-bottom: 20px; }
@@ -232,21 +231,8 @@ def tela_login():
                 inset 0 1px 0 rgba(255,255,255,0.18),
                 0 0 0 1px rgba(129,140,248,0.18);
         }
-        .login-badge-icon {
-            width: 84px;
-            height: 84px;
-            margin: 0 auto 16px auto;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 40px;
-            background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
-            box-shadow: 0 12px 30px rgba(99,102,241,0.55), 0 0 0 6px rgba(56,189,248,0.12);
-            color: #ffffff;
-        }
         .login-title {
-            font-size: 46px;
+            font-size: 64px;
             font-weight: 800;
             text-align: center;
             background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
@@ -292,9 +278,9 @@ def tela_login():
     with col2:
         st.markdown('<div class="login-card">', unsafe_allow_html=True)
         if LOGO_BASE64:
-            st.markdown(f'<div class="login-badge-icon"><img src="data:image/png;base64,{LOGO_BASE64}" style="width:70%;height:70%;object-fit:contain;"/></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="text-align:center;margin-bottom:12px;"><img src="data:image/png;base64,{LOGO_BASE64}" style="width:140px;height:140px;object-fit:contain;"/></div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="login-badge-icon">🏥</div>', unsafe_allow_html=True)
+            st.markdown('<div style="text-align:center;font-size:56px;margin-bottom:12px;">🏥</div>', unsafe_allow_html=True)
         st.markdown('<p class="login-title">MARMED</p>', unsafe_allow_html=True)
         st.markdown('<p class="login-subtitle">Gestao Inteligente de Saude Municipal</p>', unsafe_allow_html=True)
 
@@ -323,9 +309,9 @@ def tela_login():
 
 def pagina_inicio():
     if LOGO_BASE64:
-        st.markdown(f'<div class="mm-brand-logo"><img src="data:image/png;base64,{LOGO_BASE64}" style="width:70%;height:70%;object-fit:contain;"/></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="text-align:center;margin-bottom:12px;"><img src="data:image/png;base64,{LOGO_BASE64}" style="width:160px;height:160px;object-fit:contain;"/></div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div class="mm-brand-logo" style="font-size:44px;">🏥</div>', unsafe_allow_html=True)
+        st.markdown('<div style="text-align:center;font-size:64px;margin-bottom:12px;">🏥</div>', unsafe_allow_html=True)
     st.markdown('<p class="mm-brand-title">MARMED</p>', unsafe_allow_html=True)
     st.markdown('<p class="mm-brand-subtitle">Sistema Integrado de Gestao Publica</p>', unsafe_allow_html=True)
     st.markdown('<p class="mm-brand-institution">Prefeitura Municipal de Luminarias - MG</p>', unsafe_allow_html=True)
