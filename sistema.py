@@ -206,7 +206,8 @@ def cadastrar_contas():
                     (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vt, data_receb, prog, setor))
                 conn.commit()
                 conn.close()
-                st.success("Conta cadastrada com sucesso!")
+                # REDIRECIONAR PARA CONTAS CADASTRADAS
+                st.session_state["page"] = "CONTAS CADASTRADAS"
                 st.rerun()
 
 def contas_cadastradas():
@@ -221,8 +222,7 @@ def contas_cadastradas():
                 import pandas as pd
                 d = [(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11]) for x in r]
                 pdf = pd.DataFrame(d, columns=["ID", "Conta", "Fonte", "Ref.", "N/Ano", "Tipo", "Custeio", "Invest.", "Total", "Data", "Programa", "Setor"])
-                for c in ["Custeio", "Invest.", "Total"]:
-                    pdf[c] = pdf[c].apply(lambda x: format_currency(x))
+                for c in ["Custeio", "Invest.", "Total"]: pdf[c] = pdf[c].apply(lambda x: format_currency(x))
                 st.dataframe(pdf, use_container_width=True, hide_index=True)
                 st.markdown(f'<p style="color:#64748b;font-size:12px;">Total: {len(r)} conta(s) {esf}</p>', unsafe_allow_html=True)
                 st.markdown(f'<h4 style="color:#7dd3fc;">Editar / Excluir - {esf}</h4>', unsafe_allow_html=True)
