@@ -1,907 +1,1400 @@
 import streamlit as st
 import pandas as pd
-import datetime
-import hashlib
 import plotly.express as px
-from database import *
+import plotly.graph_objects as go
+from datetime import datetime, date, timedelta
+import sqlite3
+import hashlib
+import os
 
-st.set_page_config(page_title="MARMED Gestão em Saúde", layout="wide")
+DB_FILE = 'marmed.db'
+
+# ============================================================
+# CONFIGURAÇÃO INICIAL
+# ============================================================
+
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        senha_hash TEXT,
+        perfil TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS exercicios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ano INTEGER UNIQUE,
+        ativo INTEGER,
+        orcamento_total REAL
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS orgaos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT,
+        codigo TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS programas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo TEXT,
+        nome TEXT,
+        exercicio_id INTEGER
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS acoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo TEXT,
+        nome TEXT,
+        programa_id INTEGER
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS naturezas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo TEXT,
+        descricao TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS fontes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo TEXT,
+        descricao TEXT,
+        tipo TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS dotacoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exercicio_id INTEGER,
+        orgao_id INTEGER,
+        programa_id INTEGER,
+        acao_id INTEGER,
+        natureza_id INTEGER,
+        fonte_id INTEGER,
+        valor REAL
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS receitas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exercicio_id INTEGER,
+        fonte_id INTEGER,
+        descricao TEXT,
+        valor_previsto REAL,
+        valor_arrecadado REAL
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS ppa (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exercicio TEXT,
+        diretrizes TEXT,
+        objetivos TEXT,
+        metas TEXT,
+        valor_previsto REAL,
+        programa TEXT,
+        orgao TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS ldo (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exercicio TEXT,
+        descricao TEXT,
+        metas_fiscais TEXT,
+        prioridades TEXT,
+        limites_programa TEXT,
+        data_aprovacao TEXT,
+        link_lc141 TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS pas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ano INTEGER,
+        acoes TEXT,
+        indicadores TEXT,
+        meta TEXT,
+        previsao_orcamentaria REAL,
+        status TEXT,
+        observacoes TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS plano_saude (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        periodo TEXT,
+        diretrizes TEXT,
+        objetivos TEXT,
+        metas TEXT,
+        populacao_estimada INTEGER,
+        orcamento_previsto REAL
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS fornecedores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo TEXT,
+        nome TEXT,
+        cpf_cnpj TEXT,
+        endereco TEXT,
+        banco TEXT,
+        agencia TEXT,
+        conta TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS prestadores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT,
+        cnes TEXT,
+        tipo TEXT,
+        conselho TEXT,
+        validade TEXT,
+        especialidade TEXT,
+        situacao TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS pacientes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT,
+        cpf TEXT,
+        nascimento TEXT,
+        sexo TEXT,
+        endereco TEXT,
+        telefone TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS atendimentos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        paciente_id INTEGER,
+        data TEXT,
+        tipo TEXT,
+        prestador_id INTEGER,
+        descricao TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS renen (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT,
+        cnes TEXT,
+        tipo TEXT,
+        municipio TEXT,
+        gestao TEXT,
+        natureza TEXT,
+        situacao TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS licitacoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        numero TEXT,
+        modalidade TEXT,
+        objeto TEXT,
+        dotacao_id INTEGER,
+        fornecedor_id INTEGER,
+        valor_total REAL,
+        qtd_total REAL,
+        saldo REAL,
+        situacao TEXT,
+        alerta_percentual REAL
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS ordens_compra (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        licitacao_id INTEGER,
+        fornecedor_id INTEGER,
+        numero TEXT,
+        data TEXT,
+        valor REAL,
+        qtd REAL,
+        descricao TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS contratos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        numero TEXT,
+        fornecedor_id INTEGER,
+        objeto TEXT,
+        valor_inicial REAL,
+        valor_atual REAL,
+        data_inicio TEXT,
+        data_fim TEXT,
+        situacao TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS aditivos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contrato_id INTEGER,
+        tipo TEXT,
+        valor REAL,
+        data TEXT,
+        descricao TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS empenhos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dotacao_id INTEGER,
+        numero TEXT,
+        data TEXT,
+        valor_empenhado REAL,
+        valor_liquidado REAL,
+        valor_pago REAL,
+        fornecedor_id INTEGER,
+        descricao TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS suplementacoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dotacao_id INTEGER,
+        tipo TEXT,
+        numero TEXT,
+        data TEXT,
+        valor REAL,
+        descricao TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS leitos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        estabelecimento TEXT,
+        tipo TEXT,
+        total INTEGER,
+        ocupados INTEGER,
+        data TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS producao (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo TEXT,
+        estabelecimento TEXT,
+        quantidade INTEGER,
+        data TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS alertas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        modulo TEXT,
+        percentual REAL
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS configuracoes (
+        chave TEXT PRIMARY KEY,
+        valor TEXT
+    )
+    ''')
+
+    conn.commit()
+    return conn
 
 
-def hash_senha(senha):
-    return hashlib.sha256(senha.encode("utf-8")).hexdigest()
+def seed_data(conn):
+    c = conn.cursor()
+
+    c.execute("SELECT COUNT(*) FROM exercicios")
+    if c.fetchone()[0] == 0:
+        c.execute("INSERT INTO exercicios (ano, ativo, orcamento_total) VALUES (?, ?, ?)", (2026, 1, 76935000.00))
+
+    c.execute("SELECT COUNT(*) FROM orgaos")
+    if c.fetchone()[0] == 0:
+        c.execute("INSERT INTO orgaos (nome, codigo) VALUES (?, ?)", ("Secretaria Municipal de Saúde de Luminárias", "SMS-LUM"))
+
+    c.execute("SELECT COUNT(*) FROM programas")
+    if c.fetchone()[0] == 0:
+        c.execute("INSERT INTO programas (codigo, nome, exercicio_id) VALUES (?, ?, ?)", ("2010", "Saúde da Família", 1))
+        c.execute("INSERT INTO programas (codigo, nome, exercicio_id) VALUES (?, ?, ?)", ("2021", "Assistência Hospitalar e Ambulatorial", 1))
+
+    c.execute("SELECT COUNT(*) FROM acoes")
+    if c.fetchone()[0] == 0:
+        c.execute("INSERT INTO acoes (codigo, nome, programa_id) VALUES (?, ?, ?)", ("2011", "Saúde da Família - PSF", 1))
+        c.execute("INSERT INTO acoes (codigo, nome, programa_id) VALUES (?, ?, ?)", ("2022", "Atendimento Ambulatorial", 2))
+        c.execute("INSERT INTO acoes (codigo, nome, programa_id) VALUES (?, ?, ?)", ("2023", "Hospital Municipal", 2))
+
+    c.execute("SELECT COUNT(*) FROM naturezas")
+    if c.fetchone()[0] == 0:
+        for n in [("3.3.90.00", "Outras Despesas Correntes"), ("3.3.50.00", "Serviços de Terceiros"), ("4.4.50.00", "Investimentos")]:
+            c.execute("INSERT INTO naturezas (codigo, descricao) VALUES (?, ?)", n)
+
+    c.execute("SELECT COUNT(*) FROM fontes")
+    if c.fetchone()[0] == 0:
+        for f in [("10000000", "Recursos Ordinários - Receitas Federais SUS", "Federal"),
+                  ("15000000", "Receitas Federais SUS - Conta 1", "Federal"),
+                  ("15000001", "Receitas Federais SUS - Conta 2", "Federal"),
+                  ("15000002", "Receitas Federais SUS - Conta 3", "Federal"),
+                  ("15000003", "Receitas Federais SUS - Conta 4", "Federal"),
+                  ("15000004", "Receitas Federais SUS - Conta 5", "Federal"),
+                  ("15000005", "Receitas Federais SUS - Conta 6", "Federal"),
+                  ("15000006", "Receitas Federais SUS - Conta 7", "Federal"),
+                  ("16000000", "Recursos Estaduais - CIS", "Estadual")]:
+            c.execute("INSERT INTO fontes (codigo, descricao, tipo) VALUES (?, ?, ?)", f)
+
+    c.execute("SELECT COUNT(*) FROM dotacoes")
+    if c.fetchone()[0] == 0:
+        c.execute("INSERT INTO dotacoes (exercicio_id, orgao_id, programa_id, acao_id, natureza_id, fonte_id, valor) VALUES (?,?,?,?,?,?,?)", (1, 1, 1, 1, 1, 1, 50000000.0))
+        c.execute("INSERT INTO dotacoes (exercicio_id, orgao_id, programa_id, acao_id, natureza_id, fonte_id, valor) VALUES (?,?,?,?,?,?,?)", (1, 1, 2, 2, 1, 1, 15000000.0))
+        c.execute("INSERT INTO dotacoes (exercicio_id, orgao_id, programa_id, acao_id, natureza_id, fonte_id, valor) VALUES (?,?,?,?,?,?,?)", (1, 1, 2, 3, 1, 9, 11935000.0))
+
+    c.execute("SELECT COUNT(*) FROM receitas")
+    if c.fetchone()[0] == 0:
+        for desc, val in [("SUS Federal - Conta 1", 5000000.0), ("SUS Federal - Conta 2", 4500000.0), ("SUS Federal - Conta 3", 4200000.0),
+                          ("SUS Federal - Conta 4", 4100000.0), ("SUS Federal - Conta 5", 4000000.0), ("SUS Federal - Conta 6", 3900000.0),
+                          ("SUS Federal - Conta 7", 3800000.0), ("Recursos Estaduais - CIS", 11935000.0)]:
+            c.execute("INSERT INTO receitas (exercicio_id, fonte_id, descricao, valor_previsto, valor_arrecadado) VALUES (?, ?, ?, ?, ?)", (1, 1, desc, val, 0.0))
+
+    c.execute("SELECT COUNT(*) FROM renen")
+    if c.fetchone()[0] == 0:
+        for r in [("UBS Central", "1234567", "UBS", "Luminárias", "Municipal", "Público", "Ativo"),
+                  ("Hospital Municipal", "7654321", "Hospital", "Luminárias", "Municipal", "Público", "Ativo"),
+                  ("Laboratório Luminárias", "1111111", "Laboratório", "Luminárias", "Municipal", "Privado", "Ativo")]:
+            c.execute("INSERT INTO renen (nome, cnes, tipo, municipio, gestao, natureza, situacao) VALUES (?, ?, ?, ?, ?, ?, ?)", r)
+
+    c.execute("SELECT COUNT(*) FROM leitos")
+    if c.fetchone()[0] == 0:
+        for l in [("Hospital Municipal", "UTI", 10, 7), ("Hospital Municipal", "Clínica Médica", 30, 20), ("Hospital Municipal", "Obstetrícia", 12, 8)]:
+            c.execute("INSERT INTO leitos (estabelecimento, tipo, total, ocupados, data) VALUES (?, ?, ?, ?, ?)", (l[0], l[1], l[2], l[3], date.today().isoformat()))
+
+    c.execute("SELECT COUNT(*) FROM producao")
+    if c.fetchone()[0] == 0:
+        for p in [("Ambulatorial", "UBS Central", 1200), ("Hospitalar", "Hospital Municipal", 450), ("Exames", "Laboratório Luminárias", 3200)]:
+            c.execute("INSERT INTO producao (tipo, estabelecimento, quantidade, data) VALUES (?, ?, ?, ?)", (p[0], p[1], p[2], date.today().isoformat()))
+
+    c.execute("SELECT COUNT(*) FROM usuarios")
+    if c.fetchone()[0] == 0:
+        c.execute("INSERT INTO usuarios (username, senha_hash, perfil) VALUES (?, ?, ?)", ("admin", hashlib.sha256("admin".encode()).hexdigest(), "admin"))
+
+    c.execute("SELECT COUNT(*) FROM alertas")
+    if c.fetchone()[0] == 0:
+        for m in ["licitacoes", "contratos", "financeiro", "licitacao_saldo"]:
+            c.execute("INSERT INTO alertas (modulo, percentual) VALUES (?, ?)", (m, 80.0))
+
+    conn.commit()
 
 
-def pagina_dashboard():
-    st.title("🏠 Dashboard - MARMED Gestão em Saúde")
+def get_connection():
+    return sqlite3.connect(DB_FILE)
 
-    exercicios = get_all_exercicios()
-    if not exercicios:
-        st.warning("Nenhum exercício orçamentário cadastrado.")
-        return
-    ex = exercicios[0]
+
+def run_query(query, params=()):
+    conn = get_connection()
+    df = pd.read_sql_query(query, conn, params=params)
+    conn.close()
+    return df
+
+
+def run_insert(query, params=()):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(query, params)
+    conn.commit()
+    last_id = c.lastrowid
+    conn.close()
+    return last_id
+
+
+def run_update(query, params=()):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(query, params)
+    conn.commit()
+    conn.close()
+
+
+def run_delete(query, params=()):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(query, params)
+    conn.commit()
+    conn.close()
+
+
+# ============================================================
+# UTILITÁRIOS
+# ============================================================
+
+def format_currency(val):
+    try:
+        return f"R$ {val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return "R$ 0,00"
+
+
+def format_percent(val):
+    try:
+        return f"{val:.1f}%"
+    except:
+        return "0,0%"
+
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def login_page():
+    st.title("🔐 MARMED - Gestão em Saúde")
+    st.markdown("### Sistema de Gestão Pública Municipal de Saúde")
+    st.info("Use usuário **admin** e senha **admin** para acesso inicial.")
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        with st.form("login"):
+            username = st.text_input("Usuário")
+            password = st.text_input("Senha", type="password")
+            submitted = st.form_submit_button("Entrar", use_container_width=True)
+            if submitted:
+                conn = get_connection()
+                c = conn.cursor()
+                c.execute("SELECT id, username, perfil FROM usuarios WHERE username=? AND senha_hash=?", (username, hash_password(password)))
+                user = c.fetchone()
+                conn.close()
+                if user:
+                    st.session_state['authenticated'] = True
+                    st.session_state['user'] = user[1]
+                    st.session_state['perfil'] = user[2]
+                    st.rerun()
+                else:
+                    st.error("Usuário ou senha inválidos")
+
+
+def sidebar_navigation():
+    st.sidebar.markdown("# 🏥 MARMED")
+    st.sidebar.markdown("### Gestão em Saúde")
+    st.sidebar.divider()
+
+    with st.sidebar.expander("🏠 Início", expanded=True):
+        if st.button("Dashboard Principal", key="nav_dashboard", use_container_width=True):
+            st.session_state['page'] = 'dashboard'
+
+    with st.sidebar.expander("📋 Planejamento", expanded=True):
+        for label, page in [("PPA", 'ppa'), ("LDO", 'ldo'), ("LOA", 'loa'), ("PAS", 'pas'), ("Plano de Saúde", 'plano_saude')]:
+            if st.button(label, key=f"nav_{page}", use_container_width=True):
+                st.session_state['page'] = page
+
+    with st.sidebar.expander("📑 Licitações e Contratos", expanded=True):
+        for label, page in [("Licitações", 'licitacoes'), ("Ordens de Compra", 'ordens_compra'), ("Contratos", 'contratos')]:
+            if st.button(label, key=f"nav_{page}", use_container_width=True):
+                st.session_state['page'] = page
+
+    with st.sidebar.expander("👥 Cadastros", expanded=True):
+        for label, page in [("Fornecedores", 'fornecedores'), ("Prestadores de Saúde", 'prestadores'), ("Pacientes", 'pacientes'), ("RENEN", 'renen')]:
+            if st.button(label, key=f"nav_{page}", use_container_width=True):
+                st.session_state['page'] = page
+
+    with st.sidebar.expander("🏥 Core Saúde", expanded=True):
+        if st.button("Visão Geral Consolidada", key="nav_core", use_container_width=True):
+            st.session_state['page'] = 'core_saude'
+
+    with st.sidebar.expander("🔗 Sistemas Externos", expanded=True):
+        if st.button("Links Úteis", key="nav_links", use_container_width=True):
+            st.session_state['page'] = 'sistemas_externos'
+
+    with st.sidebar.expander("📊 Organograma e Fluxos", expanded=True):
+        for label, page in [("Organograma", 'organograma'), ("Fluxo Administrativo", 'fluxo_adm'), ("Fluxo da Saúde", 'fluxo_saude')]:
+            if st.button(label, key=f"nav_{page}", use_container_width=True):
+                st.session_state['page'] = page
+
+    with st.sidebar.expander("💰 Financeiro", expanded=True):
+        for label, page in [("Execução Orçamentária", 'financeiro'), ("Suplementações", 'suplementacoes')]:
+            if st.button(label, key=f"nav_{page}", use_container_width=True):
+                st.session_state['page'] = page
+
+    with st.sidebar.expander("📈 Relatórios", expanded=True):
+        for label, page in [("Exportação de Dados", 'exportacao'), ("Relatórios Consolidados", 'relatorios')]:
+            if st.button(label, key=f"nav_{page}", use_container_width=True):
+                st.session_state['page'] = page
+
+    st.sidebar.divider()
+    st.sidebar.markdown(f"👤 Usuário: **{st.session_state.get('user', '')}**")
+    if st.sidebar.button("Sair", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+
+
+# ============================================================
+# PÁGINAS
+# ============================================================
+
+def page_dashboard():
+    st.title("🏠 Dashboard Principal - MARMED")
+    st.markdown("### Gestão Municipal de Saúde de Luminárias")
 
     col1, col2, col3, col4 = st.columns(4)
 
-    dotacoes = get_all_dotacoes()
-    total_orcamento = sum(d["valor_atual"] or 0 for d in dotacoes)
-    total_empenhado = sum(d["valor_empenhado"] or 0 for d in dotacoes)
-    total_pago = sum(d["valor_pago"] or 0 for d in dotacoes)
-    saldo = total_orcamento - total_empenhado
-    pct_exec = (total_empenhado / total_orcamento * 100) if total_orcamento else 0
+    df_dot = run_query("SELECT COALESCE(SUM(valor),0) as total FROM dotacoes")
+    df_emp = run_query("SELECT COALESCE(SUM(valor_empenhado),0) as total FROM empenhos")
+    df_liq = run_query("SELECT COALESCE(SUM(valor_liquidado),0) as total FROM empenhos")
+    df_pag = run_query("SELECT COALESCE(SUM(valor_pago),0) as total FROM empenhos")
 
-    col1.metric("💵 Orçamento Total", f"R$ {total_orcamento:,.2f}")
-    col2.metric("📌 Valor Empenhado", f"R$ {total_empenhado:,.2f}")
-    col3.metric("📊 % Executado", f"{pct_exec:.1f}%")
-    col4.metric("💰 Saldo Disponível", f"R$ {saldo:,.2f}")
-
-    col1, col2 = st.columns(2)
+    orc_total = float(df_dot['total'].iloc[0])
+    emp_total = float(df_emp['total'].iloc[0])
+    liq_total = float(df_liq['total'].iloc[0])
+    pag_total = float(df_pag['total'].iloc[0])
 
     with col1:
-        st.subheader("📊 Execução por Natureza")
-        ranking = get_ranking_despesas(ex["id"], 7)
-        if ranking:
-            fig = px.bar(
-                ranking, x="descricao", y="total_pago",
-                title="Despesas por Natureza",
-                labels={"descricao": "Natureza", "total_pago": "Valor Pago (R$)"},
-                color_discrete_sequence=["#1f77b4"]
-            )
-            fig.update_layout(xaxis_tickangle=-45)
-            st.plotly_chart(fig, use_container_width=True)
-
+        st.metric("Orçamento Total", format_currency(orc_total))
     with col2:
-        st.subheader("📊 Execução por Órgão")
-        exec_orgao = get_execucao_por_orgao(ex["id"])
-        if exec_orgao:
-            fig = px.pie(
-                exec_orgao, values="total_dotacao", names="sigla",
-                title="Distribuição por Órgão",
-                hole=0.4
-            )
+        st.metric("Empenhado", format_currency(emp_total))
+    with col3:
+        st.metric("Liquidado", format_currency(liq_total))
+    with col4:
+        st.metric("Pago", format_currency(pag_total))
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        df_rec = run_query("SELECT descricao, valor_previsto FROM receitas")
+        if not df_rec.empty:
+            fig = px.pie(df_rec, names='descricao', values='valor_previsto', title='Receitas Previstas por Fonte')
             st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("🚨 Alertas Ativos")
-    alertas_lic = get_alerta_licitacao()
-    alertas_dot = get_alerta_dotacao()
+    with c2:
+        df_prog = run_query('''
+            SELECT p.nome, SUM(d.valor) as total FROM dotacoes d
+            JOIN programas p ON d.programa_id = p.id GROUP BY p.nome
+        ''')
+        if not df_prog.empty:
+            fig = px.bar(df_prog, x='nome', y='total', title='Dotações por Programa', text_auto='.2s')
+            fig.update_layout(showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
 
-    if alertas_lic:
-        st.warning(f"⚠️ {len(alertas_lic)} item(ns) de licitação atingiram o limite de retirada!")
-    if alertas_dot:
-        st.warning(f"⚠️ {len(alertas_dot)} dotação(ões) necessitam suplementação!")
-    if not alertas_lic and not alertas_dot:
-        st.success("✅ Nenhum alerta ativo no momento.")
+    c3, c4 = st.columns(2)
 
-    st.subheader("📋 Últimas Movimentações")
-    empenhos = get_all_empenhos()
-    if empenhos:
-        df = pd.DataFrame(empenhos[:10])
-        st.dataframe(df[["numero", "data", "valor", "status"]], use_container_width=True)
+    with c3:
+        df_lic = run_query("SELECT situacao, COUNT(*) as qtd FROM licitacoes GROUP BY situacao")
+        if not df_lic.empty:
+            fig = px.pie(df_lic, names='situacao', values='qtd', title='Situação das Licitações')
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Nenhuma licitação cadastrada")
+
+    with c4:
+        df_prod = run_query('''SELECT tipo, SUM(quantidade) as total FROM producao GROUP BY tipo''')
+        if not df_prod.empty:
+            fig = px.bar(df_prod, x='tipo', y='total', title='Produção por Tipo', text_auto=True)
+            st.plotly_chart(fig, use_container_width=True)
+
+    st.subheader("⚠️ Alertas do Sistema")
+    df_alertas = run_query("SELECT * FROM alertas")
+    for _, row in df_alertas.iterrows():
+        st.write(f"{row['modulo']}: alerta em {row['percentual']}%")
 
 
-def pagina_loa():
-    st.title("📊 LOA - Lei Orçamentária Anual")
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-        "📅 Exercício", "🏛️ Órgãos", "📋 Programas/Ações",
-        "🏷️ Naturezas", "💰 Fontes", "💵 Dotações",
-        "📈 Receitas", "👁️ Visão Geral"
-    ])
+def page_ppa():
+    st.title("📋 PPA - Plano Plurianual")
+    tab1, tab2 = st.tabs(["Cadastro", "Consulta"])
 
     with tab1:
-        st.subheader("Exercícios Orçamentários")
-        with st.form("form_exercicio"):
-            col1, col2 = st.columns(2)
-            with col1:
-                ano = st.number_input("Ano", min_value=2020, max_value=2035, value=2026)
-                data_inicio = st.date_input("Data Início", value=datetime.date(2026, 1, 1))
-            with col2:
-                status = st.selectbox("Status", ["elaboracao", "aprovado", "execucao", "encerrado"])
-                data_fim = st.date_input("Data Fim", value=datetime.date(2026, 12, 31))
+        with st.form("form_ppa"):
+            exercicio = st.text_input("Exercício / Período")
+            diretrizes = st.text_area("Diretrizes")
+            objetivos = st.text_area("Objetivos")
+            metas = st.text_area("Metas")
+            valor = st.number_input("Valor Previsto", min_value=0.0, step=1000.0)
+            programa = st.text_input("Programa")
+            orgao = st.text_input("Órgão Responsável")
             if st.form_submit_button("Salvar"):
-                try:
-                    insert_exercicio({"ano": ano, "status": status, "data_inicio": data_inicio, "data_fim": data_fim})
-                    st.success("Exercício salvo!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-
-        exercicios = get_all_exercicios()
-        if exercicios:
-            st.dataframe(pd.DataFrame(exercicios), use_container_width=True)
+                run_insert("INSERT INTO ppa (exercicio, diretrizes, objetivos, metas, valor_previsto, programa, orgao) VALUES (?,?,?,?,?,?,?)",
+                           (exercicio, diretrizes, objetivos, metas, valor, programa, orgao))
+                st.success("PPA salvo")
 
     with tab2:
-        st.subheader("Órgãos")
-        with st.form("form_orgao"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                codigo = st.text_input("Código", "02.01")
-            with col2:
-                nome = st.text_input("Nome", "Secretaria Municipal de Saúde")
-            with col3:
-                sigla = st.text_input("Sigla", "SMS")
-            if st.form_submit_button("Salvar"):
-                try:
-                    insert_orgao({"codigo": codigo, "nome": nome, "sigla": sigla, "ativo": 1})
-                    st.success("Órgão salvo!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-        orgaos = get_all_orgaos()
-        if orgaos:
-            st.dataframe(pd.DataFrame(orgaos), use_container_width=True)
-
-    with tab3:
-        st.subheader("Programas")
-        with st.form("form_programa"):
-            orgaos_list = get_all_orgaos()
-            orgao_opts = {f"{o['nome']} ({o['sigla']})": o["id"] for o in orgaos_list}
-            col1, col2 = st.columns(2)
-            with col1:
-                p_codigo = st.text_input("Código do Programa")
-                p_nome = st.text_input("Nome do Programa")
-            with col2:
-                p_objetivo = st.text_area("Objetivo")
-                p_orgao = st.selectbox("Órgão Responsável", options=list(orgao_opts.keys()))
-            if st.form_submit_button("Salvar Programa"):
-                try:
-                    insert_programa({"codigo": p_codigo, "nome": p_nome, "objetivo": p_objetivo, "orgao_responsavel_id": orgao_opts[p_orgao]})
-                    st.success("Programa salvo!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-
-        st.subheader("Ações")
-        with st.form("form_acao"):
-            programas = get_all_programas()
-            prog_opts = {p["nome"]: p["id"] for p in programas}
-            col1, col2 = st.columns(2)
-            with col1:
-                a_codigo = st.text_input("Código da Ação")
-                a_nome = st.text_input("Nome da Ação")
-                a_programa = st.selectbox("Programa", options=list(prog_opts.keys()))
-            with col2:
-                a_tipo = st.selectbox("Tipo", ["projeto", "atividade", "operacao_especial"])
-                a_produto = st.text_input("Produto", "Consultas médicas")
-                a_unidade = st.text_input("Unidade Medida", "Atendimento")
-            if st.form_submit_button("Salvar Ação"):
-                try:
-                    insert_acao({"codigo": a_codigo, "tipo": a_tipo, "nome": a_nome, "produto": a_produto, "unidade_medida": a_unidade, "programa_id": prog_opts[a_programa], "orgao_id": 1})
-                    st.success("Ação salva!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-
-    with tab4:
-        st.subheader("Naturezas de Despesa")
-        with st.form("form_natureza"):
-            col1, col2 = st.columns(2)
-            with col1:
-                n_codigo = st.text_input("Código", "3.1.90.11.00")
-                n_grupo = st.selectbox("Grupo", ["1 - Pessoal", "2 - Juros", "3 - Outras Correntes", "4 - Investimentos"])
-                n_elemento = st.text_input("Elemento", "11")
-            with col2:
-                n_categoria = st.selectbox("Categoria", ["3 - Corrente", "4 - Capital"])
-                n_modalidade = st.text_input("Modalidade", "90")
-                n_descricao = st.text_input("Descrição", "Vencimentos e Vantagens Fixas")
-            if st.form_submit_button("Salvar"):
-                try:
-                    insert_natureza({"codigo": n_codigo, "categoria": n_categoria, "grupo": n_grupo, "modalidade": n_modalidade, "elemento": n_elemento, "descricao": n_descricao})
-                    st.success("Natureza salva!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-        naturezas = get_all_naturezas()
-        if naturezas:
-            st.dataframe(pd.DataFrame(naturezas), use_container_width=True)
-
-    with tab5:
-        st.subheader("Fontes de Recurso")
-        with st.form("form_fonte"):
-            col1, col2 = st.columns(2)
-            with col1:
-                f_codigo = st.text_input("Código", "RO")
-                f_descricao = st.text_input("Descrição", "Recursos Ordinários")
-            with col2:
-                f_tipo = st.selectbox("Tipo", ["tesouro", "vinculado", "convenio"])
-            if st.form_submit_button("Salvar"):
-                try:
-                    insert_fonte({"codigo": f_codigo, "descricao": f_descricao, "tipo": f_tipo})
-                    st.success("Fonte salva!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-        fontes = get_all_fontes()
-        if fontes:
-            st.dataframe(pd.DataFrame(fontes), use_container_width=True)
-
-    with tab6:
-        st.subheader("Dotações Orçamentárias")
-        with st.form("form_dotacao"):
-            exercicios_list = get_all_exercicios()
-            ex_opts = {str(e["ano"]): e["id"] for e in exercicios_list}
-            orgaos_list = get_all_orgaos()
-            og_opts = {f"{o['nome']} ({o['sigla']})": o["id"] for o in orgaos_list}
-            programas = get_all_programas()
-            pr_opts = {p["nome"]: p["id"] for p in programas}
-            acoes = get_all_acoes()
-            ac_opts = {a["nome"]: a["id"] for a in acoes}
-            naturezas = get_all_naturezas()
-            nt_opts = {n["descricao"]: n["id"] for n in naturezas}
-            fontes_list = get_all_fontes()
-            ft_opts = {f["descricao"]: f["id"] for f in fontes_list}
-
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                d_exercicio = st.selectbox("Exercício", options=list(ex_opts.keys()))
-                d_orgao = st.selectbox("Órgão", options=list(og_opts.keys()))
-                d_programa = st.selectbox("Programa", options=list(pr_opts.keys()))
-            with col2:
-                d_acao = st.selectbox("Ação", options=list(ac_opts.keys()))
-                d_natureza = st.selectbox("Natureza", options=list(nt_opts.keys()))
-                d_fonte = st.selectbox("Fonte", options=list(ft_opts.keys()))
-            with col3:
-                d_valor_original = st.number_input("Valor Original (R$)", min_value=0.0, step=1000.0, format="%.2f")
-                d_valor_atual = st.number_input("Valor Atual (R$)", min_value=0.0, step=1000.0, format="%.2f")
-
-            if st.form_submit_button("Salvar Dotação"):
-                try:
-                    insert_dotacao({
-                        "exercicio_id": ex_opts[d_exercicio], "orgao_id": og_opts[d_orgao],
-                        "programa_id": pr_opts[d_programa], "acao_id": ac_opts[d_acao],
-                        "natureza_id": nt_opts[d_natureza], "fonte_recurso_id": ft_opts[d_fonte],
-                        "valor_original": d_valor_original, "valor_atual": d_valor_atual
-                    })
-                    st.success("Dotação salva!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-
-        dotacoes = get_all_dotacoes()
-        if dotacoes:
-            st.dataframe(pd.DataFrame(dotacoes), use_container_width=True)
-
-    with tab7:
-        st.subheader("Previsão de Receitas")
-        with st.form("form_receita"):
-            receitas_fontes = get_all_fontes()
-            rf_opts = {f["descricao"]: f["id"] for f in receitas_fontes}
-            col1, col2 = st.columns(2)
-            with col1:
-                r_descricao = st.text_input("Descrição")
-                r_valor_previsto = st.number_input("Valor Previsto (R$)", min_value=0.0, format="%.2f")
-            with col2:
-                r_fonte = st.selectbox("Fonte de Recurso", options=list(rf_opts.keys()))
-                r_mes = st.number_input("Mês", min_value=1, max_value=12, value=1)
-            if st.form_submit_button("Salvar"):
-                try:
-                    ex_id = ex_opts[list(ex_opts.keys())[0]] if ex_opts else 1
-                    insert_receita({"exercicio_id": ex_id, "fonte_recurso_id": rf_opts[r_fonte], "descricao": r_descricao, "valor_previsto": r_valor_previsto, "valor_realizado": 0, "mes_competencia": r_mes})
-                    st.success("Receita salva!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-
-        receitas = get_all_receitas()
-        if receitas:
-            df = pd.DataFrame(receitas)
-            st.dataframe(df, use_container_width=True)
-            total_prev = df["valor_previsto"].sum()
-            st.metric("Total Previsto", f"R$ {total_prev:,.2f}")
-
-    with tab8:
-        st.subheader("Visão Geral da LOA")
-        exercicios_list = get_all_exercicios()
-        if exercicios_list:
-            ex_id = exercicios_list[0]["id"]
-            dados = get_visao_geral_loa(ex_id)
-            if dados:
-                df = pd.DataFrame(dados)
-                st.dataframe(df, use_container_width=True, height=400)
-                csv = df.to_csv(index=False).encode("utf-8")
-                st.download_button("📥 Download CSV", csv, "loa_completa.csv", "text/csv")
-
-                col1, col2, col3 = st.columns(3)
-                col1.metric("💰 Orçamento Original", f"R$ {df['valor_original'].sum():,.2f}")
-                col2.metric("💵 Orçamento Atual", f"R$ {df['valor_atual'].sum():,.2f}")
-                col3.metric("📌 Saldo Disponível", f"R$ {df['saldo'].sum():,.2f}")
-
-
-def pagina_licitacoes():
-    st.title("📑 Licitações")
-
-    tab_lic, tab_itens = st.tabs(["Cadastro de Licitações", "Itens da Licitação"])
-
-    with tab_lic:
-        orgaos_list = get_all_orgaos()
-        og_opts = {f"{o['nome']} ({o['sigla']})": o["id"] for o in orgaos_list}
-        with st.form("form_licitacao"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                numero = st.text_input("Número da Licitação")
-                modalidade = st.selectbox("Modalidade", ["pregao_eletronico", "tomada_preco", "convite", "concorrencia", "dispensa", "inexigibilidade"])
-            with col2:
-                objeto = st.text_area("Objeto")
-                valor_estimado = st.number_input("Valor Estimado (R$)", min_value=0.0, format="%.2f")
-            with col3:
-                orgao = st.selectbox("Órgão", options=list(og_opts.keys()))
-                alerta = st.slider("Percentual de alerta (%)", 0, 100, 20, 1)
-            if st.form_submit_button("Salvar Licitação"):
-                try:
-                    insert_licitacao({"numero": numero, "modalidade": modalidade, "objeto": objeto, "valor_estimado": valor_estimado, "orgao_id": og_opts[orgao], "alerta_percentual": alerta})
-                    st.success("Licitação salva!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-
-        licitacoes = get_all_licitacoes()
-        if licitacoes:
-            df = pd.DataFrame(licitacoes)
-            st.dataframe(df, use_container_width=True)
-            st.subheader("Detalhes da Licitação")
-            lic_opt = {f"{l['numero']} - {l.get('objeto', '')}": l["id"] for l in licitacoes}
-            sel = st.selectbox("Selecionar licitação", options=list(lic_opt.keys()))
-            itens = get_itens_licitacao(lic_opt[sel])
-            if itens:
-                st.dataframe(pd.DataFrame(itens), use_container_width=True)
-
-    with tab_itens:
-        licitacoes = get_all_licitacoes()
-        lic_opts = {f"{l['numero']} - {l.get('objeto', '')}": l["id"] for l in licitacoes}
-        if not licitacoes:
-            st.warning("Cadastre uma licitação primeiro.")
-            return
-        with st.form("form_item_licitacao"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                lic_sel = st.selectbox("Licitação", options=list(lic_opts.keys()))
-                produto = st.text_input("Produto")
-            with col2:
-                quantidade = st.number_input("Quantidade", min_value=1, value=1)
-                valor_unitario = st.number_input("Valor Unitário (R$)", min_value=0.0, format="%.2f")
-            with col3:
-                unidade = st.text_input("Unidade de Medida", "un")
-            if st.form_submit_button("Salvar Item"):
-                try:
-                    insert_item_licitacao({"licitacao_id": lic_opts[lic_sel], "produto": produto, "quantidade": quantidade, "valor_unitario": valor_unitario, "unidade_medida": unidade, "quantidade_retirada": 0})
-                    st.success("Item salvo!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-
-        if licitacoes:
-            lic_det = st.selectbox("Ver itens de", options=list(lic_opts.keys()), key="det_itens")
-            itens = get_itens_licitacao(lic_opts[lic_det])
-            if itens:
-                for item in itens:
-                    total = item.get("quantidade", 0)
-                    retirada = item.get("quantidade_retirada", 0)
-                    pct = (retirada / total * 100) if total else 0
-                    col_a, col_b = st.columns([1, 3])
-                    col_a.write(f"{item.get('produto', '')}")
-                    col_b.progress(min(pct / 100, 1.0), text=f"{retirada}/{total} ({pct:.1f}%)")
-                st.dataframe(pd.DataFrame(itens), use_container_width=True)
-
-
-def pagina_compras():
-    st.title("🛒 Compras - Ordens de Compra")
-
-    licitacoes = get_all_licitacoes()
-    lic_opts = {f"{l['numero']} - {l.get('objeto', '')}": l["id"] for l in licitacoes}
-    if not licitacoes:
-        st.warning("Nenhuma licitação cadastrada.")
-        return
-
-    lic_sel = st.selectbox("Licitação", options=list(lic_opts.keys()))
-    itens = get_itens_licitacao(lic_opts[lic_sel])
-    item_opts = {f"{i['produto']} (disp: {i.get('quantidade', 0) - i.get('quantidade_retirada', 0)})": i["id"] for i in itens}
-
-    with st.form("form_compra"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            item_sel = st.selectbox("Item", options=list(item_opts.keys()))
-            quantidade = st.number_input("Quantidade", min_value=1, value=1)
-        with col2:
-            valor_unitario = st.number_input("Valor Unitário (R$)", min_value=0.0, format="%.2f")
-            situacao = st.selectbox("Situação", ["pendente", "autorizada", "entregue", "cancelada"])
-        with col3:
-            data_oc = st.date_input("Data", value=datetime.date.today())
-            numero = st.text_input("Número OC")
-        if st.form_submit_button("Salvar Ordem de Compra"):
-            try:
-                insert_ordem_compra({"licitacao_id": lic_opts[lic_sel], "item_licitacao_id": item_opts[item_sel], "numero": numero, "data": data_oc, "quantidade": quantidade, "valor_unitario": valor_unitario, "situacao": situacao})
-                recalcular_saldo_item_licitacao(item_opts[item_sel])
-                st.success("Ordem de compra salva!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Erro ao salvar: {e}")
-
-    st.subheader("Histórico de Ordens de Compra")
-    ordens = get_all_ordens_compra()
-    if ordens:
-        st.dataframe(pd.DataFrame(ordens), use_container_width=True)
-
-
-def pagina_contratos():
-    st.title("📜 Contratos")
-
-    tab_con, tab_adit = st.tabs(["Contratos", "Aditivos"])
-
-    with tab_con:
-        licitacoes = get_all_licitacoes()
-        lic_opts = {f"{l['numero']} - {l.get('objeto', '')}": l["id"] for l in licitacoes}
-        fornecedores = get_all_fornecedores()
-        forn_opts = {f"{f['nome']} ({f.get('cpf_cnpj', '')})": f["id"] for f in fornecedores}
-        with st.form("form_contrato"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                numero = st.text_input("Número do Contrato")
-                licitacao = st.selectbox("Licitação", options=list(lic_opts.keys()))
-            with col2:
-                credor = st.selectbox("Credor", options=list(forn_opts.keys()))
-                valor_global = st.number_input("Valor Global (R$)", min_value=0.0, format="%.2f")
-            with col3:
-                vigencia = st.date_input("Vigência", value=datetime.date.today())
-                situacao = st.selectbox("Situação", ["ativo", "suspenso", "rescindido", "encerrado"])
-            if st.form_submit_button("Salvar Contrato"):
-                try:
-                    insert_contrato({"numero": numero, "licitacao_id": lic_opts[licitacao], "fornecedor_id": forn_opts[credor], "valor_global": valor_global, "vigencia": vigencia, "situacao": situacao})
-                    st.success("Contrato salvo!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-
-        contratos = get_all_contratos()
-        if contratos:
-            df = pd.DataFrame(contratos)
-            hoje = datetime.date.today()
-            def colorir_vencimento(row):
-                vig = row.get("vigencia")
-                if not vig:
-                    return [""] * len(row)
-                try:
-                    vig_dt = pd.to_datetime(vig).date()
-                except Exception:
-                    return [""] * len(row)
-                dias = (vig_dt - hoje).days
-                if dias > 60:
-                    cor = "background-color: #d4edda"
-                elif dias > 30:
-                    cor = "background-color: #fff3cd"
-                else:
-                    cor = "background-color: #f8d7da"
-                return [cor] * len(row)
-
-            st.dataframe(df.style.apply(colorir_vencimento, axis=1), use_container_width=True)
-
-    with tab_adit:
-        contratos = get_all_contratos()
-        cont_opts = {f"{c['numero']}": c["id"] for c in contratos}
-        if not contratos:
-            st.warning("Cadastre um contrato primeiro.")
-            return
-        with st.form("form_aditivo"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                contrato = st.selectbox("Contrato", options=list(cont_opts.keys()))
-                tipo = st.selectbox("Tipo", ["prazo", "valor", "prazo_e_valor", "outros"])
-            with col2:
-                valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
-                novo_vencimento = st.date_input("Novo Vencimento", value=datetime.date.today())
-            with col3:
-                justificativa = st.text_area("Justificativa")
-            if st.form_submit_button("Salvar Aditivo"):
-                try:
-                    insert_aditivo({"contrato_id": cont_opts[contrato], "tipo": tipo, "valor": valor, "novo_vencimento": novo_vencimento, "justificativa": justificativa})
-                    st.success("Aditivo salvo!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-
-        aditivos = get_all_aditivos()
-        if aditivos:
-            st.dataframe(pd.DataFrame(aditivos), use_container_width=True)
-
-
-def pagina_fornecedores():
-    st.title("🏢 Fornecedores")
-
-    with st.form("form_fornecedor"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            tipo = st.selectbox("Tipo", ["pf", "pj"])
-            cpf_cnpj = st.text_input("CPF/CNPJ")
-        with col2:
-            nome = st.text_input("Nome / Razão Social")
-            endereco = st.text_input("Endereço")
-        with col3:
-            dados_bancarios = st.text_input("Dados Bancários")
-            ativo = st.selectbox("Ativo", [1, 0])
-        if st.form_submit_button("Salvar Fornecedor"):
-            try:
-                insert_fornecedor({"tipo": tipo, "cpf_cnpj": cpf_cnpj, "nome": nome, "endereco": endereco, "dados_bancarios": dados_bancarios, "ativo": ativo})
-                st.success("Fornecedor salvo!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Erro ao salvar: {e}")
-
-    fornecedores = get_all_fornecedores()
-    if fornecedores:
-        df = pd.DataFrame(fornecedores)
+        df = run_query("SELECT * FROM ppa")
         st.dataframe(df, use_container_width=True)
 
-        st.subheader("Histórico do Fornecedor")
-        forn_opts = {f"{f['nome']} ({f.get('cpf_cnpj', '')})": f["id"] for f in fornecedores}
-        forn_sel = st.selectbox("Selecionar fornecedor", options=list(forn_opts.keys()))
-        contratos = get_contratos_por_fornecedor(forn_opts[forn_sel])
-        empenhos = get_empenhos_por_fornecedor(forn_opts[forn_sel])
-        if contratos:
-            st.markdown("**Contratos**")
-            st.dataframe(pd.DataFrame(contratos), use_container_width=True)
-        if empenhos:
-            st.markdown("**Empenhos**")
-            st.dataframe(pd.DataFrame(empenhos), use_container_width=True)
+
+def page_ldo():
+    st.title("📋 LDO - Lei de Diretrizes Orçamentárias")
+    tab1, tab2 = st.tabs(["Cadastro", "Consulta"])
+
+    with tab1:
+        with st.form("form_ldo"):
+            exercicio = st.text_input("Exercício")
+            descricao = st.text_area("Descrição")
+            metas_fiscais = st.text_area("Metas Fiscais")
+            prioridades = st.text_area("Prioridades")
+            limites = st.text_area("Limites por Programa")
+            data_aprov = st.date_input("Data Aprovação", value=date.today())
+            link = st.text_input("Link LC 141")
+            if st.form_submit_button("Salvar"):
+                run_insert("INSERT INTO ldo (exercicio, descricao, metas_fiscais, prioridades, limites_programa, data_aprovacao, link_lc141) VALUES (?,?,?,?,?,?,?)",
+                           (exercicio, descricao, metas_fiscais, prioridades, limites, data_aprov.isoformat(), link))
+                st.success("LDO salva")
+
+    with tab2:
+        df = run_query("SELECT * FROM ldo")
+        st.dataframe(df, use_container_width=True)
 
 
-def pagina_prestadores():
-    st.title("🏥 Prestadores de Saúde")
+def page_loa():
+    st.title("📋 LOA - Lei Orçamentária Anual")
+    tab1, tab2 = st.tabs(["Cadastro", "Consulta"])
 
-    fornecedores = get_all_fornecedores()
-    forn_opts = {f"{f['nome']} ({f.get('cpf_cnpj', '')})": f["id"] for f in fornecedores}
-    with st.form("form_prestador"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            credor = st.selectbox("Credor", options=list(forn_opts.keys()))
-            especialidade = st.text_input("Especialidade")
-        with col2:
-            registro_conselho = st.text_input("Registro no Conselho")
-            data_credenciamento = st.date_input("Data Credenciamento", value=datetime.date.today())
-        with col3:
-            data_validade = st.date_input("Data Validade", value=datetime.date.today())
-            situacao = st.selectbox("Situação", ["ativo", "suspenso", "cancelado"])
-        if st.form_submit_button("Salvar Prestador"):
-            try:
-                insert_prestador({"fornecedor_id": forn_opts[credor], "especialidade": especialidade, "registro_conselho": registro_conselho, "data_credenciamento": data_credenciamento, "data_validade": data_validade, "situacao": situacao})
-                st.success("Prestador salvo!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Erro ao salvar: {e}")
+    with tab1:
+        with st.form("form_loa"):
+            exercicios = run_query("SELECT id, ano FROM exercicios")
+            orgaos = run_query("SELECT id, nome FROM orgaos")
+            programas = run_query("SELECT id, nome FROM programas")
+            acoes = run_query("SELECT id, nome FROM acoes")
+            naturezas = run_query("SELECT id, codigo || ' - ' || descricao as nome FROM naturezas")
+            fontes = run_query("SELECT id, codigo || ' - ' || descricao as nome FROM fontes")
 
-    prestadores = get_all_prestadores()
-    if prestadores:
-        st.dataframe(pd.DataFrame(prestadores), use_container_width=True)
+            ex_id = st.selectbox("Exercício", exercicios['id'], format_func=lambda x: str(exercicios[exercicios['id'] == x]['ano'].values[0]))
+            org_id = st.selectbox("Órgão", orgaos['id'], format_func=lambda x: orgaos[orgaos['id'] == x]['nome'].values[0])
+            prog_id = st.selectbox("Programa", programas['id'], format_func=lambda x: programas[programas['id'] == x]['nome'].values[0])
+            ac_id = st.selectbox("Ação", acoes['id'], format_func=lambda x: acoes[acoes['id'] == x]['nome'].values[0])
+            nat_id = st.selectbox("Natureza", naturezas['id'], format_func=lambda x: naturezas[naturezas['id'] == x]['nome'].values[0])
+            fon_id = st.selectbox("Fonte", fontes['id'], format_func=lambda x: fontes[fontes['id'] == x]['nome'].values[0])
+            valor = st.number_input("Valor", min_value=0.0, step=1000.0)
 
+            if st.form_submit_button("Salvar Dotação"):
+                run_insert("INSERT INTO dotacoes (exercicio_id, orgao_id, programa_id, acao_id, natureza_id, fonte_id, valor) VALUES (?,?,?,?,?,?,?)",
+                           (ex_id, org_id, prog_id, ac_id, nat_id, fon_id, valor))
+                st.success("Dotação salva")
 
-def pagina_pacientes():
-    st.title("👤 Pacientes")
+            st.markdown("---")
+            st.subheader("Receita Prevista")
+            fon_id_rec = st.selectbox("Fonte Receita", fontes['id'], format_func=lambda x: fontes[fontes['id'] == x]['nome'].values[0], key="rec_fonte")
+            desc_rec = st.text_input("Descrição Receita")
+            val_rec = st.number_input("Valor Previsto", min_value=0.0, step=1000.0, key="rec_val")
+            if st.form_submit_button("Salvar Receita"):
+                run_insert("INSERT INTO receitas (exercicio_id, fonte_id, descricao, valor_previsto, valor_arrecadado) VALUES (?,?,?,?,?)",
+                           (ex_id, fon_id_rec, desc_rec, val_rec, 0.0))
+                st.success("Receita salva")
 
-    tab_cad, tab_atend = st.tabs(["Cadastro", "Atendimentos"])
-
-    with tab_cad:
-        with st.form("form_paciente"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                nome = st.text_input("Nome")
-                cpf = st.text_input("CPF")
-                data_nascimento = st.date_input("Data Nascimento", value=datetime.date.today())
-            with col2:
-                sexo = st.selectbox("Sexo", ["M", "F", "Outro"])
-                endereco = st.text_input("Endereço")
-            with col3:
-                telefone = st.text_input("Telefone")
-                email = st.text_input("Email")
-                convenio = st.text_input("Convênio")
-            if st.form_submit_button("Salvar Paciente"):
-                try:
-                    insert_paciente({"nome": nome, "cpf": cpf, "data_nascimento": data_nascimento, "sexo": sexo, "endereco": endereco, "telefone": telefone, "email": email, "convenio": convenio})
-                    st.success("Paciente salvo!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-
-        pacientes = get_all_pacientes()
-        if pacientes:
-            st.dataframe(pd.DataFrame(pacientes), use_container_width=True)
-
-    with tab_atend:
-        pacientes = get_all_pacientes()
-        if not pacientes:
-            st.warning("Cadastre um paciente primeiro.")
-            return
-        pac_opts = {f"{p['nome']} ({p.get('cpf', '')})": p["id"] for p in pacientes}
-        pac_sel = st.selectbox("Paciente", options=list(pac_opts.keys()), key="pac_atend")
-
-        with st.form("form_atendimento"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                data_atend = st.date_input("Data Atendimento", value=datetime.date.today())
-                tipo = st.selectbox("Tipo", ["consulta", "exame", "procedimento", "internacao"])
-            with col2:
-                prestadores = get_all_prestadores()
-                prest_opts = {f"{p.get('especialidade', '')} - {p.get('registro_conselho', '')}": p["id"] for p in prestadores}
-                prestador = st.selectbox("Prestador", options=list(prest_opts.keys()))
-                valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
-            with col3:
-                procedimento = st.text_input("Procedimento")
-                situacao = st.selectbox("Situação", ["agendado", "realizado", "cancelado"])
-            if st.form_submit_button("Salvar Atendimento"):
-                try:
-                    insert_atendimento({"paciente_id": pac_opts[pac_sel], "prestador_id": prest_opts[prestador], "data": data_atend, "tipo": tipo, "procedimento": procedimento, "valor": valor, "situacao": situacao})
-                    st.success("Atendimento salvo!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-
-        atendimentos = get_atendimentos_por_paciente(pac_opts[pac_sel])
-        if atendimentos:
-            st.dataframe(pd.DataFrame(atendimentos), use_container_width=True)
+    with tab2:
+        df = run_query('''
+            SELECT d.id, e.ano, o.nome as orgao, p.nome as programa, a.nome as acao, n.codigo as natureza, f.descricao as fonte, d.valor
+            FROM dotacoes d
+            JOIN exercicios e ON d.exercicio_id = e.id
+            JOIN orgaos o ON d.orgao_id = o.id
+            JOIN programas p ON d.programa_id = p.id
+            JOIN acoes a ON d.acao_id = a.id
+            JOIN naturezas n ON d.natureza_id = n.id
+            JOIN fontes f ON d.fonte_id = f.id
+        ''')
+        st.dataframe(df, use_container_width=True)
+        st.subheader("Receitas")
+        df_rec = run_query("SELECT * FROM receitas")
+        st.dataframe(df_rec, use_container_width=True)
 
 
-def pagina_financeiro():
-    st.title("💰 Financeiro")
+def page_pas():
+    st.title("📋 PAS - Programação Anual de Saúde")
+    tab1, tab2 = st.tabs(["Cadastro", "Consulta"])
 
-    tab_emp, tab_liq, tab_pag, tab_sup, tab_ext = st.tabs([
-        "Empenhos", "Liquidações", "Pagamentos", "Suplementações", "Extrato"
-    ])
+    with tab1:
+        with st.form("form_pas"):
+            ano = st.number_input("Ano", min_value=2000, max_value=2100, value=2026)
+            acoes = st.text_area("Ações Programadas")
+            indicadores = st.text_area("Indicadores")
+            meta = st.text_input("Meta")
+            previsao = st.number_input("Previsão Orçamentária", min_value=0.0, step=1000.0)
+            status = st.selectbox("Status", ["Planejado", "Em execução", "Concluído", "Suspenso"])
+            obs = st.text_area("Observações")
+            if st.form_submit_button("Salvar"):
+                run_insert("INSERT INTO pas (ano, acoes, indicadores, meta, previsao_orcamentaria, status, observacoes) VALUES (?,?,?,?,?,?,?)",
+                           (ano, acoes, indicadores, meta, previsao, status, obs))
+                st.success("PAS salvo")
 
-    with tab_emp:
-        dotacoes = get_all_dotacoes()
-        dot_opts = {f"Dotação #{d['id']}": d["id"] for d in dotacoes}
-        fornecedores = get_all_fornecedores()
-        forn_opts = {f"{f['nome']} ({f.get('cpf_cnpj', '')})": f["id"] for f in fornecedores}
-        with st.form("form_empenho"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                numero = st.text_input("Número Empenho")
-                data = st.date_input("Data", value=datetime.date.today())
-                tipo = st.selectbox("Tipo", ["ordinario", "estimativo", "global"])
-            with col2:
-                dotacao = st.selectbox("Dotação", options=list(dot_opts.keys()))
-                credor = st.selectbox("Credor", options=list(forn_opts.keys()))
-            with col3:
-                valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
-                historico = st.text_area("Histórico")
-            if st.form_submit_button("Salvar Empenho"):
-                try:
-                    insert_empenho({"numero": numero, "data": data, "tipo": tipo, "dotacao_id": dot_opts[dotacao], "fornecedor_id": forn_opts[credor], "valor": valor, "historico": historico, "status": "ativo"})
-                    recalcular_dotacao_por_empenho(dot_opts[dotacao])
-                    st.success("Empenho salvo!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
+    with tab2:
+        df = run_query("SELECT * FROM pas")
+        st.dataframe(df, use_container_width=True)
 
-        empenhos = get_all_empenhos()
-        if empenhos:
-            st.dataframe(pd.DataFrame(empenhos), use_container_width=True)
 
-    with tab_liq:
-        empenhos = get_all_empenhos()
-        emp_opts = {f"{e['numero']} - R$ {e.get('valor', 0):,.2f}": e["id"] for e in empenhos}
-        if not empenhos:
-            st.warning("Cadastre um empenho primeiro.")
-        else:
-            with st.form("form_liquidacao"):
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    empenho = st.selectbox("Empenho", options=list(emp_opts.keys()))
-                    numero = st.text_input("Número Liquidação")
-                with col2:
-                    data = st.date_input("Data", value=datetime.date.today())
-                    valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
-                with col3:
-                    documento_fiscal = st.text_input("Documento Fiscal")
-                if st.form_submit_button("Salvar Liquidação"):
-                    try:
-                        insert_liquidacao({"empenho_id": emp_opts[empenho], "numero": numero, "data": data, "valor": valor, "documento_fiscal": documento_fiscal})
-                        dot_id = next((e["dotacao_id"] for e in empenhos if e["id"] == emp_opts[empenho]), None)
-                        if dot_id:
-                            recalcular_dotacao_por_empenho(dot_id)
-                        st.success("Liquidação salva!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro ao salvar: {e}")
+def page_plano_saude():
+    st.title("📋 Plano de Saúde")
+    tab1, tab2 = st.tabs(["Cadastro", "Consulta"])
 
-        liquidacoes = get_all_liquidacoes()
-        if liquidacoes:
-            st.dataframe(pd.DataFrame(liquidacoes), use_container_width=True)
+    with tab1:
+        with st.form("form_plano_saude"):
+            periodo = st.text_input("Período (ex: 2026-2029)")
+            diretrizes = st.text_area("Diretrizes")
+            objetivos = st.text_area("Objetivos")
+            metas = st.text_area("Metas")
+            populacao = st.number_input("População Estimada", min_value=0, step=100)
+            orcamento = st.number_input("Orçamento Previsto", min_value=0.0, step=1000.0)
+            if st.form_submit_button("Salvar"):
+                run_insert("INSERT INTO plano_saude (periodo, diretrizes, objetivos, metas, populacao_estimada, orcamento_previsto) VALUES (?,?,?,?,?,?)",
+                           (periodo, diretrizes, objetivos, metas, populacao, orcamento))
+                st.success("Plano de Saúde salvo")
 
-    with tab_pag:
-        liquidacoes = get_all_liquidacoes()
-        liq_opts = {f"{l['numero']} - R$ {l.get('valor', 0):,.2f}": l["id"] for l in liquidacoes}
-        if not liquidacoes:
-            st.warning("Cadastre uma liquidação primeiro.")
-        else:
-            with st.form("form_pagamento"):
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    liquidacao = st.selectbox("Liquidação", options=list(liq_opts.keys()))
-                    data = st.date_input("Data", value=datetime.date.today())
-                with col2:
-                    valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
-                    forma_pagamento = st.selectbox("Forma Pagamento", ["transferencia", "cheque", "dinheiro", "pix"])
-                with col3:
-                    st.text_input("Observação", "", key="obs_pag")
-                if st.form_submit_button("Salvar Pagamento"):
-                    try:
-                        insert_pagamento({"liquidacao_id": liq_opts[liquidacao], "data": data, "valor": valor, "forma_pagamento": forma_pagamento})
-                        st.success("Pagamento salvo!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro ao salvar: {e}")
+    with tab2:
+        df = run_query("SELECT * FROM plano_saude")
+        st.dataframe(df, use_container_width=True)
 
-        pagamentos = get_all_pagamentos()
-        if pagamentos:
-            st.dataframe(pd.DataFrame(pagamentos), use_container_width=True)
 
-    with tab_sup:
-        st.subheader("Suplementações / Alterações Orçamentárias")
-        alerta_sup = st.slider("Percentual de alerta (%)", 0, 100, 20, 1, key="alerta_sup")
-        with st.form("form_suplementacao"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                tipo = st.selectbox("Tipo", ["suplementacao", "anulacao", "remanejamento"])
-                numero_decreto = st.text_input("Número Decreto/Portaria")
-            with col2:
-                data = st.date_input("Data", value=datetime.date.today())
-                dotacao = st.selectbox("Dotação", options=[f"Dotação #{d['id']}" for d in get_all_dotacoes()])
-            with col3:
-                valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
-                justificativa = st.text_area("Justificativa")
-            if st.form_submit_button("Salvar Alteração"):
-                try:
-                    dot_id = int(dotacao.replace("Dotação #", ""))
-                    insert_alteracao_orcamentaria({"tipo": tipo, "numero_decreto": numero_decreto, "data": data, "dotacao_id": dot_id, "valor": valor, "justificativa": justificativa})
-                    st.success("Alteração salva!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
+def page_licitacoes():
+    st.title("📑 Licitações")
+    tab1, tab2 = st.tabs(["Cadastro", "Consulta / Saldo"])
 
-        alteracoes = get_all_alteracoes_orcamentarias()
-        if alteracoes:
-            df = pd.DataFrame(alteracoes)
+    with tab1:
+        with st.form("form_licitacao"):
+            numero = st.text_input("Número da Licitação")
+            modalidade = st.selectbox("Modalidade", ["Pregão", "Tomada de Preços", "Concorrência", "Dispensa", "Inexigibilidade", "Concurso"])
+            objeto = st.text_area("Objeto")
+            dotacoes = run_query("SELECT id, valor || ' - ' || programa_id as desc FROM dotacoes")
+            dotacao_id = st.selectbox("Dotação Vinculada", dotacoes['id'], format_func=lambda x: str(x)) if not dotacoes.empty else None
+            fornecedores = run_query("SELECT id, nome FROM fornecedores")
+            fornecedor_id = st.selectbox("Fornecedor Vencedor", fornecedores['id'], format_func=lambda x: fornecedores[fornecedores['id'] == x]['nome'].values[0]) if not fornecedores.empty else None
+            valor_total = st.number_input("Valor Total", min_value=0.0, step=1000.0)
+            qtd_total = st.number_input("Quantidade Total", min_value=0.0, step=1.0)
+            situacao = st.selectbox("Situação", ["Planejada", "Publicada", "Homologada", "Em execução", "Concluída", "Cancelada"])
+            alerta = st.slider("Alerta de Retirada (%)", 0, 100, 80)
+            if st.form_submit_button("Salvar"):
+                run_insert("INSERT INTO licitacoes (numero, modalidade, objeto, dotacao_id, fornecedor_id, valor_total, qtd_total, saldo, situacao, alerta_percentual) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                           (numero, modalidade, objeto, dotacao_id, fornecedor_id, valor_total, qtd_total, valor_total, situacao, alerta))
+                st.success("Licitação salva")
+
+    with tab2:
+        df = run_query('''
+            SELECT l.id, l.numero, l.modalidade, l.objeto, l.valor_total, l.qtd_total, l.saldo, l.situacao, l.alerta_percentual, f.nome as fornecedor
+            FROM licitacoes l LEFT JOIN fornecedores f ON l.fornecedor_id = f.id
+        ''')
+        if not df.empty:
+            df['perc_utilizado'] = ((df['valor_total'] - df['saldo']) / df['valor_total'] * 100).round(2)
             st.dataframe(df, use_container_width=True)
-            total_sup = df[df["tipo"] == "suplementacao"]["valor"].sum() if "tipo" in df.columns else 0
-            st.metric("Total de Suplementações", f"R$ {total_sup:,.2f}")
 
-    with tab_ext:
-        st.subheader("Extrato da Dotação")
-        dotacoes = get_all_dotacoes()
-        dot_opts = {f"Dotação #{d['id']}": d["id"] for d in dotacoes}
-        if not dotacoes:
-            st.warning("Nenhuma dotação cadastrada.")
+            for _, row in df.iterrows():
+                if row['perc_utilizado'] >= row['alerta_percentual']:
+                    st.warning(f"⚠️ Licitação {row['numero']} atingiu {row['perc_utilizado']}% de utilização (alerta: {row['alerta_percentual']}%)")
+
+            st.subheader("Ajustar Alerta")
+            lic_id = st.selectbox("Licitação", df['id'], format_func=lambda x: df[df['id'] == x]['numero'].values[0])
+            novo_alerta = st.slider("Novo percentual de alerta", 0, 100, 80, key="alerta_lic")
+            if st.button("Atualizar Alerta"):
+                run_update("UPDATE licitacoes SET alerta_percentual=? WHERE id=?", (novo_alerta, lic_id))
+                st.success("Alerta atualizado")
         else:
-            dot_sel = st.selectbox("Dotação", options=list(dot_opts.keys()), key="ext_dot")
-            extrato = get_extrato_dotacao(dot_opts[dot_sel])
-            if extrato:
-                st.dataframe(pd.DataFrame(extrato), use_container_width=True, height=500)
+            st.info("Nenhuma licitação cadastrada")
 
 
-def pagina_alertas():
-    st.title("⚠️ Alertas e Parâmetros")
+def page_ordens_compra():
+    st.title("📑 Ordens de Compra")
+    df_lic = run_query("SELECT id, numero FROM licitacoes")
+    df_forn = run_query("SELECT id, nome FROM fornecedores")
 
-    parametros = get_all_parametros()
-    if parametros:
-        for p in parametros:
-            novo_valor = st.slider(f"{p.get('nome', p['id'])} (atual: {p.get('valor', 0)})", 0, 100, int(p.get("valor", 0) or 0), 1)
-            if st.button(f"Salvar {p.get('nome', p['id'])}", key=f"btn_p_{p['id']}"):
-                try:
-                    update_parametro({"id": p["id"], "valor": novo_valor})
-                    st.success("Parâmetro atualizado!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-    else:
-        st.info("Nenhum parâmetro cadastrado.")
+    with st.form("form_oc"):
+        lic_id = st.selectbox("Licitação", df_lic['id'], format_func=lambda x: df_lic[df_lic['id'] == x]['numero'].values[0]) if not df_lic.empty else None
+        forn_id = st.selectbox("Fornecedor", df_forn['id'], format_func=lambda x: df_forn[df_forn['id'] == x]['nome'].values[0]) if not df_forn.empty else None
+        numero = st.text_input("Número OC")
+        data = st.date_input("Data", value=date.today())
+        valor = st.number_input("Valor", min_value=0.0, step=100.0)
+        qtd = st.number_input("Quantidade", min_value=0.0, step=1.0)
+        desc = st.text_area("Descrição")
+        if st.form_submit_button("Salvar OC"):
+            lic = run_query("SELECT saldo, valor_total FROM licitacoes WHERE id=?", (lic_id,))
+            if not lic.empty and valor <= lic['saldo'].iloc[0]:
+                run_insert("INSERT INTO ordens_compra (licitacao_id, fornecedor_id, numero, data, valor, qtd, descricao) VALUES (?,?,?,?,?,?,?)",
+                           (lic_id, forn_id, numero, data.isoformat(), valor, qtd, desc))
+                novo_saldo = float(lic['saldo'].iloc[0]) - valor
+                run_update("UPDATE licitacoes SET saldo=? WHERE id=?", (novo_saldo, lic_id))
+                st.success("Ordem de compra salva e saldo atualizado")
+            else:
+                st.error("Saldo insuficiente na licitação")
 
-    st.subheader("Preview dos Alertas Ativos")
-    alertas_lic = get_alerta_licitacao()
-    alertas_dot = get_alerta_dotacao()
-
-    if alertas_lic:
-        st.warning("Alertas de licitação")
-        st.dataframe(pd.DataFrame(alertas_lic), use_container_width=True)
-    if alertas_dot:
-        st.warning("Alertas de dotação")
-        st.dataframe(pd.DataFrame(alertas_dot), use_container_width=True)
-    if not alertas_lic and not alertas_dot:
-        st.success("✅ Nenhum alerta ativo no momento.")
+    st.subheader("Ordens Cadastradas")
+    df = run_query('''
+        SELECT oc.id, l.numero as licitacao, oc.numero, oc.data, oc.valor, oc.qtd, f.nome as fornecedor
+        FROM ordens_compra oc
+        JOIN licitacoes l ON oc.licitacao_id = l.id
+        LEFT JOIN fornecedores f ON oc.fornecedor_id = f.id
+    ''')
+    st.dataframe(df, use_container_width=True)
 
 
-def pagina_relatorios():
-    st.title("📈 Relatórios")
+def page_contratos():
+    st.title("📑 Contratos")
+    df_forn = run_query("SELECT id, nome FROM fornecedores")
+    df_con = run_query('''
+        SELECT c.*, f.nome as fornecedor FROM contratos c
+        LEFT JOIN fornecedores f ON c.fornecedor_id = f.id
+    ''')
 
-    col1, col2 = st.columns(2)
+    tab1, tab2, tab3 = st.tabs(["Cadastro", "Consulta", "Aditivos"])
+
+    with tab1:
+        with st.form("form_contrato"):
+            numero = st.text_input("Número Contrato")
+            forn_id = st.selectbox("Fornecedor", df_forn['id'], format_func=lambda x: df_forn[df_forn['id'] == x]['nome'].values[0]) if not df_forn.empty else None
+            objeto = st.text_area("Objeto")
+            valor_inicial = st.number_input("Valor Inicial", min_value=0.0, step=1000.0)
+            data_inicio = st.date_input("Data Início", value=date.today())
+            data_fim = st.date_input("Data Fim", value=date.today() + timedelta(days=365))
+            situacao = st.selectbox("Situação", ["Ativo", "Encerrado", "Suspenso", "Vencido"])
+            if st.form_submit_button("Salvar"):
+                run_insert("INSERT INTO contratos (numero, fornecedor_id, objeto, valor_inicial, valor_atual, data_inicio, data_fim, situacao) VALUES (?,?,?,?,?,?,?,?)",
+                           (numero, forn_id, objeto, valor_inicial, valor_inicial, data_inicio.isoformat(), data_fim.isoformat(), situacao))
+                st.success("Contrato salvo")
+
+    with tab2:
+        if not df_con.empty:
+            st.dataframe(df_con, use_container_width=True)
+            for _, row in df_con.iterrows():
+                fim = datetime.strptime(row['data_fim'], "%Y-%m-%d").date()
+                dias = (fim - date.today()).days
+                if dias <= 30 and dias >= 0:
+                    st.warning(f"⏰ Contrato {row['numero']} vence em {dias} dias")
+                elif dias < 0:
+                    st.error(f"⚠️ Contrato {row['numero']} vencido há {abs(dias)} dias")
+        else:
+            st.info("Nenhum contrato cadastrado")
+
+    with tab3:
+        if not df_con.empty:
+            con_id = st.selectbox("Contrato", df_con['id'], format_func=lambda x: df_con[df_con['id'] == x]['numero'].values[0])
+            tipo = st.selectbox("Tipo Aditivo", ["Prorrogação", "Reajuste", "Acrescimo", "Supressão", "Outro"])
+            valor = st.number_input("Valor do Aditivo", step=1000.0)
+            data_adit = st.date_input("Data Aditivo", value=date.today())
+            desc = st.text_area("Descrição")
+            if st.button("Salvar Aditivo"):
+                run_insert("INSERT INTO aditivos (contrato_id, tipo, valor, data, descricao) VALUES (?,?,?,?,?)",
+                           (con_id, tipo, valor, data_adit.isoformat(), desc))
+                contrato = run_query("SELECT valor_atual FROM contratos WHERE id=?", (con_id,))
+                if not contrato.empty:
+                    novo_valor = float(contrato['valor_atual'].iloc[0]) + valor
+                    run_update("UPDATE contratos SET valor_atual=? WHERE id=?", (novo_valor, con_id))
+                st.success("Aditivo salvo")
+        else:
+            st.info("Cadastre contratos primeiro")
+
+
+def page_fornecedores():
+    st.title("👥 Fornecedores")
+    tab1, tab2 = st.tabs(["Cadastro", "Consulta"])
+
+    with tab1:
+        with st.form("form_fornecedor"):
+            tipo = st.selectbox("Tipo", ["Pessoa Física", "Pessoa Jurídica"])
+            nome = st.text_input("Nome / Razão Social")
+            cpf_cnpj = st.text_input("CPF/CNPJ")
+            endereco = st.text_area("Endereço")
+            banco = st.text_input("Banco")
+            agencia = st.text_input("Agência")
+            conta = st.text_input("Conta")
+            if st.form_submit_button("Salvar"):
+                run_insert("INSERT INTO fornecedores (tipo, nome, cpf_cnpj, endereco, banco, agencia, conta) VALUES (?,?,?,?,?,?,?)",
+                           (tipo, nome, cpf_cnpj, endereco, banco, agencia, conta))
+                st.success("Fornecedor salvo")
+
+    with tab2:
+        df = run_query("SELECT * FROM fornecedores")
+        st.dataframe(df, use_container_width=True)
+
+
+def page_prestadores():
+    st.title("👥 Prestadores de Saúde")
+    tab1, tab2 = st.tabs(["Cadastro", "Consulta"])
+
+    with tab1:
+        with st.form("form_prestador"):
+            nome = st.text_input("Nome")
+            cnes = st.text_input("CNES")
+            tipo = st.selectbox("Tipo", ["Médico", "Enfermeiro", "Dentista", "Laboratório", "Clínica", "Hospital", "Farmácia", "Outro"])
+            conselho = st.text_input("Conselho / Registro")
+            validade = st.date_input("Validade do Credenciamento", value=date.today() + timedelta(days=180))
+            especialidade = st.text_input("Especialidade")
+            situacao = st.selectbox("Situação", ["Ativo", "Suspenso", "Cancelado", "Vencido"])
+            if st.form_submit_button("Salvar"):
+                run_insert("INSERT INTO prestadores (nome, cnes, tipo, conselho, validade, especialidade, situacao) VALUES (?,?,?,?,?,?,?)",
+                           (nome, cnes, tipo, conselho, validade.isoformat(), especialidade, situacao))
+                st.success("Prestador salvo")
+
+    with tab2:
+        df = run_query("SELECT * FROM prestadores")
+        st.dataframe(df, use_container_width=True)
+        for _, row in df.iterrows():
+            try:
+                val = datetime.strptime(row['validade'], "%Y-%m-%d").date()
+                if (val - date.today()).days <= 30:
+                    st.warning(f"⚠️ Credenciamento de {row['nome']} vence em {(val - date.today()).days} dias")
+            except:
+                pass
+
+
+def page_pacientes():
+    st.title("👥 Pacientes")
+    tab1, tab2, tab3 = st.tabs(["Cadastro", "Consulta", "Atendimentos"])
+
+    with tab1:
+        with st.form("form_paciente"):
+            nome = st.text_input("Nome")
+            cpf = st.text_input("CPF")
+            nasc = st.date_input("Nascimento", value=date.today())
+            sexo = st.selectbox("Sexo", ["Masculino", "Feminino", "Outro"])
+            endereco = st.text_area("Endereço")
+            telefone = st.text_input("Telefone")
+            if st.form_submit_button("Salvar"):
+                run_insert("INSERT INTO pacientes (nome, cpf, nascimento, sexo, endereco, telefone) VALUES (?,?,?,?,?,?)",
+                           (nome, cpf, nasc.isoformat(), sexo, endereco, telefone))
+                st.success("Paciente salvo")
+
+    with tab2:
+        df = run_query("SELECT * FROM pacientes")
+        st.dataframe(df, use_container_width=True)
+
+    with tab3:
+        df_pac = run_query("SELECT id, nome FROM pacientes")
+        df_prest = run_query("SELECT id, nome FROM prestadores")
+        with st.form("form_atendimento"):
+            pac_id = st.selectbox("Paciente", df_pac['id'], format_func=lambda x: df_pac[df_pac['id'] == x]['nome'].values[0]) if not df_pac.empty else None
+            data = st.date_input("Data Atendimento", value=date.today())
+            tipo = st.selectbox("Tipo", ["Consulta", "Exame", "Procedimento", "Internação", "Emergência"])
+            prest_id = st.selectbox("Prestador", df_prest['id'], format_func=lambda x: df_prest[df_prest['id'] == x]['nome'].values[0]) if not df_prest.empty else None
+            desc = st.text_area("Descrição")
+            if st.form_submit_button("Salvar"):
+                run_insert("INSERT INTO atendimentos (paciente_id, data, tipo, prestador_id, descricao) VALUES (?,?,?,?,?)",
+                           (pac_id, data.isoformat(), tipo, prest_id, desc))
+                st.success("Atendimento salvo")
+        st.subheader("Atendimentos Cadastrados")
+        df = run_query('''
+            SELECT a.id, p.nome as paciente, a.data, a.tipo, pr.nome as prestador, a.descricao
+            FROM atendimentos a
+            JOIN pacientes p ON a.paciente_id = p.id
+            LEFT JOIN prestadores pr ON a.prestador_id = pr.id
+        ''')
+        st.dataframe(df, use_container_width=True)
+
+
+def page_renen():
+    st.title("👥 RENEN - Relação Nacional de Estabelecimentos de Saúde")
+    tab1, tab2 = st.tabs(["Cadastro", "Consulta"])
+
+    with tab1:
+        with st.form("form_renen"):
+            nome = st.text_input("Nome")
+            cnes = st.text_input("CNES")
+            tipo = st.text_input("Tipo")
+            municipio = st.text_input("Município")
+            gestao = st.selectbox("Gestão", ["Municipal", "Estadual", "Federal", "Privada"])
+            natureza = st.selectbox("Natureza", ["Público", "Privado", "Filantrópico"])
+            situacao = st.selectbox("Situação", ["Ativo", "Inativo", "Suspenso"])
+            if st.form_submit_button("Salvar"):
+                run_insert("INSERT INTO renen (nome, cnes, tipo, municipio, gestao, natureza, situacao) VALUES (?,?,?,?,?,?,?)",
+                           (nome, cnes, tipo, municipio, gestao, natureza, situacao))
+                st.success("Estabelecimento salvo")
+
+    with tab2:
+        df = run_query("SELECT * FROM renen")
+        st.dataframe(df, use_container_width=True)
+
+
+def page_core_saude():
+    st.title("🏥 Core Saúde - Visão Geral Consolidada")
+    st.markdown("### Secretaria Municipal de Saúde de Luminárias")
+
+    col1, col2, col3, col4 = st.columns(4)
+    df_pacientes = run_query("SELECT COUNT(*) as total FROM pacientes")
+    df_prestadores = run_query("SELECT COUNT(*) as total FROM prestadores WHERE situacao='Ativo'")
+    df_atendimentos = run_query("SELECT COUNT(*) as total FROM atendimentos")
+    df_leitos = run_query("SELECT SUM(total) as total, SUM(ocupados) as ocupados FROM leitos")
+
     with col1:
-        data_inicio = st.date_input("Data Início", value=datetime.date(datetime.date.today().year, 1, 1))
+        st.metric("Pacientes Cadastrados", int(df_pacientes['total'].iloc[0]))
     with col2:
-        data_fim = st.date_input("Data Fim", value=datetime.date.today())
+        st.metric("Prestadores Ativos", int(df_prestadores['total'].iloc[0]))
+    with col3:
+        st.metric("Atendimentos", int(df_atendimentos['total'].iloc[0]))
+    with col4:
+        total_leitos = int(df_leitos['total'].iloc[0]) if df_leitos['total'].iloc[0] else 0
+        ocupados = int(df_leitos['ocupados'].iloc[0]) if df_leitos['ocupados'].iloc[0] else 0
+        taxa = (ocupados / total_leitos * 100) if total_leitos else 0
+        st.metric("Taxa Ocupação Leitos", f"{taxa:.1f}%")
 
-    tipo_rel = st.selectbox("Tipo de Relatório", [
-        "Execução Orçamentária", "Licitações", "Fornecedores"
-    ])
+    c1, c2 = st.columns(2)
+    with c1:
+        df_leitos_det = run_query("SELECT tipo, total, ocupados FROM leitos")
+        if not df_leitos_det.empty:
+            df_leitos_det['taxa'] = (df_leitos_det['ocupados'] / df_leitos_det['total'] * 100).round(1)
+            fig = px.bar(df_leitos_det, x='tipo', y='taxa', title='Taxa de Ocupação por Tipo de Leito', text_auto=True)
+            st.plotly_chart(fig, use_container_width=True)
+    with c2:
+        df_prod = run_query("SELECT tipo, SUM(quantidade) as total FROM producao GROUP BY tipo")
+        if not df_prod.empty:
+            fig = px.pie(df_prod, names='tipo', values='total', title='Produção por Tipo')
+            st.plotly_chart(fig, use_container_width=True)
 
-    if st.button("Gerar Relatório"):
-        try:
-            if tipo_rel == "Execução Orçamentária":
-                dados = get_relatorio_execucao_orcamentaria(data_inicio, data_fim)
-            elif tipo_rel == "Licitações":
-                dados = get_relatorio_licitacoes(data_inicio, data_fim)
-            elif tipo_rel == "Fornecedores":
-                dados = get_relatorio_fornecedores(data_inicio, data_fim)
+    st.subheader("Gestão de Leitos")
+    with st.form("form_leitos"):
+        estabelecimento = st.text_input("Estabelecimento")
+        tipo = st.text_input("Tipo de Leito")
+        total = st.number_input("Total Leitos", min_value=0, step=1)
+        ocupados = st.number_input("Ocupados", min_value=0, step=1)
+        if st.form_submit_button("Salvar Leitos"):
+            run_insert("INSERT INTO leitos (estabelecimento, tipo, total, ocupados, data) VALUES (?,?,?,?,?)",
+                       (estabelecimento, tipo, total, ocupados, date.today().isoformat()))
+            st.success("Leitos salvos")
+
+    st.subheader("Produção Ambulatorial e Hospitalar")
+    with st.form("form_producao"):
+        tipo_prod = st.selectbox("Tipo", ["Ambulatorial", "Hospitalar", "Exames", "Procedimentos"])
+        estab_prod = st.text_input("Estabelecimento")
+        qtd = st.number_input("Quantidade", min_value=0, step=1)
+        if st.form_submit_button("Salvar Produção"):
+            run_insert("INSERT INTO producao (tipo, estabelecimento, quantidade, data) VALUES (?,?,?,?)",
+                       (tipo_prod, estab_prod, qtd, date.today().isoformat()))
+            st.success("Produção salva")
+
+
+def page_sistemas_externos():
+    st.title("🔗 Sistemas Externos - Links Úteis")
+
+    links = [
+        ("E-Gestor AB", "https://egestorab.saude.gov.br", "Sistema de gestão do Ministério da Saúde"),
+        ("Investe SUS", "https://investesus.saude.gov.br", "Informações sobre investimentos no SUS"),
+        ("DigiSUS", "https://digisus.saude.gov.br", "Plataforma digital do SUS"),
+        ("SES Resolve", "#", "Portal estadual de serviços"),
+        ("SIGTAP", "http://sigtap.datasus.gov.br", "Tabela de Procedimentos do SUS"),
+        ("SES", "#", "Site da Secretaria Estadual de Saúde"),
+        ("COSEMS", "https://cosems.org", "Conselho de Secretarias Municipais de Saúde"),
+        ("CONASEMS", "https://conasems.org.br", "Conselho Nacional de Secretarias Municipais de Saúde"),
+        ("Sistema CIS", "https://www.cislav.com", "Consórcio Intermunicipal de Saúde"),
+        ("FNS - Fundo Nacional de Saúde", "https://www.fns.saude.gov.br", "Portal do FNS"),
+        ("Consolidação PPI", "#", "Consolidação de Programas e Projetos de Investimentos"),
+        ("SEI", "#", "Sistema Eletrônico de Informações"),
+        ("Tabela do Consórcio CISLAV", "#", "Tabela de referência do CISLAV")
+    ]
+
+    cols = st.columns(3)
+    for i, (nome, url, desc) in enumerate(links):
+        with cols[i % 3]:
+            st.markdown(f"""
+                <div style="border:1px solid #ddd; border-radius:10px; padding:15px; margin-bottom:15px; background:#f9f9f9;">
+                    <h4>{nome}</h4>
+                    <p>{desc}</p>
+                    <a href="{url}" target="_blank" style="text-decoration:none;">
+                        <button style="background:#0066cc; color:white; border:none; padding:8px 16px; border-radius:5px; cursor:pointer;">Acessar</button>
+                    </a>
+                </div>
+            """, unsafe_allow_html=True)
+
+
+def page_organograma():
+    st.title("📊 Organograma da Secretaria de Saúde")
+    st.graphviz_chart('''
+    digraph {
+        rankdir=TB;
+        node [shape=box, style="rounded,filled", color="#0066cc", fontcolor=white];
+        "Secretário Municipal de Saúde" -> "Diretoria de Atenção Primária";
+        "Secretário Municipal de Saúde" -> "Diretoria de Atenção Hospitalar";
+        "Secretário Municipal de Saúde" -> "Diretoria de Vigilância em Saúde";
+        "Secretário Municipal de Saúde" -> "Diretoria Administrativo-Financeira";
+        "Diretoria de Atenção Primária" -> "Departamento de UBS";
+        "Diretoria de Atenção Primária" -> "Departamento de Saúde da Família";
+        "Diretoria de Atenção Hospitalar" -> "Departamento de Hospital Municipal";
+        "Diretoria de Atenção Hospitalar" -> "Departamento de Regulação";
+        "Diretoria de Vigilância em Saúde" -> "Departamento de Epidemiologia";
+        "Diretoria de Vigilância em Saúde" -> "Departamento de Inspeção Sanitária";
+        "Diretoria Administrativo-Financeira" -> "Departamento de Orçamento";
+        "Diretoria Administrativo-Financeira" -> "Departamento de Licitações e Contratos";
+        "Diretoria Administrativo-Financeira" -> "Departamento de Recursos Humanos";
+        "Departamento de UBS" -> "Setor de Enfermagem";
+        "Departamento de UBS" -> "Setor de Medicamentos";
+        "Departamento de Orçamento" -> "Setor de Planejamento";
+        "Departamento de Licitações e Contratos" -> "Setor de Compras";
+    }
+    ''')
+
+
+def page_fluxo_adm():
+    st.title("📊 Fluxograma de Demanda Administrativa")
+    st.graphviz_chart('''
+    digraph {
+        rankdir=LR;
+        node [shape=box, style="rounded,filled", color="#009900", fontcolor=white];
+        "Solicitação" -> "Análise Técnica";
+        "Análise Técnica" -> "Aprovação";
+        "Aprovação" -> "Execução";
+        "Execução" -> "Prestação de Contas";
+        "Prestação de Contas" -> "Arquivamento";
+    }
+    ''')
+
+
+def page_fluxo_saude():
+    st.title("📊 Fluxograma da Saúde")
+    st.graphviz_chart('''
+    digraph {
+        rankdir=LR;
+        node [shape=box, style="rounded,filled", color="#cc6600", fontcolor=white];
+        "Demanda do Usuário" -> "UBS / Atenção Primária";
+        "UBS / Atenção Primária" -> "Referência (Especializada / Hospital)";
+        "Referência (Especializada / Hospital)" -> "Contrarreferência (Retorno à UBS)";
+        "Contrarreferência (Retorno à UBS)" -> "Acompanhamento na UBS";
+    }
+    ''')
+
+
+def page_financeiro():
+    st.title("💰 Execução Orçamentária")
+    df_dot = run_query("SELECT id, valor || ' - Programa: ' || programa_id as desc FROM dotacoes")
+    df_forn = run_query("SELECT id, nome FROM fornecedores")
+
+    tab1, tab2, tab3 = st.tabs(["Empenho", "Liquidação/Pagamento", "Alertas"])
+
+    with tab1:
+        with st.form("form_empenho"):
+            dot_id = st.selectbox("Dotação", df_dot['id'], format_func=lambda x: df_dot[df_dot['id'] == x]['desc'].values[0]) if not df_dot.empty else None
+            numero = st.text_input("Número Empenho")
+            data = st.date_input("Data", value=date.today())
+            valor = st.number_input("Valor Empenhado", min_value=0.0, step=1000.0)
+            forn_id = st.selectbox("Fornecedor", df_forn['id'], format_func=lambda x: df_forn[df_forn['id'] == x]['nome'].values[0]) if not df_forn.empty else None
+            desc = st.text_area("Descrição")
+            if st.form_submit_button("Salvar Empenho"):
+                run_insert("INSERT INTO empenhos (dotacao_id, numero, data, valor_empenhado, valor_liquidado, valor_pago, fornecedor_id, descricao) VALUES (?,?,?,?,?,?,?,?)",
+                           (dot_id, numero, data.isoformat(), valor, 0.0, 0.0, forn_id, desc))
+                st.success("Empenho salvo")
+
+    with tab2:
+        df_emp = run_query("SELECT id, numero FROM empenhos")
+        if not df_emp.empty:
+            emp_id = st.selectbox("Empenho", df_emp['id'], format_func=lambda x: df_emp[df_emp['id'] == x]['numero'].values[0])
+            emp = run_query("SELECT valor_empenhado, valor_liquidado, valor_pago FROM empenhos WHERE id=?", (emp_id,))
+            val_emp = float(emp['valor_empenhado'].iloc[0])
+            liq_atual = float(emp['valor_liquidado'].iloc[0])
+            pag_atual = float(emp['valor_pago'].iloc[0])
+            st.write(f"Empenhado: {format_currency(val_emp)} | Liquidado: {format_currency(liq_atual)} | Pago: {format_currency(pag_atual)}")
+            novo_liq = st.number_input("Valor a Liquidar", min_value=0.0, max_value=val_emp - liq_atual, step=100.0)
+            novo_pag = st.number_input("Valor a Pagar", min_value=0.0, max_value=val_emp - pag_atual, step=100.0)
+            if st.button("Atualizar Liquidação/Pagamento"):
+                run_update("UPDATE empenhos SET valor_liquidado=valor_liquidado+?, valor_pago=valor_pago+? WHERE id=?", (novo_liq, novo_pag, emp_id))
+                st.success("Valores atualizados")
+        else:
+            st.info("Nenhum empenho cadastrado")
+
+    with tab3:
+        st.subheader("Configurar Alertas Financeiros")
+        alerta = run_query("SELECT percentual FROM alertas WHERE modulo='financeiro'")
+        perc = float(alerta['percentual'].iloc[0]) if not alerta.empty else 80.0
+        novo = st.slider("Percentual de alerta para execução orçamentária", 0, 100, int(perc))
+        if st.button("Salvar Alerta"):
+            run_update("UPDATE alertas SET percentual=? WHERE modulo='financeiro'", (novo,))
+            st.success("Alerta atualizado")
+
+    st.subheader("Resumo Financeiro")
+    df = run_query('''
+        SELECT e.id, e.numero, e.data, e.valor_empenhado, e.valor_liquidado, e.valor_pago, d.valor as dotacao, f.nome as fornecedor
+        FROM empenhos e
+        JOIN dotacoes d ON e.dotacao_id = d.id
+        LEFT JOIN fornecedores f ON e.fornecedor_id = f.id
+    ''')
+    if not df.empty:
+        df['perc_exec'] = ((df['valor_empenhado'] / df['dotacao']) * 100).round(2)
+        st.dataframe(df, use_container_width=True)
+        alerta = run_query("SELECT percentual FROM alertas WHERE modulo='financeiro'")
+        perc = float(alerta['percentual'].iloc[0]) if not alerta.empty else 80.0
+        for _, row in df.iterrows():
+            if row['perc_exec'] >= perc:
+                st.warning(f"⚠️ Empenho {row['numero']} atingiu {row['perc_exec']}% da dotação")
+    else:
+        st.info("Nenhum empenho cadastrado")
+
+
+def page_suplementacoes():
+    st.title("💰 Suplementações")
+    df_dot = run_query("SELECT id, valor || ' - Programa: ' || programa_id as desc FROM dotacoes")
+
+    with st.form("form_suplementacao"):
+        dot_id = st.selectbox("Dotação", df_dot['id'], format_func=lambda x: df_dot[df_dot['id'] == x]['desc'].values[0]) if not df_dot.empty else None
+        tipo = st.selectbox("Tipo", ["Crédito Especial", "Crédito Suplementar", "Crédito Extraordinário", "Anulação"])
+        numero = st.text_input("Número Decreto/Portaria")
+        data = st.date_input("Data", value=date.today())
+        valor = st.number_input("Valor", min_value=0.0, step=1000.0)
+        desc = st.text_area("Descrição / Motivo")
+        if st.form_submit_button("Salvar"):
+            run_insert("INSERT INTO suplementacoes (dotacao_id, tipo, numero, data, valor, descricao) VALUES (?,?,?,?,?,?)",
+                       (dot_id, tipo, numero, data.isoformat(), valor, desc))
+            if tipo != "Anulação":
+                run_update("UPDATE dotacoes SET valor = valor + ? WHERE id=?", (valor, dot_id))
             else:
-                dados = []
+                run_update("UPDATE dotacoes SET valor = valor - ? WHERE id=?", (valor, dot_id))
+            st.success("Suplementação salva e dotação atualizada")
 
-            if dados:
-                df = pd.DataFrame(dados)
-                st.dataframe(df, use_container_width=True, height=500)
-                csv = df.to_csv(index=False).encode("utf-8")
-                st.download_button("📥 Download CSV", csv, f"relatorio_{tipo_rel.lower().replace(' ', '_')}.csv", "text/csv")
-            else:
-                st.info("Nenhum dado encontrado para o período/tipo selecionado.")
-        except Exception as e:
-            st.error(f"Erro ao gerar relatório: {e}")
+    st.subheader("Suplementações Cadastradas")
+    df = run_query('''
+        SELECT s.id, s.tipo, s.numero, s.data, s.valor, s.descricao, d.valor as dotacao
+        FROM suplementacoes s
+        JOIN dotacoes d ON s.dotacao_id = d.id
+    ''')
+    st.dataframe(df, use_container_width=True)
 
+
+def page_exportacao():
+    st.title("📈 Exportação de Dados")
+
+    tabelas = ["exercicios", "orgaos", "programas", "acoes", "naturezas", "fontes", "dotacoes", "receitas", "ppa", "ldo", "loa", "pas", "plano_saude",
+               "fornecedores", "prestadores", "pacientes", "renen", "licitacoes", "ordens_compra", "contratos", "aditivos", "empenhos", "suplementacoes",
+               "leitos", "producao", "atendimentos"]
+
+    tabela = st.selectbox("Selecionar tabela", tabelas)
+    data_inicio = st.date_input("Data Início", value=date(2026, 1, 1))
+    data_fim = st.date_input("Data Fim", value=date(2026, 12, 31))
+
+    if tabela in ["licitacoes", "ordens_compra", "contratos", "aditivos", "empenhos", "suplementacoes", "leitos", "producao", "atendimentos"]:
+        df = run_query(f"SELECT * FROM {tabela} WHERE data BETWEEN ? AND ?", (data_inicio.isoformat(), data_fim.isoformat()))
+    else:
+        df = run_query(f"SELECT * FROM {tabela}")
+
+    st.dataframe(df, use_container_width=True)
+
+    if not df.empty:
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("Download CSV", csv, f"{tabela}.csv", "text/csv")
+
+
+def page_relatorios():
+    st.title("📈 Relatórios Consolidados")
+
+    st.subheader("Resumo Orçamentário")
+    df_orc = run_query('''
+        SELECT e.ano, o.nome as orgao, p.nome as programa, a.nome as acao, f.descricao as fonte, d.valor
+        FROM dotacoes d
+        JOIN exercicios e ON d.exercicio_id = e.id
+        JOIN orgaos o ON d.orgao_id = o.id
+        JOIN programas p ON d.programa_id = p.id
+        JOIN acoes a ON d.acao_id = a.id
+        JOIN fontes f ON d.fonte_id = f.id
+    ''')
+    if not df_orc.empty:
+        st.dataframe(df_orc, use_container_width=True)
+        fig = px.sunburst(df_orc, path=['orgao', 'programa', 'acao'], values='valor', title='Distribuição Orçamentária')
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.subheader("Execução Financeira")
+    df_exec = run_query('''
+        SELECT p.nome as programa, SUM(e.valor_empenhado) as empenhado, SUM(e.valor_liquidado) as liquidado, SUM(e.valor_pago) as pago
+        FROM empenhos e
+        JOIN dotacoes d ON e.dotacao_id = d.id
+        JOIN programas p ON d.programa_id = p.id
+        GROUP BY p.nome
+    ''')
+    if not df_exec.empty:
+        st.dataframe(df_exec, use_container_width=True)
+        fig = go.Figure(data=[
+            go.Bar(name='Empenhado', x=df_exec['programa'], y=df_exec['empenhado']),
+            go.Bar(name='Liquidado', x=df_exec['programa'], y=df_exec['liquidado']),
+            go.Bar(name='Pago', x=df_exec['programa'], y=df_exec['pago'])
+        ])
+        fig.update_layout(barmode='group', title='Execução por Programa')
+        st.plotly_chart(fig, use_container_width=True)
+
+
+# ============================================================
+# MAIN
+# ============================================================
 
 def main():
-    if "usuario" not in st.session_state:
-        st.session_state.usuario = None
+    st.set_page_config(page_title="MARMED - Gestão em Saúde", layout="wide", initial_sidebar_state="expanded")
 
-    init_db()
+    if not os.path.exists(DB_FILE):
+        conn = init_db()
+        seed_data(conn)
+        conn.close()
+    else:
+        conn = init_db()
+        seed_data(conn)
+        conn.close()
 
-    if st.session_state.usuario is None:
-        st.title("🔐 MARMED Gestão em Saúde")
-        st.image("https://via.placeholder.com/200x80?text=MARMED", width=200)
-        email = st.text_input("Email", value="admin")
-        senha = st.text_input("Senha", type="password")
-        if st.button("Entrar"):
-            try:
-                user = login_usuario(email, hash_senha(senha))
-                if user:
-                    st.session_state.usuario = user
-                    st.rerun()
-                else:
-                    st.error("Email ou senha inválidos.")
-            except Exception as e:
-                st.error(f"Erro no login: {e}")
-        return
+    if 'authenticated' not in st.session_state:
+        st.session_state['authenticated'] = False
 
-    with st.sidebar:
-        st.title("🏥 MARMED")
-        st.caption(f"👤 {st.session_state.usuario['nome']}")
-        st.divider()
+    if not st.session_state['authenticated']:
+        login_page()
+    else:
+        sidebar_navigation()
+        page = st.session_state.get('page', 'dashboard')
 
-        pagina = st.radio("Navegação", [
-            "🏠 Dashboard", "📊 LOA", "📑 Licitações", "🛒 Compras",
-            "📜 Contratos", "🏢 Fornecedores", "🏥 Prestadores Saúde",
-            "👤 Pacientes", "💰 Financeiro", "⚠️ Alertas", "📈 Relatórios"
-        ])
-
-        st.divider()
-        if st.button("🚪 Sair"):
-            st.session_state.usuario = None
-            st.rerun()
-
-    if pagina == "🏠 Dashboard":
-        pagina_dashboard()
-    elif pagina == "📊 LOA":
-        pagina_loa()
-    elif pagina == "📑 Licitações":
-        pagina_licitacoes()
-    elif pagina == "🛒 Compras":
-        pagina_compras()
-    elif pagina == "📜 Contratos":
-        pagina_contratos()
-    elif pagina == "🏢 Fornecedores":
-        pagina_fornecedores()
-    elif pagina == "🏥 Prestadores Saúde":
-        pagina_prestadores()
-    elif pagina == "👤 Pacientes":
-        pagina_pacientes()
-    elif pagina == "💰 Financeiro":
-        pagina_financeiro()
-    elif pagina == "⚠️ Alertas":
-        pagina_alertas()
-    elif pagina == "📈 Relatórios":
-        pagina_relatorios()
+        if page == 'dashboard':
+            page_dashboard()
+        elif page == 'ppa':
+            page_ppa()
+        elif page == 'ldo':
+            page_ldo()
+        elif page == 'loa':
+            page_loa()
+        elif page == 'pas':
+            page_pas()
+        elif page == 'plano_saude':
+            page_plano_saude()
+        elif page == 'licitacoes':
+            page_licitacoes()
+        elif page == 'ordens_compra':
+            page_ordens_compra()
+        elif page == 'contratos':
+            page_contratos()
+        elif page == 'fornecedores':
+            page_fornecedores()
+        elif page == 'prestadores':
+            page_prestadores()
+        elif page == 'pacientes':
+            page_pacientes()
+        elif page == 'renen':
+            page_renen()
+        elif page == 'core_saude':
+            page_core_saude()
+        elif page == 'sistemas_externos':
+            page_sistemas_externos()
+        elif page == 'organograma':
+            page_organograma()
+        elif page == 'fluxo_adm':
+            page_fluxo_adm()
+        elif page == 'fluxo_saude':
+            page_fluxo_saude()
+        elif page == 'financeiro':
+            page_financeiro()
+        elif page == 'suplementacoes':
+            page_suplementacoes()
+        elif page == 'exportacao':
+            page_exportacao()
+        elif page == 'relatorios':
+            page_relatorios()
+        else:
+            page_dashboard()
 
 
 if __name__ == "__main__":
