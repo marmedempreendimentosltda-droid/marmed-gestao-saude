@@ -1,793 +1,753 @@
 import streamlit as st
 import sqlite3
-import base64
-import os
 import hashlib
+import re
+import base64
 from datetime import datetime
-import pandas as pd
-
-# ============================================================
-# CARREGAMENTO DE LOGO (definicoes mantidas, mas nao exibidas
-# visualmente em tela_login() e pagina_inicio() por enquanto)
-# ============================================================
 
 def get_logo_base64():
-    caminho = "logo.png"
-    if os.path.exists(caminho):
-        try:
-            with open(caminho, "rb") as f:
-                return base64.b64encode(f.read()).decode("utf-8")
-        except Exception:
-            return None
-    return None
+    try:
+        with open("logo.png", "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode("utf-8")
+    except Exception:
+        return None
 
 LOGO_BASE64 = get_logo_base64()
 
-# ============================================================
-# CONFIGURACAO DO BANCO DE DADOS
-# ============================================================
+st.set_page_config(page_title="MARMED - Gestao de Saude", page_icon="🏥", layout="wide", initial_sidebar_state="expanded")
+
+DB_NAME = "marmed.db"
+
+def get_conn():
+    return sqlite3.connect(DB_NAME, check_same_thread=False)
 
 def init_db():
-    conn = sqlite3.connect("marmed.db", check_same_thread=False)
-    c = conn.cursor()
+    conn = get_conn()
+    cur = conn.cursor()
 
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            usuario TEXT UNIQUE NOT NULL,
-            senha TEXT NOT NULL,
-            nome TEXT,
-            perfil TEXT DEFAULT 'usuario'
-        )
-    """)
+    schema = {
+        "users": [
+            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
+            ("username", "TEXT UNIQUE"),
+            ("password_hash", "TEXT"),
+            ("nome", "TEXT"),
+        ],
+        "contas_receber": [
+            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
+            ("esfera", "TEXT"),
+            ("numero_conta", "TEXT"),
+            ("fonte", "TEXT"),
+            ("referencia_tipo", "TEXT"),
+            ("referencia_numero", "TEXT"),
+            ("tipo_recurso", "TEXT"),
+            ("valor_pago_custeio", "REAL DEFAULT 0"),
+            ("valor_pago_investimento", "REAL DEFAULT 0"),
+            ("valor_total", "REAL DEFAULT 0"),
+            ("data_recebimento", "TEXT"),
+            ("programa_politica", "TEXT"),
+            ("setor_gasto", "TEXT"),
+        ],
+        "superavit": [
+            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
+            ("esfera", "TEXT"),
+            ("fonte_original", "TEXT"),
+            ("fonte_superavit", "TEXT"),
+            ("saldo_total", "REAL DEFAULT 0"),
+            ("saldo_restante", "REAL DEFAULT 0"),
+            ("created_at", "TEXT"),
+        ],
+        "ordens_compra": [
+            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
+            ("conta_receber_id", "INTEGER"),
+            ("esfera", "TEXT"),
+            ("numero_conta", "TEXT"),
+            ("fonte", "TEXT"),
+            ("ficha", "TEXT"),
+            ("tipo_despesa", "TEXT"),
+            ("data_compra", "TEXT"),
+            ("valor_compra", "REAL DEFAULT 0"),
+            ("produto_servico", "TEXT"),
+            ("created_at", "TEXT"),
+        ],
+        "arquivos_saude": [
+            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
+            ("bloco", "TEXT"),
+            ("nome_arquivo", "TEXT"),
+            ("conteudo_texto", "TEXT"),
+            ("dados_arquivo", "BLOB"),
+            ("data_upload", "TEXT"),
+        ],
+        "programas_saude": [
+            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
+            ("nome", "TEXT"),
+            ("descricao", "TEXT"),
+            ("created_at", "TEXT"),
+        ],
+        "conselho": [
+            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
+            ("nome", "TEXT"),
+            ("segmento", "TEXT"),
+            ("cargo", "TEXT"),
+            ("email", "TEXT"),
+            ("telefone", "TEXT"),
+            ("data_posse", "TEXT"),
+        ],
+    }
 
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS contas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            descricao TEXT NOT NULL,
-            categoria TEXT,
-            valor REAL,
-            vencimento TEXT,
-            status TEXT DEFAULT 'pendente'
-        )
-    """)
+    for tabela, colunas in schema.items():
+        colunas_sql = ", ".join(f"{nome} {definicao}" for nome, definicao in colunas)
+        cur.execute(f"CREATE TABLE IF NOT EXISTS {tabela} ({colunas_sql})")
 
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS compras (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            item TEXT NOT NULL,
-            fornecedor TEXT,
-            quantidade INTEGER,
-            valor_unitario REAL,
-            data TEXT,
-            esfera TEXT
-        )
-    """)
+    for tabela, colunas in schema.items():
+        existentes = {row[1] for row in cur.execute(f"PRAGMA table_info({tabela})").fetchall()}
+        for nome_coluna, definicao in colunas:
+            if nome_coluna in existentes:
+                continue
+            if "PRIMARY KEY" in definicao.upper():
+                continue
+            try:
+                cur.execute(f"ALTER TABLE {tabela} ADD COLUMN {nome_coluna} {definicao}")
+            except sqlite3.OperationalError:
+                pass
 
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS programas_saude (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            area TEXT,
-            responsavel TEXT,
-            orcamento REAL,
-            status TEXT DEFAULT 'ativo'
-        )
-    """)
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS arquivos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            tipo TEXT,
-            tamanho INTEGER,
-            data_upload TEXT,
-            esfera TEXT
-        )
-    """)
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS plano_municipal (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            eixo TEXT NOT NULL,
-            objetivo TEXT,
-            meta TEXT,
-            prazo TEXT,
-            responsavel TEXT
-        )
-    """)
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS conselho (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            cargo TEXT,
-            segmento TEXT,
-            telefone TEXT,
-            email TEXT
-        )
-    """)
-
-    # Usuario padrao
-    c.execute("SELECT * FROM usuarios WHERE usuario = ?", ("admin",))
-    if not c.fetchone():
-        senha_hash = hashlib.sha256("admin123".encode()).hexdigest()
-        c.execute(
-            "INSERT INTO usuarios (usuario, senha, nome, perfil) VALUES (?, ?, ?, ?)",
-            ("admin", senha_hash, "Administrador", "admin"),
-        )
+    admin_hash = hashlib.sha256("Diretor2025#".encode("utf-8")).hexdigest()
+    try:
+        cur.execute("INSERT OR IGNORE INTO users (username, password_hash, nome) VALUES (?, ?, ?)", ("admin", admin_hash, "Administrador"))
+    except sqlite3.OperationalError:
+        pass
 
     conn.commit()
-    return conn
+    conn.close()
 
+init_db()
+
+def format_currency(valor):
+    if valor is None:
+        valor = 0.0
+    v = float(valor)
+    texto = f"{v:,.2f}"
+    texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {texto}"
+
+def parse_valor(texto):
+    if texto is None:
+        return 0.0
+    if isinstance(texto, (int, float)):
+        return float(texto)
+    limpo = str(texto).replace("R$", "").replace(".", "").replace(",", ".").strip()
+    try:
+        return float(limpo)
+    except ValueError:
+        return 0.0
+
+def get_fonte(esfera):
+    mapa = {"Federal": "1.600", "Estadual": "1.621", "Municipal": "1.500", "Transferencia": "1.700", "Transposicao": "1.800"}
+    return mapa.get(esfera, "")
+
+def get_fonte_superavit(esfera):
+    mapa = {"Federal": "2.600", "Estadual": "2.621"}
+    return mapa.get(esfera)
 
 def hash_senha(senha):
-    return hashlib.sha256(senha.encode()).hexdigest()
+    return hashlib.sha256(senha.encode("utf-8")).hexdigest()
 
+def verificar_login(usuario, senha):
+    conn = get_conn()
+    row = conn.execute("SELECT id, username, nome FROM users WHERE username=? AND password_hash=?", (usuario, hash_senha(senha))).fetchone()
+    conn.close()
+    return row
 
-# ============================================================
-# ESTILOS GLOBAIS
-# ============================================================
+def extrair_texto(dados_bytes, nome_arquivo):
+    try:
+        if nome_arquivo.lower().endswith((".txt", ".csv")):
+            return dados_bytes.decode("utf-8", errors="replace")
+        return f"[Arquivo: {nome_arquivo}]"
+    except Exception:
+        return "[Nao foi possivel extrair texto]"
 
-ESTILOS_GLOBAIS = """
-<style>
-/* ===== Reset / base ===== */
-.stApp { background: #0a0e1a; }
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+if "usuario_nome" not in st.session_state:
+    st.session_state["usuario_nome"] = ""
+if "pagina" not in st.session_state:
+    st.session_state["pagina"] = "Inicio"
 
-/* ===== Aurora background ===== */
-.aurora-bg {
-    position: fixed;
-    top: 0; left: 0; width: 100vw; height: 100vh;
-    z-index: 0; overflow: hidden; pointer-events: none;
-}
-.aurora-blob {
-    position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.45;
-}
-.aurora-blob.b1 { width: 480px; height: 480px; background: #00d4ff; top: -120px; left: -100px; animation: float1 12s ease-in-out infinite; }
-.aurora-blob.b2 { width: 420px; height: 420px; background: #7b2ff7; bottom: -120px; right: -80px; animation: float2 14s ease-in-out infinite; }
-.aurora-blob.b3 { width: 360px; height: 360px; background: #ff2d75; top: 40%; left: 50%; animation: float3 16s ease-in-out infinite; }
-@keyframes float1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(60px,40px); } }
-@keyframes float2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-50px,-30px); } }
-@keyframes float3 { 0%,100% { transform: translate(-50%,-50%); } 50% { transform: translate(-30%,-60%); } }
-
-/* ===== Login card (glassmorphism) ===== */
-.login-card {
-    position: relative; z-index: 10;
-    max-width: 460px; margin: 80px auto 0 auto;
-    padding: 50px 44px;
-    background: rgba(255,255,255,0.07);
-    backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 24px;
-    box-shadow: 0 24px 70px rgba(0,0,0,0.45);
-}
-.login-title {
-    font-size: 84px;
-    font-weight: 800;
-    letter-spacing: 6px;
-    text-align: center;
-    margin: 0 0 6px 0;
-    background: linear-gradient(135deg, #00d4ff, #7b2ff7, #ff2d75);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    line-height: 1.05;
-}
-.login-subtitle {
-    text-align: center; color: rgba(255,255,255,0.6);
-    font-size: 15px; letter-spacing: 2px; margin-bottom: 30px;
-    text-transform: uppercase;
-}
-
-/* ===== Inicio - cabecalho ===== */
-.mm-brand-title {
-    font-size: 96px;
-    font-weight: 800;
-    letter-spacing: 8px;
-    text-align: center;
-    margin: 0 0 8px 0;
-    background: linear-gradient(135deg, #00d4ff, #7b2ff7, #ff2d75);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    line-height: 1.05;
-}
-.mm-brand-subtitle {
-    font-size: 34px;
-    font-weight: 600;
-    text-align: center;
-    color: rgba(255,255,255,0.85);
-    margin: 0 0 6px 0;
-    letter-spacing: 3px;
-}
-.mm-brand-institution {
-    font-size: 24px;
-    font-weight: 400;
-    text-align: center;
-    color: rgba(255,255,255,0.5);
-    margin: 0 0 40px 0;
-    letter-spacing: 2px;
-}
-
-/* ===== Esferas clicaveis ===== */
-.esferas-grid {
-    display: flex; flex-wrap: wrap; justify-content: center;
-    gap: 28px; margin-top: 20px;
-}
-.esfera-card {
-    width: 200px; height: 200px; border-radius: 50%;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    cursor: pointer; transition: transform 0.3s ease, box-shadow 0.3s ease;
-    text-decoration: none; color: #fff;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
-}
-.esfera-card:hover {
-    transform: scale(1.08);
-    box-shadow: 0 18px 55px rgba(0,0,0,0.55);
-}
-.esfera-card .esfera-icon { font-size: 52px; margin-bottom: 8px; }
-.esfera-card .esfera-label { font-size: 16px; font-weight: 600; text-align: center; padding: 0 10px; }
-.esfera-1 { background: linear-gradient(135deg, #00d4ff, #0066ff); }
-.esfera-2 { background: linear-gradient(135deg, #7b2ff7, #b347ff); }
-.esfera-3 { background: linear-gradient(135deg, #ff2d75, #ff6b6b); }
-.esfera-4 { background: linear-gradient(135deg, #00e8a0, #00b377); }
-.esfera-5 { background: linear-gradient(135deg, #ffa600, #ff6b00); }
-
-/* ===== Titulos de pagina ===== */
-.page-title {
-    font-size: 38px; font-weight: 700; color: #fff;
-    margin-bottom: 24px; letter-spacing: 1px;
-}
-.section-title {
-    font-size: 22px; font-weight: 600; color: rgba(255,255,255,0.9);
-    margin: 20px 0 12px 0;
-}
-
-/* ===== Menu lateral ===== */
-.nav-section-label {
-    font-size: 11px; text-transform: uppercase; letter-spacing: 2px;
-    color: rgba(255,255,255,0.4); margin: 18px 0 8px 6px; font-weight: 700;
-}
-</style>
-"""
-
-
-# ============================================================
-# TELA DE LOGIN
-# ============================================================
+st.markdown(
+    """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    * { font-family: 'Inter', sans-serif; }
+    .stApp { background: linear-gradient(135deg, #0a0e27 0%, #16213e 50%, #0f3460 100%); }
+    section[data-testid="stSidebar"] { background: linear-gradient(180deg, #0a0e27 0%, #16213e 100%); border-right: 1px solid rgba(56,189,248,0.15); }
+    section[data-testid="stSidebar"] p, section[data-testid="stSidebar"] label { color: #cbd5e1; }
+    section[data-testid="stSidebar"] button { color: #f8fafc !important; }
+    .stButton>button { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #ffffff; border: none; border-radius: 10px; font-weight: 700; padding: 28px 16px; font-size: 17px; transition: all 0.2s ease; }
+    .stButton>button:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    .stTextInput input, .stNumberInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] { background: rgba(255,255,255,0.06) !important; color: #f1f5f9 !important; border-radius: 12px !important; border: 1px solid rgba(148,163,184,0.25) !important; }
+    .stTextInput label, .stSelectbox label, .stNumberInput label, .stTextArea label, .stDateInput label { color: #e2e8f0 !important; font-weight: 500; }
+    .stTextInput > div, .stNumberInput > div, .stTextArea > div, .stDateInput > div { border-radius: 12px; transition: box-shadow 0.2s ease, border-color 0.2s ease; }
+    .stTextInput > div:focus-within, .stNumberInput > div:focus-within, .stTextArea > div:focus-within, .stDateInput > div:focus-within { box-shadow: 0 0 0 2px rgba(56,189,248,0.45); border-color: rgba(56,189,248,0.6) !important; }
+    .mm-title { font-size: 34px; font-weight: 800; color: #f1f5f9; margin-bottom: 4px; }
+    .mm-subtitle { color: #cbd5e1; font-size: 14px; margin-bottom: 24px; }
+    .mm-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; text-align: center; }
+    .mm-card-value { font-size: 22px; font-weight: 800; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .mm-card-label { color: #cbd5e1; font-size: 12px; margin-top: 6px; }
+    .mm-brand-title { font-size: 96px; font-weight: 800; color: #f8fafc; letter-spacing: 2px; text-align: center; margin-bottom: 4px; }
+    .mm-brand-subtitle { font-size: 34px; font-weight: 600; color: #7dd3fc; text-align: center; margin-bottom: 3px; }
+    .mm-brand-institution { font-size: 24px; font-weight: 500; color: #cbd5e1; text-align: center; margin-bottom: 20px; }
+    header[data-testid="stHeader"] { background: transparent !important; box-shadow: none !important; }
+    div[data-testid="stToolbar"] { background: transparent !important; }
+    div[data-testid="stDecoration"] { background: transparent !important; display: none !important; }
+    .stApp > header { background: transparent !important; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 def tela_login():
-    st.markdown(ESTILOS_GLOBAIS, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background:
+                radial-gradient(circle at 15% 20%, rgba(56,189,248,0.28) 0%, transparent 45%),
+                radial-gradient(circle at 85% 15%, rgba(129,140,248,0.30) 0%, transparent 45%),
+                radial-gradient(circle at 75% 85%, rgba(192,132,252,0.26) 0%, transparent 50%),
+                radial-gradient(circle at 25% 80%, rgba(56,189,248,0.18) 0%, transparent 45%),
+                linear-gradient(135deg, #0a0e27 0%, #16213e 50%, #0f3460 100%);
+            background-attachment: fixed;
+        }
+        .login-card {
+            background: rgba(255,255,255,0.07);
+            backdrop-filter: blur(32px);
+            -webkit-backdrop-filter: blur(32px);
+            border-radius: 32px;
+            padding: 52px 44px;
+            max-width: 460px;
+            margin: 60px auto 0 auto;
+            box-shadow:
+                0 30px 60px rgba(0,0,0,0.45),
+                inset 0 1px 0 rgba(255,255,255,0.18),
+                0 0 0 1px rgba(129,140,248,0.18);
+        }
+        .login-title {
+            font-size: 84px;
+            font-weight: 800;
+            text-align: center;
+            background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 4px;
+            margin: 0;
+        }
+        .login-subtitle { text-align: center; color: #cbd5e1; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 36px; margin-top: 6px; }
+        .login-badge { display: flex; justify-content: center; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+        .login-badge span {
+            background: rgba(56,189,248,0.10);
+            color: #bae6fd;
+            font-size: 11px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(56,189,248,0.28);
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+        .login-footer { text-align: center; margin-top: 22px; color: #94a3b8; font-size: 11px; letter-spacing: 1px; }
+        div[data-testid="stForm"] .stButton>button {
+            background: linear-gradient(135deg, #38bdf8, #6366f1, #c084fc) !important;
+            color: #ffffff !important;
+            border: none !important;
+            border-radius: 14px !important;
+            font-weight: 700 !important;
+            padding: 0.75rem 1rem !important;
+            box-shadow: 0 10px 28px rgba(99,102,241,0.45) !important;
+            transition: all 0.2s ease !important;
+        }
+        div[data-testid="stForm"] .stButton>button:hover {
+            filter: brightness(1.12);
+            transform: scale(1.02);
+            box-shadow: 0 14px 34px rgba(99,102,241,0.6) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    st.markdown('<div class="aurora-bg"><div class="aurora-blob b1"></div><div class="aurora-blob b2"></div><div class="aurora-blob b3"></div></div>', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1.3, 1])
+    with col2:
+        st.markdown('<div class="login-card">', unsafe_allow_html=True)
+        st.markdown('<p class="login-title">MARMED</p>', unsafe_allow_html=True)
+        st.markdown('<p class="login-subtitle">Gestao Inteligente de Saude Municipal</p>', unsafe_allow_html=True)
 
-    st.markdown('<div class="login-card">', unsafe_allow_html=True)
-    st.markdown('<h1 class="login-title">MARMED</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="login-subtitle">Gestao Publica Municipal</p>', unsafe_allow_html=True)
+        with st.form("form_login"):
+            usuario = st.text_input("Usuario", placeholder="Digite seu usuario")
+            senha = st.text_input("Senha", type="password", placeholder="Digite sua senha")
+            entrar = st.form_submit_button("Entrar", use_container_width=True)
 
-    col_spacer = st.columns([1, 3, 1])
-    with col_spacer[1]:
-        usuario = st.text_input("Usuario", key="login_usuario", label_visibility="collapsed", placeholder="Usuario")
-        senha = st.text_input("Senha", type="password", key="login_senha", label_visibility="collapsed", placeholder="Senha")
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        if st.button("Entrar", key="btn_entrar", use_container_width=True):
-            conn = init_db()
-            c = conn.cursor()
-            senha_hash = hash_senha(senha)
-            c.execute("SELECT * FROM usuarios WHERE usuario = ? AND senha = ?", (usuario, senha_hash))
-            user = c.fetchone()
-            if user:
-                st.session_state["logado"] = True
-                st.session_state["usuario"] = usuario
-                st.session_state["nome"] = user[3] if user[3] else usuario
-                st.session_state["perfil"] = user[4] if user[4] else "usuario"
-                st.session_state["pagina"] = "Inicio"
+            if entrar:
+                if not usuario or not senha:
+                    st.error("Preencha usuario e senha.")
+                else:
+                    row = verificar_login(usuario, senha)
+                    if row:
+                        st.session_state["logged_in"] = True
+                        st.session_state["usuario_id"] = row[0]
+                        st.session_state["usuario_nome"] = row[2] or row[1]
+                        st.session_state["pagina"] = "Inicio"
+                        st.rerun()
+                    else:
+                        st.error("Usuario ou senha invalidos.")
+
+        st.markdown('<div class="login-badge"><span>🔒 SEGURO</span><span>✦ MODERNO</span><span>✚ SUS</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-footer">MARMED © 2026 - Gestao Inteligente de Saude</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+def pagina_inicio():
+    st.markdown('<p class="mm-brand-title">MARMED</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-brand-subtitle">Sistema Integrado de Gestao Publica</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-brand-institution">Prefeitura Municipal de Luminarias - MG</p>', unsafe_allow_html=True)
+
+    conn = get_conn()
+    esferas = ["Federal", "Estadual", "Municipal", "Transferencia", "Transposicao"]
+    cols = st.columns(len(esferas))
+    for i, esf in enumerate(esferas):
+        total = conn.execute("SELECT COALESCE(SUM(valor_total),0) FROM contas_receber WHERE esfera=?", (esf,)).fetchone()[0]
+        with cols[i]:
+            if st.button(f"{esf}  ·  {format_currency(total)}", key=f"btn_esfera_{esf}", use_container_width=True):
+                st.session_state["esfera_selecionada"] = esf
+                st.session_state["pagina"] = "Esfera Detalhe"
                 st.rerun()
+    conn.close()
+
+def pagina_esfera_detalhe():
+    esfera = st.session_state.get("esfera_selecionada", "Federal")
+    if esfera in ("Federal", "Estadual", "Municipal"):
+        titulo = f"Esfera {esfera}"
+    else:
+        titulo = esfera
+
+    st.markdown(f'<p class="mm-title">{titulo}</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">Detalhamento das contas cadastradas para esta esfera</p>', unsafe_allow_html=True)
+
+    conn = get_conn()
+    total = conn.execute("SELECT COALESCE(SUM(valor_total),0) FROM contas_receber WHERE esfera=?", (esfera,)).fetchone()[0]
+    linhas = conn.execute(
+        "SELECT id, numero_conta, fonte, tipo_recurso, valor_total, data_recebimento FROM contas_receber WHERE esfera=? ORDER BY id DESC",
+        (esfera,),
+    ).fetchall()
+    conn.close()
+
+    st.markdown(
+        f'<div class="mm-card" style="margin-bottom:20px;">'
+        f'<div class="mm-card-label">Total da Esfera</div>'
+        f'<div class="mm-card-value">{format_currency(total)}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    if not linhas:
+        st.info("Nenhuma conta cadastrada para esta esfera ainda.")
+    else:
+        for linha in linhas:
+            cid, numero_conta, fonte, tipo_recurso, valor_total, data_recebimento = linha
+            st.markdown(
+                f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
+                f'<strong>Conta {numero_conta}</strong> - Fonte {fonte}<br>'
+                f'{tipo_recurso} - {format_currency(valor_total)} - {data_recebimento}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    if st.button("Voltar ao Inicio", key="btn_voltar_inicio", use_container_width=True):
+        st.session_state["pagina"] = "Inicio"
+        st.rerun()
+
+def pagina_cadastro_contas():
+    st.markdown('<p class="mm-title">Cadastro de Contas</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">Registre as contas a receber por esfera de gestao</p>', unsafe_allow_html=True)
+
+    with st.form("form_cadastro_conta"):
+        col1, col2 = st.columns(2)
+        with col1:
+            esfera = st.selectbox("Esfera", ["Federal", "Estadual", "Municipal", "Transferencia", "Transposicao"])
+            numero_conta = st.text_input("Numero da Conta")
+            referencia_tipo = st.text_input("Tipo de Referencia")
+            referencia_numero = st.text_input("Numero de Referencia")
+        with col2:
+            tipo_recurso = st.selectbox("Tipo de Recurso", ["Custeio", "Investimento", "Custeio e Investimento"])
+            valor_custeio = st.text_input("Valor Custeio", value="R$ 0,00")
+            valor_investimento = st.text_input("Valor Investimento", value="R$ 0,00")
+            data_recebimento = st.date_input("Data de Recebimento", value=datetime.now())
+
+        programa_politica = st.text_input("Programa / Politica")
+        setor_gasto = st.text_input("Setor de Gasto")
+
+        salvar = st.form_submit_button("Salvar Conta", use_container_width=True)
+
+        if salvar:
+            vc = parse_valor(valor_custeio)
+            vi = parse_valor(valor_investimento)
+            vt = vc + vi
+            if vt <= 0:
+                st.error("Informe pelo menos um valor de custeio ou investimento.")
             else:
-                st.error("Usuario ou senha invalidos.")
+                conn = get_conn()
+                conn.execute(
+                    "INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (esfera, numero_conta, get_fonte(esfera), referencia_tipo, referencia_numero, tipo_recurso, vc, vi, vt, data_recebimento.strftime("%d/%m/%Y"), programa_politica, setor_gasto),
+                )
+                conn.commit()
+                conn.close()
+                st.success("Conta cadastrada com sucesso!")
+                st.rerun()
 
-    st.markdown('</div>', unsafe_allow_html=True)
+def pagina_contas_cadastradas():
+    st.markdown('<p class="mm-title">Contas Cadastradas</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">Consulte todas as contas registradas no sistema</p>', unsafe_allow_html=True)
 
+    conn = get_conn()
+    linhas = conn.execute(
+        "SELECT id, esfera, numero_conta, fonte, tipo_recurso, valor_total, data_recebimento FROM contas_receber ORDER BY id DESC"
+    ).fetchall()
+    conn.close()
 
-# ============================================================
-# MENU LATERAL
-# ============================================================
+    if not linhas:
+        st.info("Nenhuma conta cadastrada ainda.")
+        return
+
+    for linha in linhas:
+        cid, esfera, numero_conta, fonte, tipo_recurso, valor_total, data_recebimento = linha
+        st.markdown(
+            f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
+            f'<strong>{esfera}</strong> - Conta {numero_conta} - Fonte {fonte}<br>'
+            f'{tipo_recurso} - {format_currency(valor_total)} - {data_recebimento}'
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+def pagina_realizar_compras():
+    st.markdown('<p class="mm-title">Realizar Compras</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">Registre ordens de compra vinculadas as contas cadastradas</p>', unsafe_allow_html=True)
+
+    conn = get_conn()
+    contas = conn.execute("SELECT id, esfera, numero_conta, fonte, valor_total FROM contas_receber ORDER BY id DESC").fetchall()
+    conn.close()
+
+    if not contas:
+        st.info("Cadastre uma conta antes de realizar compras.")
+        return
+
+    opcoes = {f"{c[1]} - Conta {c[2]} - Fonte {c[3]}": c for c in contas}
+    escolha = st.selectbox("Selecione a conta", list(opcoes.keys()))
+    conta_selecionada = opcoes[escolha]
+
+    with st.form("form_compra"):
+        ficha = st.text_input("Ficha")
+        tipo_despesa = st.selectbox("Tipo de Despesa", ["Material de Consumo", "Servico PF", "Servico PJ", "Distribuicao Gratuita", "Equipamento"])
+        data_compra = st.date_input("Data da Compra", value=datetime.now())
+        valor_compra = st.text_input("Valor da Compra", value="R$ 0,00")
+        produto_servico = st.text_area("Descricao do Produto/Servico")
+
+        registrar = st.form_submit_button("Registrar Compra", use_container_width=True)
+
+        if registrar:
+            vc = parse_valor(valor_compra)
+            if vc <= 0:
+                st.error("Informe um valor de compra maior que zero.")
+            else:
+                conn = get_conn()
+                conn.execute(
+                    "INSERT INTO ordens_compra (conta_receber_id, esfera, numero_conta, fonte, ficha, tipo_despesa, data_compra, valor_compra, produto_servico, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (conta_selecionada[0], conta_selecionada[1], conta_selecionada[2], conta_selecionada[3], ficha, tipo_despesa, data_compra.strftime("%d/%m/%Y"), vc, produto_servico, datetime.now().strftime("%d/%m/%Y %H:%M:%S")),
+                )
+                conn.commit()
+                conn.close()
+                st.success("Compra registrada com sucesso!")
+                st.rerun()
+
+def pagina_superavit():
+    st.markdown('<p class="mm-title">Superavit Financeiro</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">Controle o superavit de recursos de exercicios anteriores</p>', unsafe_allow_html=True)
+
+    with st.form("form_superavit"):
+        esfera = st.selectbox("Esfera", ["Federal", "Estadual"])
+        valor = st.text_input("Valor do Superavit", value="R$ 0,00")
+        registrar = st.form_submit_button("Registrar Superavit", use_container_width=True)
+
+        if registrar:
+            v = parse_valor(valor)
+            if v <= 0:
+                st.error("Informe um valor maior que zero.")
+            else:
+                conn = get_conn()
+                conn.execute(
+                    "INSERT INTO superavit (esfera, fonte_original, fonte_superavit, saldo_total, saldo_restante, created_at) VALUES (?,?,?,?,?,?)",
+                    (esfera, get_fonte(esfera), get_fonte_superavit(esfera), v, v, datetime.now().strftime("%d/%m/%Y %H:%M:%S")),
+                )
+                conn.commit()
+                conn.close()
+                st.success("Superavit registrado com sucesso!")
+                st.rerun()
+
+    conn = get_conn()
+    linhas = conn.execute("SELECT esfera, fonte_superavit, saldo_total, saldo_restante, created_at FROM superavit ORDER BY id DESC").fetchall()
+    conn.close()
+
+    if linhas:
+        st.markdown("<br>", unsafe_allow_html=True)
+        for esfera, fonte_sup, saldo_total, saldo_restante, criado in linhas:
+            st.markdown(
+                f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
+                f"<strong>{esfera}</strong> - Fonte {fonte_sup}<br>"
+                f"Total: {format_currency(saldo_total)} - Restante: {format_currency(saldo_restante)} - {criado}"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+def pagina_programas_saude():
+    st.markdown('<p class="mm-title">Programas de Saude</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">Cadastre e acompanhe os programas municipais de saude</p>', unsafe_allow_html=True)
+
+    with st.form("form_programa"):
+        nome = st.text_input("Nome do Programa")
+        descricao = st.text_area("Descricao")
+        salvar = st.form_submit_button("Salvar Programa", use_container_width=True)
+
+        if salvar:
+            if not nome:
+                st.error("Informe o nome do programa.")
+            else:
+                conn = get_conn()
+                conn.execute(
+                    "INSERT INTO programas_saude (nome, descricao, created_at) VALUES (?,?,?)",
+                    (nome, descricao, datetime.now().strftime("%d/%m/%Y %H:%M:%S")),
+                )
+                conn.commit()
+                conn.close()
+                st.success("Programa cadastrado com sucesso!")
+                st.rerun()
+
+    conn = get_conn()
+    linhas = conn.execute("SELECT nome, descricao, created_at FROM programas_saude ORDER BY id DESC").fetchall()
+    conn.close()
+
+    if linhas:
+        st.markdown("<br>", unsafe_allow_html=True)
+        for nome, descricao, criado in linhas:
+            st.markdown(
+                f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
+                f"<strong>{nome}</strong><br>{descricao}<br>"
+                f'<span style="color:#94a3b8;font-size:11px;">{criado}</span>'
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+def pagina_upload_arquivos():
+    st.markdown('<p class="mm-title">Upload de Arquivos</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">Envie documentos e comprovantes do sistema</p>', unsafe_allow_html=True)
+
+    bloco = st.selectbox("Categoria do Arquivo", ["Contas", "Compras", "Programas de Saude", "Plano Municipal", "Conselho", "Outros"])
+    arquivo = st.file_uploader("Selecione o arquivo", type=["pdf", "docx", "doc", "txt", "csv", "xlsx"])
+
+    if st.button("Enviar Arquivo", use_container_width=True):
+        if not arquivo:
+            st.error("Selecione um arquivo antes de enviar.")
+        else:
+            dados_bytes = arquivo.read()
+            texto = extrair_texto(dados_bytes, arquivo.name)
+            conn = get_conn()
+            conn.execute(
+                "INSERT INTO arquivos_saude (bloco, nome_arquivo, conteudo_texto, dados_arquivo, data_upload) VALUES (?,?,?,?,?)",
+                (bloco, arquivo.name, texto, dados_bytes, datetime.now().strftime("%d/%m/%Y %H:%M:%S")),
+            )
+            conn.commit()
+            conn.close()
+            st.success("Arquivo enviado com sucesso!")
+            st.rerun()
+
+    conn = get_conn()
+    linhas = conn.execute("SELECT bloco, nome_arquivo, data_upload FROM arquivos_saude ORDER BY id DESC").fetchall()
+    conn.close()
+
+    if linhas:
+        st.markdown("<br>", unsafe_allow_html=True)
+        for bloco_item, nome_arquivo, data_upload in linhas:
+            st.markdown(
+                f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
+                f"<strong>{nome_arquivo}</strong> - {bloco_item}<br>"
+                f'<span style="color:#94a3b8;font-size:11px;">{data_upload}</span>'
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+def pagina_plano_municipal():
+    st.markdown('<p class="mm-title">Plano Municipal de Saude</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">Diretrizes e eixos estrategicos do PMS</p>', unsafe_allow_html=True)
+
+    st.markdown(
+        '<div class="mm-card" style="text-align:left;">'
+        "O Plano Municipal de Saude (PMS) e o instrumento de planejamento que orienta a gestao "
+        "municipal do SUS, definindo diretrizes, objetivos, metas e indicadores para o periodo "
+        "de vigencia estabelecido."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+def pagina_norte_gestao():
+    st.markdown('<p class="mm-title">Norte da Minha Gestao</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">Diretrizes estrategicas da Secretaria Municipal de Saude</p>', unsafe_allow_html=True)
+
+    diretrizes = [
+        ("Fortalecimento da Atencao Primaria", "Ampliar a cobertura da Estrategia Saude da Familia e fortalecer o vinculo com a comunidade."),
+        ("Eficiencia na Gestao Financeira", "Otimizar recursos publicos e garantir transparencia nos repasses."),
+        ("Valorizacao dos Profissionais", "Investir em capacitacao continua e melhores condicoes de trabalho."),
+        ("Integracao Regional", "Fortalecer a parceria com o CISLAV e demais consorcios, ampliando o acesso a consultas especializadas e exames."),
+        ("Controle Social e Transparencia", "Garantir a participacao ativa do Conselho Municipal de Saude."),
+    ]
+
+    for titulo, descricao in diretrizes:
+        st.markdown(
+            f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
+            f"<strong>{titulo}</strong><br>{descricao}"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+def pagina_conselho():
+    st.markdown('<p class="mm-title">Conselho Municipal de Saude</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">Cadastro de membros do conselho</p>', unsafe_allow_html=True)
+
+    with st.form("form_conselho"):
+        nome = st.text_input("Nome")
+        segmento = st.selectbox("Segmento", ["Usuarios", "Trabalhadores", "Gestores", "Prestadores"])
+        cargo = st.text_input("Cargo")
+        email = st.text_input("E-mail")
+        telefone = st.text_input("Telefone")
+        data_posse = st.date_input("Data de Posse", value=datetime.now())
+
+        salvar = st.form_submit_button("Cadastrar Membro", use_container_width=True)
+
+        if salvar:
+            if not nome:
+                st.error("Informe o nome do membro.")
+            else:
+                conn = get_conn()
+                conn.execute(
+                    "INSERT INTO conselho (nome, segmento, cargo, email, telefone, data_posse) VALUES (?,?,?,?,?,?)",
+                    (nome, segmento, cargo, email, telefone, data_posse.strftime("%d/%m/%Y")),
+                )
+                conn.commit()
+                conn.close()
+                st.success("Membro cadastrado com sucesso!")
+                st.rerun()
+
+    conn = get_conn()
+    linhas = conn.execute("SELECT nome, segmento, cargo, data_posse FROM conselho ORDER BY id DESC").fetchall()
+    conn.close()
+
+    if linhas:
+        st.markdown("<br>", unsafe_allow_html=True)
+        for nome, segmento, cargo, data_posse in linhas:
+            st.markdown(
+                f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
+                f"<strong>{nome}</strong> - {cargo}<br>"
+                f'<span style="color:#94a3b8;font-size:11px;">{segmento} - Posse em {data_posse}</span>'
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+def pagina_trocar_senha():
+    st.markdown('<p class="mm-title">Trocar Senha</p>', unsafe_allow_html=True)
+    st.markdown('<p class="mm-subtitle">Atualize sua senha de acesso</p>', unsafe_allow_html=True)
+
+    with st.form("form_trocar_senha"):
+        senha_atual = st.text_input("Senha Atual", type="password")
+        nova_senha = st.text_input("Nova Senha", type="password")
+        confirmar_senha = st.text_input("Confirmar Nova Senha", type="password")
+        salvar = st.form_submit_button("Alterar Senha", use_container_width=True)
+
+        if salvar:
+            conn = get_conn()
+            row = conn.execute(
+                "SELECT id FROM users WHERE id=? AND password_hash=?",
+                (st.session_state.get("usuario_id"), hash_senha(senha_atual)),
+            ).fetchone()
+
+            if not row:
+                st.error("Senha atual incorreta.")
+            elif nova_senha != confirmar_senha:
+                st.error("A nova senha e a confirmacao nao coincidem.")
+            elif len(nova_senha) < 6:
+                st.error("A nova senha deve ter pelo menos 6 caracteres.")
+            else:
+                conn.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_senha(nova_senha), row[0]))
+                conn.commit()
+                st.success("Senha alterada com sucesso!")
+            conn.close()
 
 def menu_lateral():
     with st.sidebar:
-        st.markdown("<div class='nav-section-label'>Aba de Navegacao</div>", unsafe_allow_html=True)
+        st.markdown('<p style="color:#7dd3fc;font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-top:8px;margin-bottom:4px;">Aba de Navegacao</p>', unsafe_allow_html=True)
+        st.markdown("---")
 
         paginas = [
             "Inicio",
             "Cadastro de Contas",
             "Contas Cadastradas",
             "Realizar Compras",
-            "Superavit",
+            "Superavit Financeiro",
             "Programas de Saude",
             "Upload de Arquivos",
-            "Plano Municipal",
-            "Norte da Gestao",
-            "Conselho",
+            "Plano Municipal de Saude",
+            "Norte da Minha Gestao",
+            "Conselho Municipal de Saude",
             "Trocar Senha",
         ]
 
-        escolha = st.radio("Navegacao", paginas, key="nav_radio", label_visibility="collapsed")
-        st.session_state["pagina"] = escolha
+        for pagina in paginas:
+            if st.button(pagina, key=f"nav_{pagina}", use_container_width=True):
+                st.session_state["pagina"] = pagina
+                st.rerun()
 
-        st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-        st.markdown("<hr style='border-color:rgba(255,255,255,0.1)'>", unsafe_allow_html=True)
-        st.markdown(f"<p style='color:rgba(255,255,255,0.5);font-size:13px'>Usuario: <b>{st.session_state.get('nome','')}</b></p>", unsafe_allow_html=True)
-
-        if st.button("Sair", key="btn_sair", use_container_width=True):
-            st.session_state["logado"] = False
+        st.markdown("---")
+        if st.button("Sair", key="nav_sair", use_container_width=True):
+            st.session_state["logged_in"] = False
             st.session_state["pagina"] = "Inicio"
             st.rerun()
 
-
-# ============================================================
-# PAGINA INICIO
-# ============================================================
-
-ESFERAS = [
-    {"id": 1, "nome": "Saude", "icone": "\u2695", "classe": "esfera-1"},
-    {"id": 2, "nome": "Educacao", "icone": "\u270D", "classe": "esfera-2"},
-    {"id": 3, "nome": "Assistencia Social", "icone": "\u2764", "classe": "esfera-3"},
-    {"id": 4, "nome": "Infraestrutura", "icone": "\u26CF", "classe": "esfera-4"},
-    {"id": 5, "nome": "Administracao", "icone": "\u2696", "classe": "esfera-5"},
-]
-
-
-def pagina_inicio():
-    st.markdown(ESTILOS_GLOBAIS, unsafe_allow_html=True)
-
-    st.markdown('<h1 class="mm-brand-title">MARMED</h1>', unsafe_allow_html=True)
-    st.markdown('<h2 class="mm-brand-subtitle">Gestao Publica Municipal</h2>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-brand-institution">Sistema Integrado de Gestao</p>', unsafe_allow_html=True)
-
-    st.markdown('<div class="esferas-grid">', unsafe_allow_html=True)
-    cols = st.columns(5)
-    for i, esfera in enumerate(ESFERAS):
-        with cols[i]:
-            if st.button(f"{esfera['icone']}\n{esfera['nome']}", key=f"esfera_{esfera['id']}", use_container_width=True):
-                st.session_state["esfera_ativa"] = esfera["id"]
-                st.session_state["pagina"] = "Esfera Detalhe"
-                st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;color:rgba(255,255,255,0.4);font-size:14px'>Clique em uma esfera para acessar os detalhes.</p>", unsafe_allow_html=True)
-
-
-# ============================================================
-# ESFERA DETALHE
-# ============================================================
-
-def esfera_detalhe():
-    esfera_id = st.session_state.get("esfera_ativa", 1)
-    esfera = next((e for e in ESFERAS if e["id"] == esfera_id), ESFERAS[0])
-
-    st.markdown(f"<h1 class='page-title'>{esfera['icone']} {esfera['nome']}</h1>", unsafe_allow_html=True)
-
-    if st.button("\u2190 Voltar para Inicio", key="btn_voltar_esfera"):
-        st.session_state["pagina"] = "Inicio"
-        st.rerun()
-
-    st.markdown(f"<div style='height:20px'></div>", unsafe_allow_html=True)
-
-    st.markdown(f"<h3 class='section-title'>Resumo - {esfera['nome']}</h3>", unsafe_allow_html=True)
-
-    conn = init_db()
-    c = conn.cursor()
-
-    c.execute("SELECT COUNT(*), COALESCE(SUM(valor),0) FROM contas")
-    total_contas = c.fetchone()
-    c.execute("SELECT COUNT(*), COALESCE(SUM(quantidade * valor_unitario),0) FROM compras WHERE esfera = ?", (esfera["nome"],))
-    total_compras = c.fetchone()
-    c.execute("SELECT COUNT(*) FROM arquivos WHERE esfera = ?", (esfera["nome"],))
-    total_arquivos = c.fetchone()
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Contas Cadastradas", total_contas[0])
-    col2.metric("Compras nesta Esfera", total_compras[0])
-    col3.metric("Arquivos desta Esfera", total_arquivos[0])
-
-    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-    st.markdown("<h3 class='section-title'>Acoes Rápidas</h3>", unsafe_allow_html=True)
-
-    acoes = st.columns(3)
-    with acoes[0]:
-        if st.button("Cadastrar Conta", key="act_conta"):
-            st.session_state["pagina"] = "Cadastro de Contas"
-            st.rerun()
-    with acoes[1]:
-        if st.button("Realizar Compra", key="act_compra"):
-            st.session_state["pagina"] = "Realizar Compras"
-            st.rerun()
-    with acoes[2]:
-        if st.button("Upload de Arquivo", key="act_upload"):
-            st.session_state["pagina"] = "Upload de Arquivos"
-            st.rerun()
-
-
-# ============================================================
-# CADASTRO DE CONTAS
-# ============================================================
-
-def cadastro_contas():
-    st.markdown("<h1 class='page-title'>\u270D Cadastro de Contas</h1>", unsafe_allow_html=True)
-
-    with st.form("form_conta"):
-        descricao = st.text_input("Descricao da Conta")
-        categoria = st.selectbox("Categoria", ["Saude", "Educacao", "Assistencia Social", "Infraestrutura", "Administracao", "Outros"])
-        valor = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
-        vencimento = st.date_input("Vencimento")
-        status = st.selectbox("Status", ["pendente", "paga", "atrasada"])
-        submitted = st.form_submit_button("Cadastrar Conta")
-
-    if submitted:
-        if descricao.strip() == "":
-            st.error("Informe a descricao da conta.")
-        else:
-            conn = init_db()
-            c = conn.cursor()
-            c.execute(
-                "INSERT INTO contas (descricao, categoria, valor, vencimento, status) VALUES (?, ?, ?, ?, ?)",
-                (descricao, categoria, valor, str(vencimento), status),
-            )
-            conn.commit()
-            st.success("Conta cadastrada com sucesso!")
-
-
-# ============================================================
-# CONTAS CADASTRADAS
-# ============================================================
-
-def contas_cadastradas():
-    st.markdown("<h1 class='page-title'>\u2709 Contas Cadastradas</h1>", unsafe_allow_html=True)
-
-    conn = init_db()
-    df = pd.read_sql_query("SELECT id, descricao, categoria, valor, vencimento, status FROM contas ORDER BY id DESC", conn)
-
-    if df.empty:
-        st.info("Nenhuma conta cadastrada ainda.")
-    else:
-        st.dataframe(df, use_container_width=True)
-
-        st.markdown("<h3 class='section-title'>Resumo Financeiro</h3>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total de Contas", len(df))
-        col2.metric("Valor Total", f"R$ {df['valor'].sum():.2f}")
-        col3.metric("Pendentes", len(df[df["status"] == "pendente"]))
-
-        st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-        conta_id = st.selectbox("Selecionar conta para remover", df["id"].tolist(), format_func=lambda x: f"ID {x}")
-        if st.button("Remover Conta", key="btn_remover_conta"):
-            c = conn.cursor()
-            c.execute("DELETE FROM contas WHERE id = ?", (conta_id,))
-            conn.commit()
-            st.success("Conta removida.")
-            st.rerun()
-
-
-# ============================================================
-# REALIZAR COMPRAS
-# ============================================================
-
-def realizar_compras():
-    st.markdown("<h1 class='page-title'>\u26CF Realizar Compras</h1>", unsafe_allow_html=True)
-
-    esferas_nomes = [e["nome"] for e in ESFERAS]
-
-    with st.form("form_compra"):
-        item = st.text_input("Item")
-        fornecedor = st.text_input("Fornecedor")
-        quantidade = st.number_input("Quantidade", min_value=1, step=1)
-        valor_unitario = st.number_input("Valor Unitario (R$)", min_value=0.0, format="%.2f")
-        esfera = st.selectbox("Esfera", esferas_nomes)
-        data = st.date_input("Data da Compra")
-        submitted = st.form_submit_button("Registrar Compra")
-
-    if submitted:
-        if item.strip() == "":
-            st.error("Informe o item da compra.")
-        else:
-            conn = init_db()
-            c = conn.cursor()
-            c.execute(
-                "INSERT INTO compras (item, fornecedor, quantidade, valor_unitario, data, esfera) VALUES (?, ?, ?, ?, ?, ?)",
-                (item, fornecedor, int(quantidade), valor_unitario, str(data), esfera),
-            )
-            conn.commit()
-            st.success("Compra registrada com sucesso!")
-
-    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-    st.markdown("<h3 class='section-title'>Compras Recentes</h3>", unsafe_allow_html=True)
-    conn = init_db()
-    df = pd.read_sql_query("SELECT id, item, fornecedor, quantidade, valor_unitario, data, esfera FROM compras ORDER BY id DESC LIMIT 20", conn)
-    if df.empty:
-        st.info("Nenhuma compra registrada.")
-    else:
-        df["valor_total"] = df["quantidade"] * df["valor_unitario"]
-        st.dataframe(df, use_container_width=True)
-
-
-# ============================================================
-# SUPERAVIT
-# ============================================================
-
-def superavit():
-    st.markdown("<h1 class='page-title'>\u2696 Superavit</h1>", unsafe_allow_html=True)
-
-    conn = init_db()
-    c = conn.cursor()
-
-    c.execute("SELECT COALESCE(SUM(valor),0) FROM contas WHERE status = 'paga'")
-    despesas = c.fetchone()[0]
-
-    c.execute("SELECT COALESCE(SUM(quantidade * valor_unitario),0) FROM compras")
-    compras_total = c.fetchone()[0]
-
-    receita = st.number_input("Receita Total Prevista (R$)", min_value=0.0, value=100000.0, format="%.2f", key="receita_superavit")
-
-    total_despesas = despesas + compras_total
-    resultado = receita - total_despesas
-
-    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Receita Prevista", f"R$ {receita:.2f}")
-    col2.metric("Total de Despesas", f"R$ {total_despesas:.2f}")
-    col3.metric("Resultado (Superavit/Deficit)", f"R$ {resultado:.2f}")
-
-    if resultado >= 0:
-        st.success(f"Superavit de R$ {resultado:.2f}")
-    else:
-        st.error(f"Deficit de R$ {abs(resultado):.2f}")
-
-
-# ============================================================
-# PROGRAMAS DE SAUDE
-# ============================================================
-
-def programas_saude():
-    st.markdown("<h1 class='page-title'>\u2695 Programas de Saude</h1>", unsafe_allow_html=True)
-
-    with st.form("form_programa"):
-        nome = st.text_input("Nome do Programa")
-        area = st.selectbox("Area", ["Atencao Basica", "Vigilancia em Saude", "Saude Mental", "Saude da Mulher", "Saude da Crianca", "Outros"])
-        responsavel = st.text_input("Responsavel")
-        orcamento = st.number_input("Orcamento (R$)", min_value=0.0, format="%.2f")
-        status = st.selectbox("Status", ["ativo", "planejado", "encerrado"])
-        submitted = st.form_submit_button("Cadastrar Programa")
-
-    if submitted:
-        if nome.strip() == "":
-            st.error("Informe o nome do programa.")
-        else:
-            conn = init_db()
-            c = conn.cursor()
-            c.execute(
-                "INSERT INTO programas_saude (nome, area, responsavel, orcamento, status) VALUES (?, ?, ?, ?, ?)",
-                (nome, area, responsavel, orcamento, status),
-            )
-            conn.commit()
-            st.success("Programa cadastrado com sucesso!")
-
-    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-    st.markdown("<h3 class='section-title'>Programas Cadastrados</h3>", unsafe_allow_html=True)
-    conn = init_db()
-    df = pd.read_sql_query("SELECT id, nome, area, responsavel, orcamento, status FROM programas_saude ORDER BY id DESC", conn)
-    if df.empty:
-        st.info("Nenhum programa cadastrado.")
-    else:
-        st.dataframe(df, use_container_width=True)
-
-
-# ============================================================
-# UPLOAD DE ARQUIVOS
-# ============================================================
-
-def upload_arquivos():
-    st.markdown("<h1 class='page-title'>\u2191 Upload de Arquivos</h1>", unsafe_allow_html=True)
-
-    esferas_nomes = [e["nome"] for e in ESFERAS]
-    esfera = st.selectbox("Esfera relacionada", esferas_nomes, key="upload_esfera")
-    arquivo = st.file_uploader("Selecione o arquivo", type=["pdf", "docx", "xlsx", "csv", "png", "jpg", "jpeg", "txt"])
-
-    if st.button("Registrar Upload", key="btn_upload"):
-        if arquivo is not None:
-            conn = init_db()
-            c = conn.cursor()
-            c.execute(
-                "INSERT INTO arquivos (nome, tipo, tamanho, data_upload, esfera) VALUES (?, ?, ?, ?, ?)",
-                (arquivo.name, arquivo.type, len(arquivo.getvalue()), datetime.now().strftime("%Y-%m-%d %H:%M"), esfera),
-            )
-            conn.commit()
-            st.success(f"Arquivo '{arquivo.name}' registrado para a esfera {esfera}.")
-        else:
-            st.warning("Selecione um arquivo primeiro.")
-
-    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-    st.markdown("<h3 class='section-title'>Arquivos Registrados</h3>", unsafe_allow_html=True)
-    conn = init_db()
-    df = pd.read_sql_query("SELECT id, nome, tipo, tamanho, data_upload, esfera FROM arquivos ORDER BY id DESC", conn)
-    if df.empty:
-        st.info("Nenhum arquivo registrado.")
-    else:
-        st.dataframe(df, use_container_width=True)
-
-
-# ============================================================
-# PLANO MUNICIPAL
-# ============================================================
-
-def plano_municipal():
-    st.markdown("<h1 class='page-title'>\u270D Plano Municipal</h1>", unsafe_allow_html=True)
-
-    with st.form("form_plano"):
-        eixo = st.text_input("Eixo")
-        objetivo = st.text_area("Objetivo")
-        meta = st.text_area("Meta")
-        prazo = st.date_input("Prazo")
-        responsavel = st.text_input("Responsavel")
-        submitted = st.form_submit_button("Adicionar ao Plano")
-
-    if submitted:
-        if eixo.strip() == "":
-            st.error("Informe o eixo.")
-        else:
-            conn = init_db()
-            c = conn.cursor()
-            c.execute(
-                "INSERT INTO plano_municipal (eixo, objetivo, meta, prazo, responsavel) VALUES (?, ?, ?, ?, ?)",
-                (eixo, objetivo, meta, str(prazo), responsavel),
-            )
-            conn.commit()
-            st.success("Item adicionado ao plano municipal.")
-
-    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-    st.markdown("<h3 class='section-title'>Itens do Plano</h3>", unsafe_allow_html=True)
-    conn = init_db()
-    df = pd.read_sql_query("SELECT id, eixo, objetivo, meta, prazo, responsavel FROM plano_municipal ORDER BY id DESC", conn)
-    if df.empty:
-        st.info("Nenhum item no plano municipal.")
-    else:
-        st.dataframe(df, use_container_width=True)
-
-
-# ============================================================
-# NORTE DA GESTAO
-# ============================================================
-
-def norte_gestao():
-    st.markdown("<h1 class='page-title'>\u2605 Norte da Gestao</h1>", unsafe_allow_html=True)
-
-    st.markdown("""
-    <div style='background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
-    border-radius:16px;padding:30px;color:rgba(255,255,255,0.8);font-size:16px;line-height:1.8'>
-    <h3 style='color:#00d4ff;margin-bottom:16px'>Principios e Diretrizes</h3>
-    <p><b>Transparencia:</b> Garantir acesso a informacoes publicas de forma clara e acessivel.</p>
-    <p><b>Eficiencia:</b> Otimizar recursos publicos para maximo impacto social.</p>
-    <p><b>Participacao:</b> Envolver a comunidade nas decisoes municipais.</p>
-    <p><b>Sustentabilidade:</b> Promover desenvolvimento ambientalmente responsavel.</p>
-    <p><b>Equidade:</b> Assegurar servicos de qualidade para toda a populacao.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# ============================================================
-# CONSELHO
-# ============================================================
-
-def conselho():
-    st.markdown("<h1 class='page-title'>\u2696 Conselho</h1>", unsafe_allow_html=True)
-
-    with st.form("form_conselho"):
-        nome = st.text_input("Nome do Membro")
-        cargo = st.text_input("Cargo")
-        segmento = st.selectbox("Segmento", ["Governo", "Sociedade Civil", "Trabalhadores", "Empregadores", "Outros"])
-        telefone = st.text_input("Telefone")
-        email = st.text_input("E-mail")
-        submitted = st.form_submit_button("Cadastrar Membro")
-
-    if submitted:
-        if nome.strip() == "":
-            st.error("Informe o nome do membro.")
-        else:
-            conn = init_db()
-            c = conn.cursor()
-            c.execute(
-                "INSERT INTO conselho (nome, cargo, segmento, telefone, email) VALUES (?, ?, ?, ?, ?)",
-                (nome, cargo, segmento, telefone, email),
-            )
-            conn.commit()
-            st.success("Membro cadastrado no conselho.")
-
-    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-    st.markdown("<h3 class='section-title'>Membros do Conselho</h3>", unsafe_allow_html=True)
-    conn = init_db()
-    df = pd.read_sql_query("SELECT id, nome, cargo, segmento, telefone, email FROM conselho ORDER BY id DESC", conn)
-    if df.empty:
-        st.info("Nenhum membro cadastrado.")
-    else:
-        st.dataframe(df, use_container_width=True)
-
-
-# ============================================================
-# TROCAR SENHA
-# ============================================================
-
-def trocar_senha():
-    st.markdown("<h1 class='page-title'>\u2709 Trocar Senha</h1>", unsafe_allow_html=True)
-
-    usuario = st.session_state.get("usuario", "")
-    senha_atual = st.text_input("Senha Atual", type="password")
-    nova_senha = st.text_input("Nova Senha", type="password")
-    confirmar = st.text_input("Confirmar Nova Senha", type="password")
-
-    if st.button("Alterar Senha", key="btn_trocar_senha"):
-        if not senha_atual or not nova_senha or not confirmar:
-            st.error("Preencha todos os campos.")
-        elif nova_senha != confirmar:
-            st.error("A nova senha e a confirmacao nao coincidem.")
-        else:
-            conn = init_db()
-            c = conn.cursor()
-            c.execute("SELECT * FROM usuarios WHERE usuario = ? AND senha = ?", (usuario, hash_senha(senha_atual)))
-            if not c.fetchone():
-                st.error("Senha atual incorreta.")
-            else:
-                c.execute("UPDATE usuarios SET senha = ? WHERE usuario = ?", (hash_senha(nova_senha), usuario))
-                conn.commit()
-                st.success("Senha alterada com sucesso!")
-
-
-# ============================================================
-# MAIN
-# ============================================================
-
 def main():
-    st.set_page_config(page_title="MARMED - Gestao Publica Municipal", page_icon="\u2695", layout="wide")
-
-    if "logado" not in st.session_state:
-        st.session_state["logado"] = False
-    if "pagina" not in st.session_state:
-        st.session_state["pagina"] = "Inicio"
-
-    if not st.session_state["logado"]:
+    if not st.session_state["logged_in"]:
         tela_login()
         return
 
     menu_lateral()
-
     pagina = st.session_state.get("pagina", "Inicio")
 
     if pagina == "Inicio":
         pagina_inicio()
     elif pagina == "Esfera Detalhe":
-        esfera_detalhe()
+        pagina_esfera_detalhe()
     elif pagina == "Cadastro de Contas":
-        cadastro_contas()
+        pagina_cadastro_contas()
     elif pagina == "Contas Cadastradas":
-        contas_cadastradas()
+        pagina_contas_cadastradas()
     elif pagina == "Realizar Compras":
-        realizar_compras()
-    elif pagina == "Superavit":
-        superavit()
+        pagina_realizar_compras()
+    elif pagina == "Superavit Financeiro":
+        pagina_superavit()
     elif pagina == "Programas de Saude":
-        programas_saude()
+        pagina_programas_saude()
     elif pagina == "Upload de Arquivos":
-        upload_arquivos()
-    elif pagina == "Plano Municipal":
-        plano_municipal()
-    elif pagina == "Norte da Gestao":
-        norte_gestao()
-    elif pagina == "Conselho":
-        conselho()
+        pagina_upload_arquivos()
+    elif pagina == "Plano Municipal de Saude":
+        pagina_plano_municipal()
+    elif pagina == "Norte da Minha Gestao":
+        pagina_norte_gestao()
+    elif pagina == "Conselho Municipal de Saude":
+        pagina_conselho()
     elif pagina == "Trocar Senha":
-        trocar_senha()
-    else:
-        pagina_inicio()
-
+        pagina_trocar_senha()
 
 if __name__ == "__main__":
     main()
