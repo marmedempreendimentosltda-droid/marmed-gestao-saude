@@ -399,7 +399,7 @@ def pagina_cadastro_contas():
             vc = parse_valor(valor_custeio)
             vi = parse_valor(valor_investimento)
             vt = vc + vi
-            if vt &lt;= 0:
+            if vt <= 0:
                 st.error("Informe pelo menos um valor de custeio ou investimento.")
             else:
                 conn = get_conn()
@@ -463,7 +463,7 @@ def pagina_realizar_compras():
 
         if registrar:
             vc = parse_valor(valor_compra)
-            if vc &lt;= 0:
+            if vc <= 0:
                 st.error("Informe um valor de compra maior que zero.")
             else:
                 conn = get_conn()
@@ -487,7 +487,7 @@ def pagina_superavit():
 
         if registrar:
             v = parse_valor(valor)
-            if v &lt;= 0:
+            if v <= 0:
                 st.error("Informe um valor maior que zero.")
             else:
                 conn = get_conn()
@@ -540,224 +540,4 @@ def pagina_programas_saude():
 
     conn = get_conn()
     linhas = conn.execute("SELECT nome, descricao, created_at FROM programas_saude ORDER BY id DESC").fetchall()
-    conn.close()
-
-    if linhas:
-        st.markdown("<br>", unsafe_allow_html=True)
-        for nome, descricao, criado in linhas:
-            st.markdown(
-                f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
-                f"<strong>{nome}</strong><br>{descricao}<br>"
-                f'<span style="color:#94a3b8;font-size:11px;">{criado}</span>'
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-
-def pagina_upload_arquivos():
-    st.markdown('<p class="mm-title">Upload de Arquivos</p>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-subtitle">Envie documentos e comprovantes do sistema</p>', unsafe_allow_html=True)
-
-    bloco = st.selectbox("Categoria do Arquivo", ["Contas", "Compras", "Programas de Saude", "Plano Municipal", "Conselho", "Outros"])
-    arquivo = st.file_uploader("Selecione o arquivo", type=["pdf", "docx", "doc", "txt", "csv", "xlsx"])
-
-    if st.button("Enviar Arquivo", use_container_width=True):
-        if not arquivo:
-            st.error("Selecione um arquivo antes de enviar.")
-        else:
-            dados_bytes = arquivo.read()
-            texto = extrair_texto(dados_bytes, arquivo.name)
-            conn = get_conn()
-            conn.execute(
-                "INSERT INTO arquivos_saude (bloco, nome_arquivo, conteudo_texto, dados_arquivo, data_upload) VALUES (?,?,?,?,?)",
-                (bloco, arquivo.name, texto, dados_bytes, datetime.now().strftime("%d/%m/%Y %H:%M:%S")),
-            )
-            conn.commit()
-            conn.close()
-            st.success("Arquivo enviado com sucesso!")
-            st.rerun()
-
-    conn = get_conn()
-    linhas = conn.execute("SELECT bloco, nome_arquivo, data_upload FROM arquivos_saude ORDER BY id DESC").fetchall()
-    conn.close()
-
-    if linhas:
-        st.markdown("<br>", unsafe_allow_html=True)
-        for bloco_item, nome_arquivo, data_upload in linhas:
-            st.markdown(
-                f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
-                f"<strong>{nome_arquivo}</strong> - {bloco_item}<br>"
-                f'<span style="color:#94a3b8;font-size:11px;">{data_upload}</span>'
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-
-def pagina_plano_municipal():
-    st.markdown('<p class="mm-title">Plano Municipal de Saude</p>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-subtitle">Diretrizes e eixos estrategicos do PMS</p>', unsafe_allow_html=True)
-
-    st.markdown(
-        '<div class="mm-card" style="text-align:left;">'
-        "O Plano Municipal de Saude (PMS) e o instrumento de planejamento que orienta a gestao "
-        "municipal do SUS, definindo diretrizes, objetivos, metas e indicadores para o periodo "
-        "de vigencia establecido."
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-def pagina_norte_gestao():
-    st.markdown('<p class="mm-title">Norte da Minha Gestao</p>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-subtitle">Diretrizes estrategicas da Secretaria Municipal de Saude</p>', unsafe_allow_html=True)
-
-    diretrizes = [
-        ("Fortalecimento da Atencao Primaria", "Ampliar a cobertura da Estrategia Saude da Familia e fortalecer o vinculo com a comunidade."),
-        ("Eficiencia na Gestao Financeira", "Otimizar recursos publicos e garantir transparencia nos repasses."),
-        ("Valorizacao dos Profissionais", "Investir em capacitacao continua e melhores condicoes de trabalho."),
-        ("Integracao Regional", "Fortalecer a parceria com o CISLAV e demais consorcios, ampliando o acesso a consultas especializadas e exames."),
-        ("Controle Social e Transparencia", "Garantir a participacao ativa do Conselho Municipal de Saude."),
-    ]
-
-    for titulo, descricao in diretrizes:
-        st.markdown(
-            f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
-            f"<strong>{titulo}</strong><br>{descricao}"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-def pagina_conselho():
-    st.markdown('<p class="mm-title">Conselho Municipal de Saude</p>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-subtitle">Cadastro de membros do conselho</p>', unsafe_allow_html=True)
-
-    with st.form("form_conselho"):
-        nome = st.text_input("Nome")
-        segmento = st.selectbox("Segmento", ["Usuarios", "Trabalhadores", "Gestores", "Prestadores"])
-        cargo = st.text_input("Cargo")
-        email = st.text_input("E-mail")
-        telefone = st.text_input("Telefone")
-        data_posse = st.date_input("Data de Posse", value=datetime.now())
-
-        salvar = st.form_submit_button("Cadastrar Membro", use_container_width=True)
-
-        if salvar:
-            if not nome:
-                st.error("Informe o nome do membro.")
-            else:
-                conn = get_conn()
-                conn.execute(
-                    "INSERT INTO conselho (nome, segmento, cargo, email, telefone, data_posse) VALUES (?,?,?,?,?,?)",
-                    (nome, segmento, cargo, email, telefone, data_posse.strftime("%d/%m/%Y")),
-                )
-                conn.commit()
-                conn.close()
-                st.success("Membro cadastrado com sucesso!")
-                st.rerun()
-
-    conn = get_conn()
-    linhas = conn.execute("SELECT nome, segmento, cargo, data_posse FROM conselho ORDER BY id DESC").fetchall()
-    conn.close()
-
-    if linhas:
-        st.markdown("<br>", unsafe_allow_html=True)
-        for nome, segmento, cargo, data_posse in linhas:
-            st.markdown(
-                f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
-                f"<strong>{nome}</strong> - {cargo}<br>"
-                f'<span style="color:#94a3b8;font-size:11px;">{segmento} - Posse em {data_posse}</span>'
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-
-def pagina_trocar_senha():
-    st.markdown('<p class="mm-title">Trocar Senha</p>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-subtitle">Atualize sua senha de acesso</p>', unsafe_allow_html=True)
-
-    with st.form("form_trocar_senha"):
-        senha_atual = st.text_input("Senha Atual", type="password")
-        nova_senha = st.text_input("Nova Senha", type="password")
-        confirmar_senha = st.text_input("Confirmar Nova Senha", type="password")
-        salvar = st.form_submit_button("Alterar Senha", use_container_width=True)
-
-        if salvar:
-            conn = get_conn()
-            row = conn.execute(
-                "SELECT id FROM users WHERE id=? AND password_hash=?",
-                (st.session_state.get("usuario_id"), hash_senha(senha_atual)),
-            ).fetchone()
-
-            if not row:
-                st.error("Senha atual incorreta.")
-            elif nova_senha != confirmar_senha:
-                st.error("A nova senha e a confirmacao nao coincidem.")
-            elif len(nova_senha) &lt; 6:
-                st.error("A nova senha deve ter pelo menos 6 caracteres.")
-            else:
-                conn.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_senha(nova_senha), row[0]))
-                conn.commit()
-                st.success("Senha alterada com sucesso!")
-            conn.close()
-
-def menu_lateral():
-    with st.sidebar:
-        st.markdown('<p style="color:#7dd3fc;font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-top:8px;margin-bottom:4px;">Aba de Navegacao</p>', unsafe_allow_html=True)
-        st.markdown("---")
-
-        paginas = [
-            "Inicio",
-            "Cadastro de Contas",
-            "Contas Cadastradas",
-            "Realizar Compras",
-            "Superavit Financeiro",
-            "Programas de Saude",
-            "Upload de Arquivos",
-            "Plano Municipal de Saude",
-            "Norte da Minha Gestao",
-            "Conselho Municipal de Saude",
-            "Trocar Senha",
-        ]
-
-        for pagina in paginas:
-            if st.button(pagina, key=f"nav_{pagina}", use_container_width=True):
-                st.session_state["pagina"] = pagina
-                st.rerun()
-
-        st.markdown("---")
-        if st.button("Sair", key="nav_sair", use_container_width=True):
-            st.session_state["logged_in"] = False
-            st.session_state["pagina"] = "Inicio"
-            st.rerun()
-
-def main():
-    if not st.session_state["logged_in"]:
-        tela_login()
-        return
-
-    menu_lateral()
-    pagina = st.session_state.get("pagina", "Inicio")
-
-    if pagina == "Inicio":
-        pagina_inicio()
-    elif pagina == "Esfera Detalhe":
-        pagina_esfera_detalhe()
-    elif pagina == "Cadastro de Contas":
-        pagina_cadastro_contas()
-    elif pagina == "Contas Cadastradas":
-        pagina_contas_cadastradas()
-    elif pagina == "Realizar Compras":
-        pagina_realizar_compras()
-    elif pagina == "Superavit Financeiro":
-        pagina_superavit()
-    elif pagina == "Programas de Saude":
-        pagina_programas_saude()
-    elif pagina == "Upload de Arquivos":
-        pagina_upload_arquivos()
-    elif pagina == "Plano Municipal de Saude":
-        pagina_plano_municipal()
-    elif pagina == "Norte da Minha Gestao":
-        pagina_norte_gestao()
-    elif pagina == "Conselho Municipal de Saude":
-        pagina_conselho()
-    elif pagina == "Trocar Senha":
-        pagina_trocar_senha()
-
-if __name__ == "__main__":
-    main()
+   
