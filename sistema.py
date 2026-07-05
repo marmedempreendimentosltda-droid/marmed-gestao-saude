@@ -399,7 +399,7 @@ def pagina_cadastro_contas():
             vc = parse_valor(valor_custeio)
             vi = parse_valor(valor_investimento)
             vt = vc + vi
-            if vt <= 0:
+            if vt &lt;= 0:
                 st.error("Informe pelo menos um valor de custeio ou investimento.")
             else:
                 conn = get_conn()
@@ -463,7 +463,7 @@ def pagina_realizar_compras():
 
         if registrar:
             vc = parse_valor(valor_compra)
-            if vc <= 0:
+            if vc &lt;= 0:
                 st.error("Informe um valor de compra maior que zero.")
             else:
                 conn = get_conn()
@@ -487,7 +487,7 @@ def pagina_superavit():
 
         if registrar:
             v = parse_valor(valor)
-            if v <= 0:
+            if v &lt;= 0:
                 st.error("Informe um valor maior que zero.")
             else:
                 conn = get_conn()
@@ -688,7 +688,7 @@ def pagina_trocar_senha():
                 st.error("Senha atual incorreta.")
             elif nova_senha != confirmar_senha:
                 st.error("A nova senha e a confirmacao nao coincidem.")
-            elif len(nova_senha) < 6:
+            elif len(nova_senha) &lt; 6:
                 st.error("A nova senha deve ter pelo menos 6 caracteres.")
             else:
                 conn.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_senha(nova_senha), row[0]))
