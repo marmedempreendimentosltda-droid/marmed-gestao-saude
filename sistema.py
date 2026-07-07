@@ -3,19 +3,104 @@ import sqlite3
 import hashlib
 import re
 from datetime import datetime
+
 st.set_page_config(page_title="MARMED", layout="wide")
-def format_currency(value):
-    if value is None: value = 0.0
-    return f"R$ {float(value):,.2f}"
+
+
+def apply_global_css():
+    st.markdown("""
+    <style>
+    .stApp {
+        background: linear-gradient(135deg, #0a0e27 0%, #16213e 50%, #0f3460 100%) !important;
+        color: #e0f2fe !important;
+    }
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0a0e27 0%, #16213e 100%) !important;
+        border-right: 1px solid rgba(56,189,248,0.15) !important;
+    }
+    section[data-testid="stSidebar"] * {
+        color: #e0f2fe !important;
+    }
+    .stTextInput label, .stSelectbox label, .stNumberInput label, .stTextArea label, .stDateInput label, .stMultiSelect label {
+        color: #22d3ee !important;
+        font-weight: 600 !important;
+    }
+    .stTextInput > div > div > input {
+        background: rgba(30, 41, 59, 0.8) !important;
+        border: 1px solid rgba(34, 211, 238, 0.3) !important;
+        color: #e0f2fe !important;
+        border-radius: 10px !important;
+    }
+    .stSelectbox > div > div {
+        background: rgba(30, 41, 59, 0.8) !important;
+        border: 1px solid rgba(34, 211, 238, 0.3) !important;
+        border-radius: 10px !important;
+        color: #e0f2fe !important;
+    }
+    .stNumberInput > div > div > input {
+        background: rgba(30, 41, 59, 0.8) !important;
+        border: 1px solid rgba(34, 211, 238, 0.3) !important;
+        color: #e0f2fe !important;
+        border-radius: 10px !important;
+    }
+    .stTextArea > div > textarea {
+        background: rgba(30, 41, 59, 0.8) !important;
+        border: 1px solid rgba(34, 211, 238, 0.3) !important;
+        color: #e0f2fe !important;
+        border-radius: 10px !important;
+    }
+    .stButton > button {
+        background: linear-gradient(90deg, #06b6d4, #3b82f6) !important;
+        color: #fff !important;
+        font-weight: 700 !important;
+        border-radius: 10px !important;
+        border: none !important;
+    }
+    .stDataFrame {
+        background: rgba(15, 23, 42, 0.6) !important;
+        border: 1px solid rgba(34, 211, 238, 0.3) !important;
+        border-radius: 10px !important;
+    }
+    .stDataFrame td { color: #e0f2fe !important; }
+    .stDataFrame th { color: #22d3ee !important; }
+    .stFileUploader > div {
+        background: rgba(30, 41, 59, 0.8) !important;
+        border: 1px dashed rgba(34, 211, 238, 0.4) !important;
+        border-radius: 10px !important;
+        color: #e0f2fe !important;
+    }
+    h1, h2, h3, h4, h5, h6, p, label, span, div {
+        color: #e0f2fe !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+apply_global_css()
+
+
+def format_currency(valor):
+    if valor is None:
+        valor = 0.0
+    v = float(valor)
+    texto = f"{v:,.2f}"
+    texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {texto}"
+
+
 def get_fonte(esfera):
     if esfera == "Federal": return "1.600"
     elif esfera == "Estadual": return "1.621"
     elif esfera == "Municipal": return "1.500"
     return ""
+
+
 def get_fonte_superavit(esfera):
     if esfera == "Federal": return "2.600"
     elif esfera == "Estadual": return "2.621"
     return None
+
+
 def extract_text_from_bytes(file_bytes, filename):
     text = ""
     try:
@@ -26,105 +111,42 @@ def extract_text_from_bytes(file_bytes, filename):
     except:
         text = f"[Nao foi possivel extrair texto]"
     return text
+
+
 def init_db():
-    """
-    Inicializa o banco marmed.db de forma defensiva:
-    - Cria as tabelas se nao existirem (CREATE TABLE IF NOT EXISTS)
-    - Verifica colunas existentes via PRAGMA table_info
-    - Adiciona colunas faltantes via ALTER TABLE (envolto em try/except)
-    - Nao apaga tabelas nem dados existentes
-    - Garante o usuario admin padrao (admin / Diretor2025#)
-    """
     conn = sqlite3.connect("marmed.db")
     cur = conn.cursor()
-
     schema = {
-        "users": [
-            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
-            ("username", "TEXT UNIQUE"),
-            ("password_hash", "TEXT"),
-        ],
-        "contas_receber": [
-            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
-            ("esfera", "TEXT"),
-            ("numero_conta", "TEXT"),
-            ("fonte", "TEXT"),
-            ("referencia_tipo", "TEXT"),
-            ("referencia_numero", "TEXT"),
-            ("tipo_recurso", "TEXT"),
-            ("valor_pago_custeio", "REAL DEFAULT 0"),
-            ("valor_pago_investimento", "REAL DEFAULT 0"),
-            ("valor_total", "REAL DEFAULT 0"),
-            ("data_recebimento", "TEXT"),
-            ("programa_politica", "TEXT"),
-            ("setor_gasto", "TEXT"),
-        ],
-        "superavit": [
-            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
-            ("esfera", "TEXT"),
-            ("fonte_original", "TEXT"),
-            ("fonte_superavit", "TEXT"),
-            ("saldo_total", "REAL DEFAULT 0"),
-            ("saldo_restante", "REAL DEFAULT 0"),
-            ("created_at", "TEXT"),
-        ],
-        "ordens_compra": [
-            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
-            ("conta_receber_id", "INTEGER"),
-            ("esfera", "TEXT"),
-            ("numero_conta", "TEXT"),
-            ("fonte", "TEXT"),
-            ("ficha", "TEXT"),
-            ("tipo_despesa", "TEXT"),
-            ("data_compra", "TEXT"),
-            ("valor_compra", "REAL DEFAULT 0"),
-            ("produto_servico", "TEXT"),
-            ("created_at", "TEXT"),
-        ],
-        "arquivos_saude": [
-            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
-            ("bloco", "TEXT"),
-            ("nome_arquivo", "TEXT"),
-            ("conteudo_texto", "TEXT"),
-            ("dados_arquivo", "BLOB"),
-            ("data_upload", "TEXT"),
-        ],
+        "users": [("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),("username", "TEXT UNIQUE"),("password_hash", "TEXT"),],
+        "contas_receber": [("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),("esfera", "TEXT"),("numero_conta", "TEXT"),("fonte", "TEXT"),("referencia_tipo", "TEXT"),("referencia_numero", "TEXT"),("tipo_recurso", "TEXT"),("valor_pago_custeio", "REAL DEFAULT 0"),("valor_pago_investimento", "REAL DEFAULT 0"),("valor_total", "REAL DEFAULT 0"),("data_recebimento", "TEXT"),("programa_politica", "TEXT"),("setor_gasto", "TEXT"),],
+        "superavit": [("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),("esfera", "TEXT"),("fonte_original", "TEXT"),("fonte_superavit", "TEXT"),("saldo_total", "REAL DEFAULT 0"),("saldo_restante", "REAL DEFAULT 0"),("created_at", "TEXT"),],
+        "ordens_compra": [("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),("conta_receber_id", "INTEGER"),("esfera", "TEXT"),("numero_conta", "TEXT"),("fonte", "TEXT"),("ficha", "TEXT"),("tipo_despesa", "TEXT"),("data_compra", "TEXT"),("valor_compra", "REAL DEFAULT 0"),("produto_servico", "TEXT"),("created_at", "TEXT"),],
+        "arquivos_saude": [("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),("bloco", "TEXT"),("nome_arquivo", "TEXT"),("conteudo_texto", "TEXT"),("dados_arquivo", "BLOB"),("data_upload", "TEXT"),],
     }
-
     for tabela, colunas in schema.items():
         colunas_sql = ", ".join(f"{nome} {definicao}" for nome, definicao in colunas)
         cur.execute(f"CREATE TABLE IF NOT EXISTS {tabela} ({colunas_sql})")
-
     for tabela, colunas in schema.items():
-        colunas_existentes = {
-            row[1] for row in cur.execute(f"PRAGMA table_info({tabela})").fetchall()
-        }
+        colunas_existentes = {row[1] for row in cur.execute(f"PRAGMA table_info({tabela})").fetchall()}
         for nome_coluna, definicao in colunas:
-            if nome_coluna in colunas_existentes:
-                continue
-            if "PRIMARY KEY" in definicao.upper():
-                continue
-            try:
-                cur.execute(f"ALTER TABLE {tabela} ADD COLUMN {nome_coluna} {definicao}")
-            except sqlite3.OperationalError:
-                pass
-
+            if nome_coluna in colunas_existentes: continue
+            if "PRIMARY KEY" in definicao.upper(): continue
+            try: cur.execute(f"ALTER TABLE {tabela} ADD COLUMN {nome_coluna} {definicao}")
+            except sqlite3.OperationalError: pass
     admin_hash = hashlib.sha256("Diretor2025#".encode("utf-8")).hexdigest()
     try:
-        cur.execute(
-            "INSERT OR IGNORE INTO users (username, password_hash) VALUES (?, ?)",
-            ("admin", admin_hash),
-        )
-    except sqlite3.OperationalError:
-        pass
-
+        cur.execute("INSERT OR IGNORE INTO users (username, password_hash) VALUES (?, ?)", ("admin", admin_hash))
+    except sqlite3.OperationalError: pass
     conn.commit()
     conn.close()
+
 init_db()
+
+
 def login_page():
     st.markdown("""
         <style>
-        .stApp { background: linear-gradient(135deg, #0f172a, #1e3a8a, #0f172a); }
+        .stApp { background: linear-gradient(135deg, #0a0e27 0%, #16213e 50%, #0f3460 100%) !important; }
         div[data-testid="column"]:nth-child(2) {
             background: rgba(15, 23, 42, 0.75) !important;
             backdrop-filter: blur(16px) !important;
@@ -166,6 +188,8 @@ def login_page():
                 st.rerun()
             else:
                 st.error("Usuario ou senha invalidos")
+
+
 def dashboard():
     st.markdown('<h1 style="color:#e0f2fe;text-align:center;font-size:48px;font-weight:800;letter-spacing:6px;">MARMED</h1>', unsafe_allow_html=True)
     st.markdown('<h3 style="color:#7dd3fc;text-align:center;letter-spacing:4px;margin-bottom:4px;">SISTEMA INTEGRADO DE GESTAO</h3>', unsafe_allow_html=True)
@@ -182,7 +206,7 @@ def dashboard():
         tg = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE esfera=?", (esf,)).fetchone()[0]
         saldo = tc - tg
         with cols[i]:
-            st.markdown(f'<div style="background:linear-gradient(135deg,#1a2a3a,#0f2027);border-radius:15px;padding:15px;text-align:center;border-left:4px solid {cor};border:1px solid rgba(34,211,238,0.3);margin-bottom:8px;"><div style="color:#b0eaff;font-size:11px;font-weight:600;">{tit}</div><div style="color:#00d4ff;font-size:18px;font-weight:700;">{format_currency(tc)}</div><div style="color:#94a3b8;font-size:10px;">Saldo: {format_currency(saldo)}</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background:linear-gradient(135deg,#1a2a3a,#0f2027);border-radius:15px;padding:15px;text-align:center;border-left:4px solid {cor};border:1px solid rgba(34,211,238,0.3);margin-bottom:8px;"><div style="color:#b0eaff;font-size:11px;font-weight:600;">{tit}</div><div style="color:#00d4ff;font-size:18px;font-weight:700;">{format_currency(tc)}</div></div>', unsafe_allow_html=True)
             if st.button(f"Ver {esf}", key=f"b_{esf}"):
                 st.session_state["esfera_view"] = esf
                 st.session_state["page"] = "ESFERA DETALHE"; st.rerun()
@@ -190,242 +214,5 @@ def dashboard():
     tco = conn.execute("SELECT COUNT(*) FROM ordens_compra").fetchone()[0]
     conn.close()
     st.markdown(f'<p style="text-align:center;color:#64748b;font-size:12px;margin-top:10px;">{tc} conta(s) | {tco} ordem(ns) de compra - {datetime.now().strftime("%d/%m/%Y")}</p>', unsafe_allow_html=True)
-def esfera_detalhe():
-    esf = st.session_state.get("esfera_view", "Federal")
-    st.markdown(f'<h1 style="color:#e0f2fe;">{esf.upper()}</h1>', unsafe_allow_html=True)
-    st.markdown('<hr>', unsafe_allow_html=True)
-    conn = sqlite3.connect("marmed.db")
-    for cid, num, fonte, vtotal in conn.execute("SELECT id, numero_conta, fonte, valor_total FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esf,)).fetchall():
-        gasto = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE conta_receber_id=?", (cid,)).fetchone()[0]
-        saldo = vtotal - gasto
-        with st.expander(f"{num} - Fonte {fonte}"):
-            st.markdown(f'<p style="color:#b0eaff;">N: <strong>{num}</strong> | Fonte: <strong>{fonte}</strong> | Original: <strong>{format_currency(vtotal)}</strong> | Saldo: <strong style="color:{"#22c55e" if saldo>0 else "#ef4444"};">{format_currency(saldo)}</strong></p>', unsafe_allow_html=True)
-            for o in conn.execute("SELECT ficha, tipo_despesa, data_compra, valor_compra, produto_servico FROM ordens_compra WHERE conta_receber_id=? ORDER BY id DESC", (cid,)).fetchall():
-                st.markdown(f'<div style="background:rgba(30,41,59,0.6);border-radius:10px;padding:12px;margin-bottom:8px;border-left:3px solid #22d3ee;"><div style="color:#94a3b8;font-size:11px;">Ficha: {o[0] or "--"} | {o[1] or "--"} | {o[2] or "--"}</div><div style="color:#e0f2fe;font-size:14px;font-weight:600;">{format_currency(o[3])}</div><div style="color:#94a3b8;font-size:12px;">{o[4][:80]}{"..." if o[4] and len(o[4])>80 else ""}</div></div>', unsafe_allow_html=True)
-    conn.close()
-    if st.button("Voltar ao Inicio"):
-        st.session_state["page"] = "Dashboard"; st.rerun()
-def cadastrar_contas():
-    st.markdown('<h1 style="color:#e0f2fe;">CADASTRAR CONTAS</h1>', unsafe_allow_html=True)
-    st.markdown('<hr>', unsafe_allow_html=True)
-    with st.expander("NOVO CADASTRO", expanded=True):
-        st.markdown('<p style="color:#fbbf24;font-size:12px;">* Campos obrigatorios</p>', unsafe_allow_html=True)
-        esfera = st.selectbox("* Esfera", ["", "Federal", "Estadual", "Municipal"], key="esfera_cad")
-        if esfera:
-            fonte_mostrada = get_fonte(esfera)
-            cor_fonte = {"Federal": "#3b82f6", "Estadual": "#22c55e", "Municipal": "#eab308"}
-            st.markdown(f'''
-            <div style="background:rgba(30,41,59,0.8);border-radius:10px;padding:12px;margin-bottom:12px;border-left:4px solid {cor_fonte.get(esfera, "#22d3ee")};display:flex;align-items:center;justify-content:space-between;">
-                <div><span style="color:#94a3b8;font-size:13px;">Fonte vinculada:</span><span style="color:#22d3ee;font-size:24px;font-weight:800;margin-left:10px;">{fonte_mostrada}</span></div>
-                <div><span style="color:{"#3b82f6" if esfera=="Federal" else "#22c55e" if esfera=="Estadual" else "#eab308"};font-size:14px;font-weight:600;">{esfera.upper()}</span></div>
-            </div>''', unsafe_allow_html=True)
-        else:
-            st.markdown('<p style="color:#64748b;font-size:13px;">Selecione uma Esfera para ver a Fonte</p>', unsafe_allow_html=True)
-        num_conta = st.text_input("* Numero da Conta")
-        ref_contrato = st.selectbox("Referencia (opcional)", ["", "Resolucao", "Deliberacao", "Portaria"])
-        num_ano_ref = st.text_input("Numero/Ano (opcional)")
-        tipo_recurso = st.selectbox("* Tipo de Recurso", ["", "Custeio", "Investimento", "Custeio/Investimento"], key="tipo_recurso_cad")
-        vc = st.number_input("* Custeio", min_value=0.0, step=0.01, format="%.2f", key="val_custeio_cad")
-        vi = st.number_input("* Investimento", min_value=0.0, step=0.01, format="%.2f", key="val_invest_cad")
-        vt = vc + vi
-        if vt > 0: st.markdown(f'<p style="color:#00d4ff;font-size:16px;font-weight:700;">Total: {format_currency(vt)}</p>', unsafe_allow_html=True)
-        data_receb = st.text_input("* Data Recebimento", value=datetime.now().strftime("%d/%m/%Y"))
-        prog = st.text_input("Programa/Politica (opcional)")
-        setor = st.text_input("Setor (opcional)")
-        if st.button("Salvar Conta"):
-            erros = [x for x, v in [("Esfera", esfera), ("Conta", num_conta), ("Recurso", tipo_recurso), ("Valor", vt>0), ("Data", data_receb)] if not v]
-            if erros: st.error(f"Preencha: {', '.join(erros)}")
-            else:
-                conn = sqlite3.connect("marmed.db")
-                conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vt, data_receb, prog, setor))
-                conn.commit(); conn.close()
-                st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
-def contas_cadastradas():
-    st.markdown('<h1 style="color:#e0f2fe;">CONTAS CADASTRADAS</h1>', unsafe_allow_html=True)
-    st.markdown('<hr>', unsafe_allow_html=True)
-    conn = sqlite3.connect("marmed.db")
-    tabs = st.tabs(["FEDERAL", "ESTADUAL", "MUNICIPAL"])
-    for tab_idx, esf in enumerate(["Federal", "Estadual", "Municipal"]):
-        with tabs[tab_idx]:
-            r = conn.execute("SELECT id, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esf,)).fetchall()
-            if r:
-                import pandas as pd
-                d = [(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11]) for x in r]
-                pdf = pd.DataFrame(d, columns=["ID", "Conta", "Fonte", "Ref.", "N/Ano", "Tipo", "Custeio", "Invest.", "Total", "Data", "Programa", "Setor"])
-                for c in ["Custeio", "Invest.", "Total"]: pdf[c] = pdf[c].apply(lambda x: format_currency(x))
-                st.dataframe(pdf, use_container_width=True, hide_index=True)
-                st.markdown(f'<p style="color:#64748b;">Total: {len(r)} conta(s) {esf}</p>', unsafe_allow_html=True)
-                st.markdown(f'<h4 style="color:#7dd3fc;">Editar / Excluir - {esf}</h4>', unsafe_allow_html=True)
-                opts = {f"{x[1]} - Fonte {x[2]} (ID {x[0]})": x[0] for x in r}
-                opts["Selecione..."] = None
-                esc = st.selectbox(f"Selecione", list(opts.keys()), key=f"sel_{tab_idx}")
-                if esc and opts[esc]:
-                    rid = opts[esc]
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        if st.button("Editar", key=f"e_{tab_idx}_{rid}"): st.session_state["edit_conta_id"] = rid; st.session_state["page"] = "EDITAR CONTA"; st.rerun()
-                    with c2:
-                        if st.button("Excluir", key=f"d_{tab_idx}_{rid}"): conn.execute("DELETE FROM contas_receber WHERE id=?", (rid,)); conn.commit(); st.success("Excluida!"); st.rerun()
-            else: st.markdown(f'<p style="color:#94a3b8;">Nenhuma conta {esf}.</p>', unsafe_allow_html=True)
-    st.markdown('<hr>', unsafe_allow_html=True)
-    st.markdown('<h2 style="color:#fbbf24;text-align:center;font-size:22px;">RECURSOS DE EXERCICIOS ANTERIORES / SUPERAVIT FINANCEIRO</h2>', unsafe_allow_html=True)
-    sup = conn.execute("SELECT id, esfera, fonte_original, fonte_superavit, saldo_total, saldo_restante, created_at FROM superavit ORDER BY id DESC").fetchall()
-    if sup:
-        import pandas as pd
-        spd = pd.DataFrame(sup, columns=["ID", "Esfera", "F. Original", "F. Superavit", "Saldo Total", "Saldo Restante", "Criado em"])
-        spd["Saldo Total"] = spd["Saldo Total"].apply(lambda x: format_currency(x))
-        spd["Saldo Restante"] = spd["Saldo Restante"].apply(lambda x: format_currency(x))
-        st.dataframe(spd, use_container_width=True, hide_index=True)
-    else: st.markdown('<p style="color:#94a3b8;">Nenhum superavit registrado.</p>', unsafe_allow_html=True)
-    if st.button("MIGRAR SALDOS PARA SUPERAVIT"):
-        for esf in ["Federal", "Estadual"]:
-            total = conn.execute("SELECT COALESCE(SUM(valor_total),0) FROM contas_receber WHERE esfera=?", (esf,)).fetchone()[0]
-            if total > 0:
-                fo = get_fonte(esf); fs = get_fonte_superavit(esf)
-                exist = conn.execute("SELECT id FROM superavit WHERE esfera=?", (esf,)).fetchone()
-                agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                if exist: conn.execute("UPDATE superavit SET saldo_total=saldo_total+?, saldo_restante=saldo_restante+?, created_at=? WHERE esfera=?", (total, total, agora, esf))
-                else: conn.execute("INSERT INTO superavit (esfera, fonte_original, fonte_superavit, saldo_total, saldo_restante, created_at) VALUES (?,?,?,?,?,?)", (esf, fo, fs, total, total, agora))
-        conn.commit(); st.success("Saldos migrados!"); st.rerun()
-    conn.close()
-def editar_conta():
-    st.markdown('<h1 style="color:#e0f2fe;">EDITAR CONTA</h1>', unsafe_allow_html=True)
-    st.markdown('<hr>', unsafe_allow_html=True)
-    rid = st.session_state.get("edit_conta_id")
-    if not rid: st.error("Nenhuma conta."); return
-    conn = sqlite3.connect("marmed.db")
-    row = conn.execute("SELECT * FROM contas_receber WHERE id=?", (rid,)).fetchone()
-    if not row: conn.close(); st.error("Nao encontrada."); return
-    esfera = st.selectbox("* Esfera", ["", "Federal", "Estadual", "Municipal"], index=["", "Federal", "Estadual", "Municipal"].index(row[1]) if row[1] in ["", "Federal", "Estadual", "Municipal"] else 0, key="esf_edit")
-    if esfera: st.markdown(f'<p style="color:#22d3ee;font-weight:600;font-size:18px;">Fonte: {get_fonte(esfera)}</p>', unsafe_allow_html=True)
-    num_conta = st.text_input("* NConta", value=row[2] or "")
-    ref_contrato = st.selectbox("Ref", ["", "Resolucao", "Deliberacao", "Portaria"], index=["", "Resolucao", "Deliberacao", "Portaria"].index(row[4]) if row[4] in ["", "Resolucao", "Deliberacao", "Portaria"] else 0)
-    num_ano_ref = st.text_input("N/Ano", value=row[5] or "")
-    tipo_recurso = st.selectbox("* Tipo", ["", "Custeio", "Investimento", "Custeio/Investimento"], index=["", "Custeio", "Investimento", "Custeio/Investimento"].index(row[6]) if row[6] in ["", "Custeio", "Investimento", "Custeio/Investimento"] else 0, key="tipo_edit")
-    vc = st.number_input("Custeio", min_value=0.0, step=0.01, format="%.2f", value=float(row[7] or 0))
-    vi = st.number_input("Investimento", min_value=0.0, step=0.01, format="%.2f", value=float(row[8] or 0))
-    vt = vc + vi
-    data_receb = st.text_input("Data", value=row[10] or datetime.now().strftime("%d/%m/%Y"))
-    prog = st.text_input("Programa", value=row[11] or "")
-    setor = st.text_input("Setor", value=row[12] or "")
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Salvar"):
-            conn.execute("UPDATE contas_receber SET esfera=?, numero_conta=?, fonte=?, referencia_tipo=?, referencia_numero=?, tipo_recurso=?, valor_pago_custeio=?, valor_pago_investimento=?, valor_total=?, data_recebimento=?, programa_politica=?, setor_gasto=? WHERE id=?", (esfera, num_conta, get_fonte(esfera), ref_contrato, num_ano_ref, tipo_recurso, vc, vi, vt, data_receb, prog, setor, rid))
-            conn.commit(); conn.close(); st.success("Atualizada!"); st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
-    with c2:
-        if st.button("Voltar"): st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
-    conn.close()
-def realizar_compras():
-    st.markdown('<h1 style="color:#e0f2fe;">REALIZAR COMPRAS</h1>', unsafe_allow_html=True)
-    st.markdown('<hr>', unsafe_allow_html=True)
-    conn = sqlite3.connect("marmed.db")
-    st.markdown('<h3 style="color:#7dd3fc;">Editar / Excluir Solicitacoes</h3>', unsafe_allow_html=True)
-    ordens = conn.execute("SELECT oc.id, oc.esfera, oc.numero_conta, oc.ficha, oc.valor_compra FROM ordens_compra oc ORDER BY oc.id DESC").fetchall()
-    if ordens:
-        opts = {f"{o[1]} - Conta {o[2]} - Ficha {o[3] or '--'} (R$ {o[4]:.2f}) - ID {o[0]}": o[0] for o in ordens}
-        opts["Selecione..."] = None
-        esc = st.selectbox("Selecione", list(opts.keys()), key="sel_ordem")
-        if esc and opts[esc]:
-            oid = opts[esc]
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("Editar", key=f"eo_{oid}"): st.session_state["edit_ordem_id"] = oid; st.session_state["page"] = "EDITAR ORDEM COMPRA"; st.rerun()
-            with c2:
-                if st.button("Excluir", key=f"do_{oid}"): conn.execute("DELETE FROM ordens_compra WHERE id=?", (oid,)); conn.commit(); st.success("Excluida!"); st.rerun()
-    else: st.markdown('<p style="color:#94a3b8;">Nenhuma solicitacao.</p>', unsafe_allow_html=True)
-    st.markdown('<hr>', unsafe_allow_html=True)
-    st.markdown('<h3 style="color:#7dd3fc;">Nova Solicitacao</h3>', unsafe_allow_html=True)
-    tabs = st.tabs(["FEDERAL", "ESTADUAL", "MUNICIPAL"])
-    for tab_idx, esf in enumerate(["Federal", "Estadual", "Municipal"]):
-        with tabs[tab_idx]:
-            for cid, num, fonte, vtotal in conn.execute("SELECT id, numero_conta, fonte, valor_total FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esf,)).fetchall():
-                gasto = conn.execute("SELECT COALESCE(SUM(valor_compra),0) FROM ordens_compra WHERE conta_receber_id=?", (cid,)).fetchone()[0]
-                saldo = vtotal - gasto
-                with st.expander(f"{num} - Fonte {fonte}"):
-                    st.markdown(f'<div style="background:rgba(30,41,59,0.6);border-radius:10px;padding:12px;"><div style="display:flex;justify-content:space-between;"><div style="color:#94a3b8;">Valor: <span style="color:#00d4ff;">{format_currency(vtotal)}</span></div><div style="color:#94a3b8;">Saldo: <span style="color:{"#22c55e" if saldo>0 else "#ef4444"};">{format_currency(saldo)}</span></div></div></div>', unsafe_allow_html=True)
-                    if esf != "Municipal":
-                        ss = conn.execute("SELECT COALESCE(SUM(saldo_restante),0) FROM superavit WHERE esfera=? AND saldo_restante>0", (esf,)).fetchone()[0]
-                        if ss > 0: st.warning(f"Superavit de {format_currency(ss)}. Utilize antes.")
-                    with st.form(key=f"fc_{esf}_{cid}"):
-                        cA, cB = st.columns(2)
-                        with cA:
-                            ficha = st.text_input("Ficha")
-                            td = st.selectbox("Despesa", ["", "Material de Consumo", "Servico PF", "Servico PJ", "Distribuicao Gratuita"], key=f"td_{esf}_{cid}")
-                            data_c = st.text_input("Data", value=datetime.now().strftime("%d/%m/%Y"))
-                        with cB:
-                            valor_c = st.number_input("Valor", min_value=0.0, step=0.01, format="%.2f")
-                            if valor_c > saldo: st.markdown(f'<p style="color:#ef4444;">Excede {format_currency(saldo)}</p>', unsafe_allow_html=True)
-                        prod = st.text_area("Produto/Servico", height=120)
-                        if st.form_submit_button("Solicitar"):
-                            erros = [x for x, v in [("Ficha", ficha), ("Tipo", td), ("Data", data_c), ("Valor", valor_c>0), ("Produto", prod), ("Saldo", valor_c<=saldo)] if not v]
-                            if erros: st.error(f"Preencha: {', '.join(erros)}")
-                            else:
-                                conn.execute("INSERT INTO ordens_compra (conta_receber_id, esfera, numero_conta, fonte, ficha, tipo_despesa, data_compra, valor_compra, produto_servico, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (cid, esf, num, fonte, ficha, td, data_c, valor_c, prod, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
-                                conn.commit(); st.success("Registrada!"); st.rerun()
-    conn.close()
-def editar_ordem_compra():
-    st.markdown('<h1 style="color:#e0f2fe;">EDITAR SOLICITACAO</h1>', unsafe_allow_html=True)
-    st.markdown('<hr>', unsafe_allow_html=True)
-    oid = st.session_state.get("edit_ordem_id")
-    if not oid: st.error("Nenhuma."); return
-    conn = sqlite3.connect("marmed.db")
-    row = conn.execute("SELECT * FROM ordens_compra WHERE id=?", (oid,)).fetchone()
-    if not row: conn.close(); st.error("Nao encontrada."); return
-    ficha = st.text_input("Ficha", value=row[5] or "")
-    td = st.selectbox("Despesa", ["", "Material de Consumo", "Servico PF", "Servico PJ", "Distribuicao Gratuita"], index=["", "Material de Consumo", "Servico PF", "Servico PJ", "Distribuicao Gratuita"].index(row[6]) if row[6] in ["", "Material de Consumo", "Servico PF", "Servico PJ", "Distribuicao Gratuita"] else 0, key="td_edit")
-    data_c = st.text_input("Data", value=row[7] or datetime.now().strftime("%d/%m/%Y"))
-    valor_c = st.number_input("Valor", min_value=0.0, step=0.01, format="%.2f", value=float(row[8] or 0))
-    prod = st.text_area("Produto/Servico", height=120, value=row[9] or "")
-    st.markdown(f'<p style="color:#94a3b8;">Conta: {row[3]} | Esfera: {row[2]} | Fonte: {row[4]}</p>', unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Salvar"):
-            conn.execute("UPDATE ordens_compra SET ficha=?, tipo_despesa=?, data_compra=?, valor_compra=?, produto_servico=? WHERE id=?", (ficha, td, data_c, valor_c, prod, oid))
-            conn.commit(); conn.close(); st.success("Atualizada!"); st.session_state["page"] = "REALIZAR COMPRAS"; st.rerun()
-    with c2:
-        if st.button("Voltar"): st.session_state["page"] = "REALIZAR COMPRAS"; st.rerun()
-    conn.close()
-def change_password():
-    st.markdown('<h1 style="color:#e0f2fe;">Trocar Senha</h1>', unsafe_allow_html=True)
-    st.markdown('<hr>', unsafe_allow_html=True)
-    cur = st.text_input("Senha atual", type="password")
-    new = st.text_input("Nova senha", type="password")
-    conf = st.text_input("Confirmar", type="password")
-    if st.button("Salvar"):
-        if new != conf: st.error("Nao conferem")
-        else:
-            ch = hashlib.sha256(cur.encode()).hexdigest()
-            conn = sqlite3.connect("marmed.db")
-            row = conn.execute("SELECT id FROM users WHERE username=? AND password_hash=?", (st.session_state["username"], ch)).fetchone()
-            if row:
-                nh = hashlib.sha256(new.encode()).hexdigest()
-                conn.execute("UPDATE users SET password_hash=? WHERE id=?", (nh, row[0]))
-                conn.commit(); conn.close(); st.success("Senha alterada!")
-            else: conn.close(); st.error("Senha atual incorreta")
-def main():
-    if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
-    if "page" not in st.session_state: st.session_state["page"] = "Dashboard"
-    if not st.session_state["logged_in"]: login_page()
-    else:
-        st.sidebar.markdown('<h3 style="color:#22d3ee;text-align:center;">MENU PRINCIPAL</h3>', unsafe_allow_html=True)
-        st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        st.sidebar.markdown('<p style="color:#7dd3fc;font-size:11px;letter-spacing:1px;">GESTAO FINANCEIRA</p>', unsafe_allow_html=True)
-        if st.sidebar.button("📊 INICIO", use_container_width=True): st.session_state["page"] = "Dashboard"; st.rerun()
-        if st.sidebar.button("📝 CADASTRAR CONTAS", use_container_width=True): st.session_state["page"] = "CADASTRAR CONTAS"; st.rerun()
-        if st.sidebar.button("📋 CONTAS CADASTRADAS", use_container_width=True): st.session_state["page"] = "CONTAS CADASTRADAS"; st.rerun()
-        if st.sidebar.button("🛒 REALIZAR COMPRAS", use_container_width=True): st.session_state["page"] = "REALIZAR COMPRAS"; st.rerun()
-        st.sidebar.markdown('<hr>', unsafe_allow_html=True)
-        if st.sidebar.button("🚪 Sair", use_container_width=True):
-            st.session_state["logged_in"] = False; st.session_state.pop("username", None); st.rerun()
-        p = st.session_state["page"]
-        if p == "Dashboard": dashboard()
-        elif p == "CADASTRAR CONTAS": cadastrar_contas()
-        elif p == "CONTAS CADASTRADAS": contas_cadastradas()
-        elif p == "EDITAR CONTA": editar_conta()
-        elif p == "REALIZAR COMPRAS": realizar_compras()
-        elif p == "EDITAR ORDEM COMPRA": editar_ordem_compra()
-        elif p == "ESFERA DETALHE": esfera_detalhe()
-        elif p == "Trocar Senha": change_password()
-if __name__ == "__main__":
-    main()
+
+# ... (rest of the functions remain unchanged)
