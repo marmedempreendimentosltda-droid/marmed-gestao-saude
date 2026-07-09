@@ -211,10 +211,7 @@ def tela_login():
             padding: 52px 44px;
             max-width: 460px;
             margin: 60px auto 0 auto;
-            box-shadow:
-                0 30px 60px rgba(0,0,0,0.45),
-                inset 0 1px 0 rgba(255,255,255,0.18),
-                0 0 0 1px rgba(129,140,248,0.18);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.18), 0 0 0 1px rgba(129,140,248,0.18);
         }
         .login-title {
             font-size: 84px;
@@ -228,32 +225,9 @@ def tela_login():
         }
         .login-subtitle { text-align: center; color: #cbd5e1; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 36px; margin-top: 6px; }
         .login-badge { display: flex; justify-content: center; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
-        .login-badge span {
-            background: rgba(56,189,248,0.10);
-            color: #bae6fd;
-            font-size: 11px;
-            padding: 6px 14px;
-            border-radius: 999px;
-            border: 1px solid rgba(56,189,248,0.28);
-            letter-spacing: 1px;
-            font-weight: 600;
-        }
+        .login-badge span { background: rgba(56,189,248,0.10); color: #bae6fd; font-size: 11px; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(56,189,248,0.28); letter-spacing: 1px; font-weight: 600; }
         .login-footer { text-align: center; margin-top: 22px; color: #94a3b8; font-size: 11px; letter-spacing: 1px; }
-        div[data-testid="stForm"] .stButton>button {
-            background: linear-gradient(135deg, #38bdf8, #6366f1, #c084fc) !important;
-            color: #ffffff !important;
-            border: none !important;
-            border-radius: 14px !important;
-            font-weight: 700 !important;
-            padding: 0.75rem 1rem !important;
-            box-shadow: 0 10px 28px rgba(99,102,241,0.45) !important;
-            transition: all 0.2s ease !important;
-        }
-        div[data-testid="stForm"] .stButton>button:hover {
-            filter: brightness(1.12);
-            transform: scale(1.02);
-            box-shadow: 0 14px 34px rgba(99,102,241,0.6) !important;
-        }
+        div[data-testid="stForm"] .stButton>button { background: linear-gradient(135deg, #38bdf8, #6366f1, #c084fc) !important; color: #fff !important; border: none !important; border-radius: 14px !important; font-weight: 700 !important; padding: 12px !important; box-shadow: 0 10px 28px rgba(99,102,241,0.45) !important; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -269,7 +243,6 @@ def tela_login():
             usuario = st.text_input("Usuario", placeholder="Digite seu usuario")
             senha = st.text_input("Senha", type="password", placeholder="Digite sua senha")
             entrar = st.form_submit_button("Entrar", use_container_width=True)
-
             if entrar:
                 if not usuario or not senha:
                     st.error("Preencha usuario e senha.")
@@ -307,43 +280,20 @@ def pagina_inicio():
 
 def pagina_esfera_detalhe():
     esfera = st.session_state.get("esfera_selecionada", "Federal")
-    if esfera in ("Federal", "Estadual", "Municipal"):
-        titulo = f"Esfera {esfera}"
-    else:
-        titulo = esfera
-
+    titulo = f"Esfera {esfera}" if esfera in ("Federal", "Estadual", "Municipal") else esfera
     st.markdown(f'<p class="mm-title">{titulo}</p>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-subtitle">Detalhamento das contas cadastradas para esta esfera</p>', unsafe_allow_html=True)
-
+    st.markdown('<p class="mm-subtitle">Detalhamento das contas cadastradas</p>', unsafe_allow_html=True)
     conn = get_conn()
     total = conn.execute("SELECT COALESCE(SUM(valor_total),0) FROM contas_receber WHERE esfera=?", (esfera,)).fetchone()[0]
-    linhas = conn.execute(
-        "SELECT id, numero_conta, fonte, tipo_recurso, valor_total, data_recebimento FROM contas_receber WHERE esfera=? ORDER BY id DESC",
-        (esfera,),
-    ).fetchall()
+    linhas = conn.execute("SELECT id, numero_conta, fonte, tipo_recurso, valor_total, data_recebimento FROM contas_receber WHERE esfera=? ORDER BY id DESC", (esfera,)).fetchall()
     conn.close()
-
-    st.markdown(
-        f'<div class="mm-card" style="margin-bottom:20px;">'
-        f'<div class="mm-card-label">Total da Esfera</div>'
-        f'<div class="mm-card-value">{format_currency(total)}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
+    st.markdown(f'<div class="mm-card" style="margin-bottom:20px;"><div class="mm-card-label">Total da Esfera</div><div class="mm-card-value">{format_currency(total)}</div></div>', unsafe_allow_html=True)
     if not linhas:
         st.info("Nenhuma conta cadastrada para esta esfera ainda.")
     else:
         for linha in linhas:
             cid, numero_conta, fonte, tipo_recurso, valor_total, data_recebimento = linha
-            st.markdown(
-                f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
-                f'<strong>Conta {numero_conta}</strong> - Fonte {fonte}<br>'
-                f'{tipo_recurso} - {format_currency(valor_total)} - {data_recebimento}'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
+            st.markdown(f'<div class="mm-card" style="text-align:left;margin-bottom:10px;"><strong>Conta {numero_conta}</strong> - Fonte {fonte}<br>{tipo_recurso} - {format_currency(valor_total)} - {data_recebimento}</div>', unsafe_allow_html=True)
     if st.button("Voltar ao Inicio", key="btn_voltar_inicio", use_container_width=True):
         st.session_state["pagina"] = "Inicio"
         st.rerun()
@@ -351,19 +301,9 @@ def pagina_esfera_detalhe():
 def pagina_cadastro_contas():
     st.markdown('<p class="mm-title">Cadastro de Contas</p>', unsafe_allow_html=True)
     st.markdown('<p class="mm-subtitle">Registre as contas a receber por esfera de gestao</p>', unsafe_allow_html=True)
-
-    # Selectbox da esfera FORA do form para atualizar a Fonte em tempo real
     esfera = st.selectbox("Esfera", ["Federal", "Estadual", "Municipal", "Transferencia", "Transposicao"], key="esfera_cad_fora")
-
     fonte_vinculada = get_fonte(esfera)
-    st.markdown(
-        f'<div class="mm-card" style="text-align:left;margin-bottom:16px;padding:14px 18px;">'
-        f'<div class="mm-card-label">Fonte Vinculada</div>'
-        f'<div class="mm-card-value" style="font-size:20px;">{fonte_vinculada}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
+    st.markdown(f'<div class="mm-card" style="text-align:left;margin-bottom:16px;padding:14px 18px;"><div class="mm-card-label">Fonte Vinculada</div><div class="mm-card-value" style="font-size:20px;">{fonte_vinculada}</div></div>', unsafe_allow_html=True)
     with st.form("form_cadastro_conta"):
         col1, col2 = st.columns(2)
         with col1:
@@ -375,12 +315,9 @@ def pagina_cadastro_contas():
             valor_custeio = st.text_input("Valor Custeio", value="R$ 0,00")
             valor_investimento = st.text_input("Valor Investimento", value="R$ 0,00")
             data_recebimento = st.date_input("Data de Recebimento", value=datetime.now())
-
         programa_politica = st.text_input("Programa / Politica")
         setor_gasto = st.text_input("Setor de Gasto")
-
         salvar = st.form_submit_button("Salvar Conta", use_container_width=True)
-
         if salvar:
             vc = parse_valor(valor_custeio)
             vi = parse_valor(valor_investimento)
@@ -389,10 +326,7 @@ def pagina_cadastro_contas():
                 st.error("Informe pelo menos um valor de custeio ou investimento.")
             else:
                 conn = get_conn()
-                conn.execute(
-                    "INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (esfera, numero_conta, get_fonte(esfera), referencia_tipo, referencia_numero, tipo_recurso, vc, vi, vt, data_recebimento.strftime("%d/%m/%Y"), programa_politica, setor_gasto),
-                )
+                conn.execute("INSERT INTO contas_receber (esfera, numero_conta, fonte, referencia_tipo, referencia_numero, tipo_recurso, valor_pago_custeio, valor_pago_investimento, valor_total, data_recebimento, programa_politica, setor_gasto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (esfera, numero_conta, get_fonte(esfera), referencia_tipo, referencia_numero, tipo_recurso, vc, vi, vt, data_recebimento.strftime("%d/%m/%Y"), programa_politica, setor_gasto))
                 conn.commit()
                 conn.close()
                 st.success("Conta cadastrada com sucesso!")
@@ -400,63 +334,43 @@ def pagina_cadastro_contas():
 
 def pagina_contas_cadastradas():
     st.markdown('<p class="mm-title">Contas Cadastradas</p>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-subtitle">Consulte todas as contas registradas no sistema</p>', unsafe_allow_html=True)
-
+    st.markdown('<p class="mm-subtitle">Consulte todas as contas registradas</p>', unsafe_allow_html=True)
     conn = get_conn()
-    linhas = conn.execute(
-        "SELECT id, esfera, numero_conta, fonte, tipo_recurso, valor_total, data_recebimento FROM contas_receber ORDER BY id DESC"
-    ).fetchall()
+    linhas = conn.execute("SELECT id, esfera, numero_conta, fonte, tipo_recurso, valor_total, data_recebimento FROM contas_receber ORDER BY id DESC").fetchall()
     conn.close()
-
     if not linhas:
         st.info("Nenhuma conta cadastrada ainda.")
         return
-
     for linha in linhas:
         cid, esfera, numero_conta, fonte, tipo_recurso, valor_total, data_recebimento = linha
-        st.markdown(
-            f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
-            f'<strong>{esfera}</strong> - Conta {numero_conta} - Fonte {fonte}<br>'
-            f'{tipo_recurso} - {format_currency(valor_total)} - {data_recebimento}'
-            f"</div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown(f'<div class="mm-card" style="text-align:left;margin-bottom:10px;"><strong>{esfera}</strong> - Conta {numero_conta} - Fonte {fonte}<br>{tipo_recurso} - {format_currency(valor_total)} - {data_recebimento}</div>', unsafe_allow_html=True)
 
 def pagina_realizar_compras():
     st.markdown('<p class="mm-title">Realizar Compras</p>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-subtitle">Registre ordens de compra vinculadas as contas cadastradas</p>', unsafe_allow_html=True)
-
+    st.markdown('<p class="mm-subtitle">Registre ordens de compra</p>', unsafe_allow_html=True)
     conn = get_conn()
     contas = conn.execute("SELECT id, esfera, numero_conta, fonte, valor_total FROM contas_receber ORDER BY id DESC").fetchall()
     conn.close()
-
     if not contas:
         st.info("Cadastre uma conta antes de realizar compras.")
         return
-
     opcoes = {f"{c[1]} - Conta {c[2]} - Fonte {c[3]}": c for c in contas}
     escolha = st.selectbox("Selecione a conta", list(opcoes.keys()))
     conta_selecionada = opcoes[escolha]
-
     with st.form("form_compra"):
         ficha = st.text_input("Ficha")
         tipo_despesa = st.selectbox("Tipo de Despesa", ["Material de Consumo", "Servico PF", "Servico PJ", "Distribuicao Gratuita", "Equipamento"])
         data_compra = st.date_input("Data da Compra", value=datetime.now())
         valor_compra = st.text_input("Valor da Compra", value="R$ 0,00")
         produto_servico = st.text_area("Descricao do Produto/Servico")
-
         registrar = st.form_submit_button("Registrar Compra", use_container_width=True)
-
         if registrar:
             vc = parse_valor(valor_compra)
             if vc &lt;= 0:
                 st.error("Informe um valor de compra maior que zero.")
             else:
                 conn = get_conn()
-                conn.execute(
-                    "INSERT INTO ordens_compra (conta_receber_id, esfera, numero_conta, fonte, ficha, tipo_despesa, data_compra, valor_compra, produto_servico, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (conta_selecionada[0], conta_selecionada[1], conta_selecionada[2], conta_selecionada[3], ficha, tipo_despesa, data_compra.strftime("%d/%m/%Y"), vc, produto_servico, datetime.now().strftime("%d/%m/%Y %H:%M:%S")),
-                )
+                conn.execute("INSERT INTO ordens_compra (conta_receber_id, esfera, numero_conta, fonte, ficha, tipo_despesa, data_compra, valor_compra, produto_servico, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (conta_selecionada[0], conta_selecionada[1], conta_selecionada[2], conta_selecionada[3], ficha, tipo_despesa, data_compra.strftime("%d/%m/%Y"), vc, produto_servico, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
                 conn.commit()
                 conn.close()
                 st.success("Compra registrada com sucesso!")
@@ -464,50 +378,35 @@ def pagina_realizar_compras():
 
 def pagina_superavit():
     st.markdown('<p class="mm-title">Superavit Financeiro</p>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-subtitle">Controle o superavit de recursos de exercicios anteriores</p>', unsafe_allow_html=True)
-
+    st.markdown('<p class="mm-subtitle">Controle de superavit de exercicios anteriores</p>', unsafe_allow_html=True)
     with st.form("form_superavit"):
         esfera = st.selectbox("Esfera", ["Federal", "Estadual"])
         valor = st.text_input("Valor do Superavit", value="R$ 0,00")
         registrar = st.form_submit_button("Registrar Superavit", use_container_width=True)
-
         if registrar:
             v = parse_valor(valor)
             if v &lt;= 0:
                 st.error("Informe um valor maior que zero.")
             else:
                 conn = get_conn()
-                conn.execute(
-                    "INSERT INTO superavit (esfera, fonte_original, fonte_superavit, saldo_total, saldo_restante, created_at) VALUES (?,?,?,?,?,?)",
-                    (esfera, get_fonte(esfera), get_fonte_superavit(esfera), v, v, datetime.now().strftime("%d/%m/%Y %H:%M:%S")),
-                )
+                conn.execute("INSERT INTO superavit (esfera, fonte_original, fonte_superavit, saldo_total, saldo_restante, created_at) VALUES (?,?,?,?,?,?)", (esfera, get_fonte(esfera), get_fonte_superavit(esfera), v, v, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
                 conn.commit()
                 conn.close()
                 st.success("Superavit registrado com sucesso!")
                 st.rerun()
-
     conn = get_conn()
     linhas = conn.execute("SELECT esfera, fonte_superavit, saldo_total, saldo_restante, created_at FROM superavit ORDER BY id DESC").fetchall()
     conn.close()
-
     if linhas:
         st.markdown("<br>", unsafe_allow_html=True)
         for esfera, fonte_sup, saldo_total, saldo_restante, criado in linhas:
-            st.markdown(
-                f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
-                f"<strong>{esfera}</strong> - Fonte {fonte_sup}<br>"
-                f"Total: {format_currency(saldo_total)} - Restante: {format_currency(saldo_restante)} - {criado}"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
+            st.markdown(f'<div class="mm-card" style="text-align:left;margin-bottom:10px;"><strong>{esfera}</strong> - Fonte {fonte_sup}<br>Total: {format_currency(saldo_total)} - Restante: {format_currency(saldo_restante)} - {criado}</div>', unsafe_allow_html=True)
 
 def pagina_upload_arquivos():
     st.markdown('<p class="mm-title">Upload de Arquivos</p>', unsafe_allow_html=True)
-    st.markdown('<p class="mm-subtitle">Envie documentos e comprovantes do sistema</p>', unsafe_allow_html=True)
-
+    st.markdown('<p class="mm-subtitle">Envie documentos e comprovantes</p>', unsafe_allow_html=True)
     bloco = st.selectbox("Categoria do Arquivo", ["Contas", "Compras", "Outros"])
     arquivo = st.file_uploader("Selecione o arquivo", type=["pdf", "docx", "doc", "txt", "csv", "xlsx"])
-
     if st.button("Enviar Arquivo", use_container_width=True):
         if not arquivo:
             st.error("Selecione um arquivo antes de enviar.")
@@ -515,47 +414,30 @@ def pagina_upload_arquivos():
             dados_bytes = arquivo.read()
             texto = extrair_texto(dados_bytes, arquivo.name)
             conn = get_conn()
-            conn.execute(
-                "INSERT INTO arquivos_saude (bloco, nome_arquivo, conteudo_texto, dados_arquivo, data_upload) VALUES (?,?,?,?,?)",
-                (bloco, arquivo.name, texto, dados_bytes, datetime.now().strftime("%d/%m/%Y %H:%M:%S")),
-            )
+            conn.execute("INSERT INTO arquivos_saude (bloco, nome_arquivo, conteudo_texto, dados_arquivo, data_upload) VALUES (?,?,?,?,?)", (bloco, arquivo.name, texto, dados_bytes, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
             conn.commit()
             conn.close()
             st.success("Arquivo enviado com sucesso!")
             st.rerun()
-
     conn = get_conn()
     linhas = conn.execute("SELECT bloco, nome_arquivo, data_upload FROM arquivos_saude ORDER BY id DESC").fetchall()
     conn.close()
-
     if linhas:
         st.markdown("<br>", unsafe_allow_html=True)
         for bloco_item, nome_arquivo, data_upload in linhas:
-            st.markdown(
-                f'<div class="mm-card" style="text-align:left;margin-bottom:10px;">'
-                f"<strong>{nome_arquivo}</strong> - {bloco_item}<br>"
-                f'<span style="color:#94a3b8;font-size:11px;">{data_upload}</span>'
-                f"</div>",
-                unsafe_allow_html=True,
-            )
+            st.markdown(f'<div class="mm-card" style="text-align:left;margin-bottom:10px;"><strong>{nome_arquivo}</strong> - {bloco_item}<br><span style="color:#94a3b8;font-size:11px;">{data_upload}</span></div>', unsafe_allow_html=True)
 
 def pagina_trocar_senha():
     st.markdown('<p class="mm-title">Trocar Senha</p>', unsafe_allow_html=True)
     st.markdown('<p class="mm-subtitle">Atualize sua senha de acesso</p>', unsafe_allow_html=True)
-
     with st.form("form_trocar_senha"):
         senha_atual = st.text_input("Senha Atual", type="password")
         nova_senha = st.text_input("Nova Senha", type="password")
         confirmar_senha = st.text_input("Confirmar Nova Senha", type="password")
         salvar = st.form_submit_button("Alterar Senha", use_container_width=True)
-
         if salvar:
             conn = get_conn()
-            row = conn.execute(
-                "SELECT id FROM users WHERE id=? AND password_hash=?",
-                (st.session_state.get("usuario_id"), hash_senha(senha_atual)),
-            ).fetchone()
-
+            row = conn.execute("SELECT id FROM users WHERE id=? AND password_hash=?", (st.session_state.get("usuario_id"), hash_senha(senha_atual))).fetchone()
             if not row:
                 st.error("Senha atual incorreta.")
             elif nova_senha != confirmar_senha:
@@ -572,22 +454,11 @@ def menu_lateral():
     with st.sidebar:
         st.markdown('<p style="color:#7dd3fc;font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-top:8px;margin-bottom:4px;">Aba de Navegacao</p>', unsafe_allow_html=True)
         st.markdown("---")
-
-        paginas = [
-            "Inicio",
-            "Cadastro de Contas",
-            "Contas Cadastradas",
-            "Realizar Compras",
-            "Superavit Financeiro",
-            "Upload de Arquivos",
-            "Trocar Senha",
-        ]
-
+        paginas = ["Inicio", "Cadastro de Contas", "Contas Cadastradas", "Realizar Compras", "Superavit Financeiro", "Upload de Arquivos", "Trocar Senha"]
         for pagina in paginas:
             if st.button(pagina, key=f"nav_{pagina}", use_container_width=True):
                 st.session_state["pagina"] = pagina
                 st.rerun()
-
         st.markdown("---")
         if st.button("Sair", key="nav_sair", use_container_width=True):
             st.session_state["logged_in"] = False
@@ -598,10 +469,8 @@ def main():
     if not st.session_state["logged_in"]:
         tela_login()
         return
-
     menu_lateral()
     pagina = st.session_state.get("pagina", "Inicio")
-
     if pagina == "Inicio":
         pagina_inicio()
     elif pagina == "Esfera Detalhe":
